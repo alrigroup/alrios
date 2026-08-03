@@ -1,0 +1,15 @@
+ALRIGROUP@APPMAKE
+{
+  "name": "cdn",
+  "bin": "cdn.arapp",
+  "version": "1.0.0",
+  "runtime": "native",
+  "entry": "cdn.web.exe",
+  "platforms": {
+    "windows": {"entry": "cdn.web.exe"},
+    "linux": {"entry": "cdn_web"},
+    "linux-x64": {"entry": "cdn_web"},
+    "linux-arm64": {"entry": "cdn_web"}
+  },
+  "files": []
+}

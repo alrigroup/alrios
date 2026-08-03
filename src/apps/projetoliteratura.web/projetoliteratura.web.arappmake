@@ -1,0 +1,20 @@
+ALRIGROUP@APPMAKE
+{
+  "name": "projetoliteratura-web",
+  "bin": "projetoliteratura.web.arapp",
+  "version": "1.0.0",
+  "runtime": "native",
+  "entry": "projetoliteratura.web.exe",
+  "platforms": {
+    "windows": {"entry": "projetoliteratura.web.exe"},
+    "linux": {"entry": "projetoliteratura_web"},
+    "linux-x64": {"entry": "projetoliteratura_web"},
+    "linux-arm64": {"entry": "projetoliteratura_web"}
+  },
+  "files": [
+    "projetoliteratura.html",
+    "projetoliteratura/style.css",
+    "projetoliteratura/images/machado-1905.png",
+    "projetoliteratura/images/machado-abl.jpg"
+  ]
+}

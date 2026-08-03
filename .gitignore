@@ -1,0 +1,73 @@
+# ===================================================================
+# ALRIOS / ARCORE - Master GitIgnore File
+# ===================================================================
+
+# Build Directories & Residue
+build/
+build-linux/
+.staging/
+bin/
+out/
+Obj/
+x64/
+x86/
+Debug/
+Release/
+*.dir/
+
+# Executables, Libraries & Binaries in arcore output directory
+arcore/arcore
+arcore/arcore.exe
+arcore/alrios
+arcore/alrios.exe
+arcore/armake
+arcore/armake.exe
+arcore/arinstall
+arcore/arinstall.exe
+arcore/apps/*.arapp
+arcore/programfiles/
+arcore/run/
+arcore/storage/arws/certs/
+arcore/*.log
+arcore/*.pid
+
+# Object and Compiled Artifacts
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.exp
+*.pdb
+*.i
+*.s
+
+# Node.js & Web Dependencies / Bundles
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.next/
+dist/
+.vite/
+
+# Temp & Editor / IDE Files
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosv
+*.sln.docstates
+*.cache
+*.tmp
+*.bak
+*.log
+*.snapshot
+nul
+checks.txt

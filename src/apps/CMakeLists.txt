@@ -1,0 +1,5 @@
+add_subdirectory(arws)
+add_subdirectory(cdn)
+add_subdirectory(home.web)
+add_subdirectory(detroit.web)
+add_subdirectory(projetoliteratura.web)

@@ -1,0 +1,15 @@
+ALRIGROUP@APPMAKE
+{
+  "name": "home-web",
+  "bin": "home.web.arapp",
+  "version": "1.0.0",
+  "runtime": "native",
+  "entry": "home.web.exe",
+  "platforms": {
+    "windows": {"entry": "home.web.exe"},
+    "linux": {"entry": "home_web"},
+    "linux-x64": {"entry": "home_web"},
+    "linux-arm64": {"entry": "home_web"}
+  },
+  "files": ["index.html", "robots.txt", "sitemap.xml"]
+}

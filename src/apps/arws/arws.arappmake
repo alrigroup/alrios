@@ -1,0 +1,12 @@
+ALRIGROUP@APPMAKE
+{
+  "name": "arws",
+  "bin": "arws.arapp",
+  "version": "1.0.0",
+  "runtime": "native",
+  "entry": "libarws.arlib",
+  "services": [
+    {"name": "arws", "entry": "arws_entry"}
+  ],
+  "files": ["libarws.arlib", "web/404/index.html", "web/maintenance/index.html"]
+}
