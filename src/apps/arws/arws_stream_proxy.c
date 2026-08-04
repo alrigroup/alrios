@@ -45,8 +45,14 @@ static int parse_target(const char *url, char *host, int host_size,
     if (*p == ':') {
         p++;
         *port = 0;
-        while (*p >= '0' && *p <= '9')
+        int digits = 0;
+        while (*p >= '0' && *p <= '9') {
+            if (digits >= 5 || *port > (65535 - (*p - '0')) / 10)
+                return -1;
             *port = (*port * 10) + (*p++ - '0');
+            digits++;
+        }
+        if (*port <= 0) return -1;
     }
     return 0;
 }
@@ -434,6 +440,6 @@ int arws_stream_proxy_forward(ClientConnection *conn, HttpRequest *req,
     }
 
     ar_mem_free(resp_buf);
-    upstream_release_conn(host, port, target_fd, 1);
+    upstream_release_conn(host, port, target_fd, 0);
     return 0;
 }

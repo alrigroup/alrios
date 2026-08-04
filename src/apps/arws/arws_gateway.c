@@ -33,18 +33,10 @@ extern void arws_route_init(void);
 extern void arws_registry_init(void);
 
 static void handler_func(ClientConnection *conn, HttpRequest *req) {
-    const char *xff = get_header(req, "X-Forwarded-For");
+    /* client_ip is already resolved in handle_client: headers like
+       X-Forwarded-For / CF-Connecting-IP are only honored when the real
+       peer is in ARWS_TRUSTED_PROXY. */
     const char *client_ip = server_get_client_ip(conn);
-    char xff_buf[64];
-    if (xff && xff[0]) {
-        const char *s = xff;
-        while (*s == ' ' || *s == '\t') s++;
-        strncpy(xff_buf, s, sizeof(xff_buf) - 1);
-        xff_buf[sizeof(xff_buf) - 1] = '\0';
-        char *comma = strchr(xff_buf, ',');
-        if (comma) *comma = '\0';
-        if (xff_buf[0]) client_ip = xff_buf;
-    }
 
     if (!arws_ratelimit_check(client_ip, req->host, req->path)) {
         arws_send_429(conn, "Rate limit exceeded");

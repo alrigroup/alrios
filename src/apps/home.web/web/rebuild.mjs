@@ -6,8 +6,9 @@
  * and at: https://github.com/alrigroup/licenses/tree/main
  */
 
-import { existsSync, writeFileSync, rmSync } from 'node:fs'
+import { existsSync, writeFileSync, readFileSync, readdirSync, rmSync, mkdirSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
+import { resolve, join } from 'node:path'
 
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const useShell = process.platform === 'win32'
@@ -21,6 +22,28 @@ if (!existsSync('node_modules')) {
   run(npmCmd, ['ci', '--no-audit', '--no-fund'])
 }
 run(npmCmd, ['run', 'build'])
+
+// Consolidate built JS/CSS assets and regenerate the .arappmake manifest so the
+// server can preload (map) every asset at startup and serve by exact name only.
+const dist = resolve('dist')
+const assetsDir = join(dist, 'assets')
+mkdirSync(assetsDir, { recursive: true })
+const assetFiles = existsSync(assetsDir)
+  ? readdirSync(assetsDir).filter((f) => !f.startsWith('.'))
+  : []
+writeFileSync(join(assetsDir, '..', 'assets.index'), assetFiles.join('\n') + '\n', 'utf-8')
+
+const manifestPath = resolve('..', 'home.web.arappmake')
+const manifestRaw = readFileSync(manifestPath, 'utf-8')
+const manifestHeader = manifestRaw.match(/^ALRIGROUP@APPMAKE\s*\n/)?.[0] ?? 'ALRIGROUP@APPMAKE\n'
+const manifest = JSON.parse(manifestRaw.replace(/^ALRIGROUP@APPMAKE\s*\n/, ''))
+manifest.files = [
+  'assets.index',
+  ...manifest.files.filter((f) => !f.startsWith('assets/') && f !== 'assets.index'),
+  ...assetFiles.map((f) => `assets/${f}`)
+]
+writeFileSync(manifestPath, manifestHeader + JSON.stringify(manifest, null, 2) + '\n', 'utf-8')
+console.log('[rebuild] assets:', assetFiles.join(', '))
 
 // Extract third-party license notices to dist/THIRD_PARTY_LICENSES.txt
 const thirdPartyNotices = `========================================================================

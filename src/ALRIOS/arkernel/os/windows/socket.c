@@ -80,6 +80,12 @@ static int os_socket_set_nonblock(int fd) {
     return ioctlsocket((SOCKET)fd, FIONBIO, &mode);
 }
 
+static int os_socket_set_recv_timeout(int fd, int timeout_ms) {
+    DWORD tv = (DWORD)timeout_ms;
+    return setsockopt((SOCKET)fd, SOL_SOCKET, SO_RCVTIMEO,
+                      (const char *)&tv, sizeof(tv)) == 0 ? 0 : -1;
+}
+
 static void os_socket_close(int fd) {
     closesocket((SOCKET)fd);
 }

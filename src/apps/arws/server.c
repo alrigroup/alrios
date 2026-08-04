@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdint.h>
 #ifndef _WIN32
 #include <strings.h>
 #include <sys/socket.h>
@@ -47,6 +48,7 @@ typedef SSIZE_T ssize_t;
 
 #define MAX_CONN 65536
 #define MAX_POLL_EVENTS 1024
+#define ARWS_READ_TIMEOUT_MS 10000
 
 typedef struct {
     int fd;
@@ -129,6 +131,80 @@ static void url_decode(char *dst, const char *src) {
         }
     }
     *dst = '\0';
+}
+
+/* Trusted proxy validation (IPv4). Headers like X-Forwarded-For and
+   CF-Connecting-IP are only honored when the real peer (accept) is inside
+   the CIDR list from ARWS_TRUSTED_PROXY. Default: trust nothing. */
+#define ARWS_MAX_TRUSTED_PROXIES 32
+
+typedef struct {
+    struct in_addr net;
+    int prefix;
+} TrustedNet;
+
+static TrustedNet g_trusted_proxies[ARWS_MAX_TRUSTED_PROXIES];
+static int g_trusted_proxy_count = -1;
+
+static void trusted_proxies_parse(void) {
+    g_trusted_proxy_count = 0;
+    const char *env = getenv("ARWS_TRUSTED_PROXY");
+    if (!env || !env[0]) return;
+
+    char list[2048];
+    strncpy(list, env, sizeof(list) - 1);
+    list[sizeof(list) - 1] = '\0';
+
+    char *tok = strtok(list, ",");
+    while (tok && g_trusted_proxy_count < ARWS_MAX_TRUSTED_PROXIES) {
+        char *t = tok;
+        while (*t == ' ' || *t == '\t') t++;
+        char *e = t + strlen(t);
+        while (e > t && (e[-1] == ' ' || e[-1] == '\t')) *--e = '\0';
+
+        if (t[0]) {
+            int prefix = 32;
+            char host[128];
+            strncpy(host, t, sizeof(host) - 1);
+            host[sizeof(host) - 1] = '\0';
+            char *slash = strchr(host, '/');
+            if (slash) {
+                *slash = '\0';
+                prefix = atoi(slash + 1);
+            }
+            struct in_addr net;
+            if (inet_pton(AF_INET, host, &net) == 1 && prefix >= 0 && prefix <= 32) {
+                g_trusted_proxies[g_trusted_proxy_count].net = net;
+                g_trusted_proxies[g_trusted_proxy_count].prefix = prefix;
+                g_trusted_proxy_count++;
+            }
+        }
+        tok = strtok(NULL, ",");
+    }
+}
+
+static int ip_is_trusted_proxy(const char *peer_ip) {
+    if (!peer_ip || !peer_ip[0]) return 0;
+    if (g_trusted_proxy_count < 0) trusted_proxies_parse();
+
+    struct in_addr a;
+    if (inet_pton(AF_INET, peer_ip, &a) != 1) return 0;
+    uint32_t ip = ntohl(a.s_addr);
+
+    for (int i = 0; i < g_trusted_proxy_count; i++) {
+        uint32_t mask = (g_trusted_proxies[i].prefix == 0)
+                            ? 0
+                            : (0xFFFFFFFFu << (32 - g_trusted_proxies[i].prefix));
+        uint32_t net = ntohl(g_trusted_proxies[i].net.s_addr);
+        if ((ip & mask) == (net & mask)) return 1;
+    }
+    return 0;
+}
+
+static int ip_looks_valid(const char *ip) {
+    if (!ip || !ip[0]) return 0;
+    struct in_addr a;
+    return inet_pton(AF_INET, ip, &a) == 1;
 }
 
 static void track_access(const char *ip, const char *path, int status, const char *anon_id) {
@@ -404,6 +480,8 @@ static void *redirector_thread(void *arg) {
         int client_socket = ar_socket_accept(server_fd);
         if (client_socket < 0) { ar_sleep_ms(1000); continue; }
 
+        ar_socket_set_recv_timeout(client_socket, ARWS_READ_TIMEOUT_MS);
+
         int *sock_ptr = (int *)ar_mem_alloc(sizeof(int));
         if (sock_ptr) {
             *sock_ptr = client_socket;
@@ -538,6 +616,18 @@ static void handle_client(ClientConnection *conn) {
         }
     }
 
+    {
+        char *pc = full_path;
+        while (*pc) {
+            if ((unsigned char)*pc < 0x20) {
+                server_send_response(conn, 400, "text/plain", "Bad Request (Invalid Character)");
+                ar_mem_free(buffer);
+                return;
+            }
+            pc++;
+        }
+    }
+
     req.method = method;
     req.path = full_path;
     strncpy(conn->current_path, full_path, sizeof(conn->current_path) - 1);
@@ -612,11 +702,33 @@ static void handle_client(ClientConnection *conn) {
         const char *env = getenv("BEHIND_CLOUDFLARE");
         behind_cf = (env && strcmp(env, "true") == 0);
     }
-    if (behind_cf) {
-        const char *cf_ip = get_header(&req, "CF-Connecting-IP");
-        if (cf_ip) {
-            strncpy(conn->client_ip, cf_ip, sizeof(conn->client_ip) - 1);
-            conn->client_ip[sizeof(conn->client_ip) - 1] = '\0';
+    if (ip_is_trusted_proxy(conn->client_ip)) {
+        if (behind_cf) {
+            const char *cf_ip = get_header(&req, "CF-Connecting-IP");
+            if (cf_ip && ip_looks_valid(cf_ip)) {
+                strncpy(conn->client_ip, cf_ip, sizeof(conn->client_ip) - 1);
+                conn->client_ip[sizeof(conn->client_ip) - 1] = '\0';
+            }
+        } else {
+            const char *xff = get_header(&req, "X-Forwarded-For");
+            if (xff && xff[0]) {
+                const char *s = xff;
+                while (*s == ' ' || *s == '\t') s++;
+                char xff_buf[64];
+                strncpy(xff_buf, s, sizeof(xff_buf) - 1);
+                xff_buf[sizeof(xff_buf) - 1] = '\0';
+                char *comma = strchr(xff_buf, ',');
+                if (comma) *comma = '\0';
+                char *sp = xff_buf;
+                while (*sp) {
+                    if ((unsigned char)*sp < 0x20) { sp[0] = '\0'; break; }
+                    sp++;
+                }
+                if (xff_buf[0] && ip_looks_valid(xff_buf)) {
+                    strncpy(conn->client_ip, xff_buf, sizeof(conn->client_ip) - 1);
+                    conn->client_ip[sizeof(conn->client_ip) - 1] = '\0';
+                }
+            }
         }
     }
 
@@ -632,15 +744,26 @@ static void handle_client(ClientConnection *conn) {
     }
     if (conn->anon_id[0] == '\0') {
         unsigned char anon_raw[16];
-        if (RAND_bytes(anon_raw, sizeof(anon_raw)) != 1) {
-            for (int i = 0; i < (int)sizeof(anon_raw); i++)
-                anon_raw[i] = (unsigned char)(ar_time_ms() & 0xFF);
+        int got_random = 0;
+        if (RAND_bytes(anon_raw, sizeof(anon_raw)) == 1) {
+            got_random = 1;
+        } else {
+#ifndef _WIN32
+            int ufd = open("/dev/urandom", O_RDONLY);
+            if (ufd >= 0) {
+                ssize_t nr = read(ufd, anon_raw, sizeof(anon_raw));
+                close(ufd);
+                got_random = (nr == (ssize_t)sizeof(anon_raw));
+            }
+#endif
         }
-        for (int i = 0; i < (int)sizeof(anon_raw); i++)
-            snprintf(conn->anon_id + (i * 2), 3, "%02x", anon_raw[i]);
-        snprintf(conn->response_headers + strlen(conn->response_headers),
-                 sizeof(conn->response_headers) - strlen(conn->response_headers),
-                 "Set-Cookie: ARC_ANON_ID=%s; Path=/; HttpOnly; SameSite=Lax; Secure\r\n", conn->anon_id);
+        if (got_random) {
+            for (int i = 0; i < (int)sizeof(anon_raw); i++)
+                snprintf(conn->anon_id + (i * 2), 3, "%02x", anon_raw[i]);
+            snprintf(conn->response_headers + strlen(conn->response_headers),
+                     sizeof(conn->response_headers) - strlen(conn->response_headers),
+                     "Set-Cookie: ARC_ANON_ID=%s; Path=/; HttpOnly; SameSite=Lax; Secure\r\n", conn->anon_id);
+        }
     }
 
     /* Enforce Rate Limiting por IP real, Host e Rota */
@@ -743,6 +866,8 @@ static void* pool_worker(void *arg) {
         strncpy(conn.client_ip, ec->client_ip, sizeof(conn.client_ip) - 1);
         conn.client_ip[sizeof(conn.client_ip) - 1] = '\0';
         memset(conn.current_path, 0, sizeof(conn.current_path));
+
+        ar_socket_set_recv_timeout(conn.socket_fd, ARWS_READ_TIMEOUT_MS);
 
         if (conn.mode == MODE_SECURE) {
             conn.ssl = ar_ssl_new(ec->ctx, ec->fd);

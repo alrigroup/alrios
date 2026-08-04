@@ -6,10 +6,25 @@ ALRIGROUP@APPMAKE
   "runtime": "native",
   "entry": "home.web.exe",
   "platforms": {
-    "windows": {"entry": "home.web.exe"},
-    "linux": {"entry": "home_web"},
-    "linux-x64": {"entry": "home_web"},
-    "linux-arm64": {"entry": "home_web"}
+    "windows": {
+      "entry": "home.web.exe"
+    },
+    "linux": {
+      "entry": "home_web"
+    },
+    "linux-x64": {
+      "entry": "home_web"
+    },
+    "linux-arm64": {
+      "entry": "home_web"
+    }
   },
-  "files": ["index.html", "robots.txt", "sitemap.xml"]
+  "files": [
+    "assets.index",
+    "index.arhtml",
+    "robots.txt",
+    "sitemap.xml",
+    "assets/index-BdRSIRsr.js",
+    "assets/style-CKinwZhK.css"
+  ]
 }

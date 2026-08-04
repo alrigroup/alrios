@@ -59,6 +59,7 @@ static int  os_socket_send(int fd, const void *data, size_t len);
 static int  os_socket_recv(int fd, void *buf, size_t len);
 static void os_socket_close(int fd);
 static int  os_socket_set_nonblock(int fd);
+static int  os_socket_set_recv_timeout(int fd, int timeout_ms);
 
 static int   os_fs_mkdir(const char *path);
 static int   os_fs_rmdir(const char *path);
@@ -263,6 +264,11 @@ void ar_socket_close(int fd) {
 int ar_socket_set_nonblock(int fd) {
     if (fd < 0) return -1;
     return os_socket_set_nonblock(fd);
+}
+
+int ar_socket_set_recv_timeout(int fd, int timeout_ms) {
+    if (fd < 0) return -1;
+    return os_socket_set_recv_timeout(fd, timeout_ms);
 }
 
 int ar_fs_mkdir(const char *path) {

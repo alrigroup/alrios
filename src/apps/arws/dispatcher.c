@@ -37,6 +37,35 @@ static int is_static_path(const char *path) {
     return 0;
 }
 
+static int header_name_eq(const char *p, const char *name, int nlen) {
+    for (int i = 0; i < nlen; i++) {
+        char c = p[i], a = name[i];
+        if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
+        if (a >= 'a' && a <= 'z') a -= 'a' - 'A';
+        if (c != a) return 0;
+    }
+    return 1;
+}
+
+/* True when the response carries a Set-Cookie header. Responses that vary
+   per user (or set cookies) must not be cached/replayed to other clients. */
+static int response_has_set_cookie(const unsigned char *buf, int len) {
+    if (!buf || len <= 0) return 0;
+    int hlen = len;
+    for (int i = 0; i + 3 < len; i++) {
+        if (buf[i] == '\r' && buf[i + 1] == '\n' &&
+            buf[i + 2] == '\r' && buf[i + 3] == '\n') {
+            hlen = i;
+            break;
+        }
+    }
+    for (int i = 0; i + 10 < hlen; i++) {
+        if (header_name_eq((const char *)buf + i, "Set-Cookie", 10) == 0)
+            return 1;
+    }
+    return 0;
+}
+
 int arws_dispatch(ClientConnection *conn, HttpRequest *req, const char *effective_mode) {
     ArwsRoute route;
     alri_print(CYN "[ARWS]" RST " dispatch: effective_mode=%s\n", effective_mode);
@@ -86,7 +115,8 @@ int arws_dispatch(ClientConnection *conn, HttpRequest *req, const char *effectiv
         if (use_cache) {
             char cache_key[512];
             arws_cache_make_key(cache_key, sizeof(cache_key),
-                                req->method, req->host, req->path);
+                                req->method, req->host, req->path,
+                                req->query_params);
             unsigned char *cached_data = NULL;
             int cached_len = 0;
             if (arws_cache_get(cache_key, &cached_data, &cached_len) == 0) {
@@ -122,9 +152,10 @@ int arws_dispatch(ClientConnection *conn, HttpRequest *req, const char *effectiv
         if (use_cache) {
             char cache_key[512];
             arws_cache_make_key(cache_key, sizeof(cache_key),
-                                req->method, req->host, req->path);
+                                req->method, req->host, req->path,
+                                req->query_params);
             if (resp_len >= 9 && strncmp((const char *)resp_buf, "HTTP/1.1 ", 9) == 0 &&
-                resp_buf[9] == '2') {
+                resp_buf[9] == '2' && !response_has_set_cookie(resp_buf, resp_len)) {
                 arws_cache_set(cache_key, resp_buf, resp_len);
             }
         }
@@ -141,63 +172,8 @@ int arws_dispatch(ClientConnection *conn, HttpRequest *req, const char *effectiv
     }
 
     if (result == 1 && !route.use_stream && route.proxy_target[0] != '\0') {
-        alri_print(CYN "[ARWS]" RST " dispatch: proxy -> %s\n", route.proxy_target);
-        unsigned char raw_buf[32768];
-        int raw_len = arws_build_http_request(conn, req, raw_buf, sizeof(raw_buf));
-        if (raw_len <= 0) {
-            arws_send_502(conn, "Bad Gateway");
-            return -1;
-        }
-
-        int is_get = (strcmp(req->method, "GET") == 0);
-        int is_static = is_get && is_static_path(req->path);
-        int has_no_cache = arws_config_is_no_cache(req->host, req->path);
-        int use_cache = 0;
-        if (is_get && !has_no_cache) {
-            if (is_static) {
-                use_cache = 1;
-            } else if (arws_config_get_cache_ttl() > 0) {
-                use_cache = 1;
-            }
-        }
-
-        if (use_cache) {
-            char cache_key[512];
-            arws_cache_make_key(cache_key, sizeof(cache_key),
-                                req->method, req->host, req->path);
-            unsigned char *cached_data = NULL;
-            int cached_len = 0;
-            if (arws_cache_get(cache_key, &cached_data, &cached_len) == 0) {
-                alri_print(CYN "[ARWS]" RST " dispatch: cache HIT %s\n", cache_key);
-                server_conn_write(conn, cached_data, cached_len);
-                ar_mem_free(cached_data);
-                return 0;
-            }
-        }
-
-        unsigned char resp_buf[65536];
-        int resp_len = arws_proxy_forward(route.proxy_target,
-                                           raw_buf, raw_len,
-                                           resp_buf, sizeof(resp_buf));
-
-        alri_print(CYN "[ARWS]" RST " dispatch: proxy resp_len=%d\n", resp_len);
-        if (resp_len <= 0) {
-            arws_send_502(conn, "Upstream error");
-            return -1;
-        }
-
-        if (use_cache) {
-            char cache_key[512];
-            arws_cache_make_key(cache_key, sizeof(cache_key),
-                                req->method, req->host, req->path);
-            if (resp_len >= 9 && strncmp((const char *)resp_buf, "HTTP/1.1 ", 9) == 0 &&
-                resp_buf[9] == '2') {
-                arws_cache_set(cache_key, resp_buf, resp_len);
-            }
-        }
-
-        server_conn_write(conn, resp_buf, resp_len);
-        alri_print(CYN "[ARWS]" RST " dispatch: proxy done\n");
+        alri_print(CYN "[ARWS]" RST " dispatch: proxy (stream) -> %s\n", route.proxy_target);
+        arws_stream_proxy_forward(conn, req, route.proxy_target);
         return 0;
     }
 

@@ -212,9 +212,10 @@ void arws_cache_cleanup(void) {
 }
 
 void arws_cache_make_key(char *out, int out_size, const char *method,
-                         const char *host, const char *path) {
-    snprintf(out, out_size, "%s|%s|%s",
+                         const char *host, const char *path, const char *query) {
+    snprintf(out, out_size, "%s|%s|%s|%s",
              method ? method : "*",
              host ? host : "*",
-             path ? path : "/");
+             path ? path : "/",
+             query ? query : "*");
 }

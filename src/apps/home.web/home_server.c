@@ -21,12 +21,23 @@
 
 static int server_port = 3001;
 
-static char *g_index_html = NULL;
-static int g_index_html_len = 0;
-static char *g_robots_txt = NULL;
-static int g_robots_txt_len = 0;
-static char *g_sitemap_xml = NULL;
-static int g_sitemap_xml_len = 0;
+typedef struct {
+    const char *route_path;
+    const char *content_type;
+    char       *data;
+    int         len;
+    int         not_found;
+} StaticFile;
+
+static StaticFile *g_files = NULL;
+static int g_file_cap = 0;
+static int g_file_count = 0;
+
+#ifdef _WIN32
+#define APP_SEP '\\'
+#else
+#define APP_SEP '/'
+#endif
 
 static char *read_file(const char *path, int *out_len) {
     FILE *f = fopen(path, "rb");
@@ -44,33 +55,154 @@ static char *read_file(const char *path, int *out_len) {
     return data;
 }
 
-static int load_index_html(void) {
-    char dir[1024];
+static void files_reserve(int need) {
+    if (need <= g_file_cap) return;
+    int nc = g_file_cap > 0 ? g_file_cap * 2 : 16;
+    while (nc < need) nc *= 2;
+    StaticFile *p = (StaticFile *)ar_mem_alloc((size_t)nc * sizeof(StaticFile));
+    if (g_file_count > 0) memcpy(p, g_files, (size_t)g_file_count * sizeof(StaticFile));
+    g_files = p;
+    g_file_cap = nc;
+}
+
+static int add_file(const char *dir, const char *route, const char *file, const char *ctype) {
+    files_reserve(g_file_count + 1);
+    StaticFile *sf = &g_files[g_file_count];
     char path[1400];
+    snprintf(path, sizeof(path), "%s%c%s", dir,
+#ifdef _WIN32
+             '\\',
+#else
+             '/',
+#endif
+             file);
+    char *data = read_file(path, &sf->len);
+    if (!data) {
+        printf("[%s] ERROR: cannot load %s\n", APP_NAME, path);
+        return -1;
+    }
+    printf("[%s] loaded %s (%d bytes)\n", APP_NAME, path, sf->len);
+    sf->route_path = route;
+    sf->content_type = ctype;
+    sf->data = data;
+    sf->not_found = (strcmp(route, "*") == 0);
+    g_file_count++;
+    return 0;
+}
+
+static const char *ctype_for_ext(const char *name) {
+    const char *ext = strrchr(name, '.');
+    if (ext) {
+        if (strcmp(ext, ".js") == 0 || strcmp(ext, ".mjs") == 0) return "text/javascript; charset=utf-8";
+        if (strcmp(ext, ".css") == 0) return "text/css; charset=utf-8";
+        if (strcmp(ext, ".svg") == 0) return "image/svg+xml";
+        if (strcmp(ext, ".png") == 0) return "image/png";
+        if (strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0) return "image/jpeg";
+        if (strcmp(ext, ".gif") == 0) return "image/gif";
+        if (strcmp(ext, ".webp") == 0) return "image/webp";
+        if (strcmp(ext, ".ico") == 0) return "image/x-icon";
+        if (strcmp(ext, ".woff") == 0) return "font/woff";
+        if (strcmp(ext, ".woff2") == 0) return "font/woff2";
+        if (strcmp(ext, ".ttf") == 0) return "font/ttf";
+        if (strcmp(ext, ".json") == 0) return "application/json; charset=utf-8";
+    }
+    return "application/octet-stream";
+}
+
+/* Preload every asset listed in assets.index into the mapped table. Serving is
+   exact-name only; the request path never touches the filesystem. */
+static void load_assets(const char *dir) {
+    char idx_path[1400];
+    snprintf(idx_path, sizeof(idx_path), "%s%cassets.index", dir, APP_SEP);
+    int ilen = 0;
+    char *idx = read_file(idx_path, &ilen);
+    if (!idx) {
+        printf("[%s] WARNING: assets.index not found (%s)\n", APP_NAME, idx_path);
+        return;
+    }
+    char *p = idx;
+    while (p && *p) {
+        char *nl = strchr(p, '\n');
+        if (nl) *nl = '\0';
+        char *line = p;
+        if (*line) {
+            char fpath[1400];
+            snprintf(fpath, sizeof(fpath), "%s%cassets%c%s", dir, APP_SEP, APP_SEP, line);
+            int blen = 0;
+            char *data = read_file(fpath, &blen);
+            if (data) {
+                files_reserve(g_file_count + 1);
+                StaticFile *sf = &g_files[g_file_count];
+                size_t rlen = strlen(line) + 16;
+                char *route = (char *)ar_mem_alloc(rlen);
+                snprintf(route, rlen, "/assets/%s", line);
+                sf->route_path = route;
+                sf->content_type = ctype_for_ext(line);
+                sf->data = data;
+                sf->len = blen;
+                sf->not_found = 0;
+                g_file_count++;
+            } else {
+                printf("[%s] WARNING: asset listed but unreadable: %s\n", APP_NAME, line);
+            }
+        }
+        p = nl ? nl + 1 : NULL;
+    }
+}
+
+static void add_alias(const char *route, const char *ctype, char *data, int len) {
+    files_reserve(g_file_count + 1);
+    StaticFile *sf = &g_files[g_file_count];
+    sf->route_path = route;
+    sf->content_type = ctype;
+    sf->data = data;
+    sf->len = len;
+    sf->not_found = 0;
+    g_file_count++;
+}
+
+static int load_files(void) {
+    char dir[1024];
+    int loaded = 0;
+    char *index_data = NULL;
+    int index_len = 0;
 
     if (home_os_get_exe_dir(dir, sizeof(dir)) == 0) {
-        snprintf(path, sizeof(path), "%s/index.html", dir);
-        g_index_html = read_file(path, &g_index_html_len);
-        snprintf(path, sizeof(path), "%s/robots.txt", dir);
-        g_robots_txt = read_file(path, &g_robots_txt_len);
-        snprintf(path, sizeof(path), "%s/sitemap.xml", dir);
-        g_sitemap_xml = read_file(path, &g_sitemap_xml_len);
-        if (g_index_html) {
-            printf("[%s] SPA loaded from %s (%d bytes)\n", APP_NAME, path, g_index_html_len);
+        if (add_file(dir, "/", "index.arhtml", "text/html; charset=utf-8") == 0) {
+            loaded++;
+            index_data = g_files[g_file_count - 1].data;
+            index_len = g_files[g_file_count - 1].len;
+        }
+        if (add_file(dir, "/robots.txt", "robots.txt", "text/plain; charset=utf-8") == 0) loaded++;
+        if (add_file(dir, "/sitemap.xml", "sitemap.xml", "application/xml; charset=utf-8") == 0) loaded++;
+        load_assets(dir);
+        if (loaded > 0) {
+            if (index_data) {
+                add_alias("/home", "text/html; charset=utf-8", index_data, index_len);
+                add_alias("/index.html", "text/html; charset=utf-8", index_data, index_len);
+            }
             return 0;
         }
     }
 
-    g_index_html = read_file("index.html", &g_index_html_len);
-    g_robots_txt = read_file("robots.txt", &g_robots_txt_len);
-    g_sitemap_xml = read_file("sitemap.xml", &g_sitemap_xml_len);
-    if (g_index_html) {
-        printf("[%s] SPA loaded from ./index.html (%d bytes)\n", APP_NAME, g_index_html_len);
-        return 0;
+    if (add_file(".", "/", "index.arhtml", "text/html; charset=utf-8") == 0) {
+        loaded++;
+        index_data = g_files[g_file_count - 1].data;
+        index_len = g_files[g_file_count - 1].len;
     }
+    if (add_file(".", "/robots.txt", "robots.txt", "text/plain; charset=utf-8") == 0) loaded++;
+    if (add_file(".", "/sitemap.xml", "sitemap.xml", "application/xml; charset=utf-8") == 0) loaded++;
+    load_assets(".");
 
-    fprintf(stderr, "[%s] ERROR: index.html not found next to executable or in cwd\n", APP_NAME);
-    return -1;
+    if (loaded == 0) {
+        fprintf(stderr, "[%s] ERROR: index.html not found next to executable or in cwd\n", APP_NAME);
+        return -1;
+    }
+    if (index_data) {
+        add_alias("/home", "text/html; charset=utf-8", index_data, index_len);
+        add_alias("/index.html", "text/html; charset=utf-8", index_data, index_len);
+    }
+    return 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -250,7 +382,16 @@ static void query_loop(int fd) {
 /* HTTP server (serves the SPA)                                        */
 /* ------------------------------------------------------------------ */
 
-static void send_response(int c, int status, const char *content_type, const char *body, int body_len) {
+static void send_all(int c, const char *data, int len) {
+    int written = 0;
+    while (written < len) {
+        int n = ar_socket_send(c, data + written, (size_t)(len - written));
+        if (n <= 0) return;
+        written += n;
+    }
+}
+
+static void send_response(int c, int status, const char *content_type, const char *body, int body_len, const char *cache_control) {
     char header[512];
     if (body_len < 0) body_len = body ? (int)strlen(body) : 0;
     const char *status_text = (status == 200) ? "OK" : (status == 500) ? "Internal Server Error" : "Not Found";
@@ -259,35 +400,46 @@ static void send_response(int c, int status, const char *content_type, const cha
                        "HTTP/1.1 %d %s\r\n"
                        "Content-Type: %s\r\n"
                        "Content-Length: %d\r\n"
-                       "Cache-Control: no-store\r\n"
+                       "Cache-Control: %s\r\n"
                        "Connection: close\r\n\r\n",
-                       status, status_text, content_type, body_len);
-    if (len > 0) ar_socket_send(c, header, (size_t)len);
-    if (body_len > 0) ar_socket_send(c, body, (size_t)body_len);
+                       status, status_text, content_type, body_len,
+                       cache_control ? cache_control : "no-store");
+    if (len > 0) send_all(c, header, len);
+    if (body_len > 0) send_all(c, body, body_len);
+}
+
+static StaticFile *find_file(const char *path) {
+    for (int i = 0; i < g_file_count; i++) {
+        if (g_files[i].route_path && strcmp(g_files[i].route_path, "*") != 0 &&
+            strcmp(g_files[i].route_path, path) == 0) {
+            return &g_files[i];
+        }
+    }
+    for (int i = 0; i < g_file_count; i++) {
+        if (g_files[i].route_path && strcmp(g_files[i].route_path, "*") == 0) {
+            return &g_files[i];
+        }
+    }
+    return NULL;
 }
 
 static void serve(int c, const char *path) {
-    if (strcmp(path, "/robots.txt") == 0) {
-        if (g_robots_txt) {
-            send_response(c, 200, "text/plain; charset=utf-8", g_robots_txt, g_robots_txt_len);
-        } else {
-            send_response(c, 404, "text/plain; charset=utf-8", "robots.txt not found", -1);
-        }
-    } else if (strcmp(path, "/sitemap.xml") == 0) {
-        if (g_sitemap_xml) {
-            send_response(c, 200, "application/xml; charset=utf-8", g_sitemap_xml, g_sitemap_xml_len);
-        } else {
-            send_response(c, 404, "text/plain; charset=utf-8", "sitemap.xml not found", -1);
-        }
-    } else if (strcmp(path, "/") == 0 || strcmp(path, "/home") == 0 ||
-        strcmp(path, "/index.html") == 0) {
-        if (g_index_html) {
-            send_response(c, 200, "text/html; charset=utf-8", g_index_html, g_index_html_len);
-        } else {
-            send_response(c, 500, "text/plain; charset=utf-8", "SPA not loaded", -1);
-        }
+    char clean[512];
+    snprintf(clean, sizeof(clean), "%s", path);
+    char *q = strchr(clean, '?');
+    if (q) *q = '\0';
+    char *h = strchr(clean, '#');
+    if (h) *h = '\0';
+
+    StaticFile *sf = find_file(clean);
+    if (sf && sf->data) {
+        int is_asset = (strncmp(clean, "/assets/", 8) == 0);
+        const char *cache = is_asset ? "public, max-age=31536000, immutable"
+                          : sf->not_found ? "no-store"
+                          : "public, max-age=3600";
+        send_response(c, sf->not_found ? 404 : 200, sf->content_type, sf->data, sf->len, cache);
     } else {
-        send_response(c, 404, "text/plain; charset=utf-8", "Not Found", -1);
+        send_response(c, 500, "text/plain; charset=utf-8", "SPA not loaded", -1, "no-store");
     }
 }
 
@@ -401,7 +553,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    load_index_html();
+    load_files();
 
     int srv = create_server(server_port);
     if (srv < 0) return 1;

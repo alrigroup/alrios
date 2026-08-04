@@ -57,6 +57,7 @@ int  ar_socket_connect(int fd, const char *addr, uint16_t port);
 int  ar_socket_send(int fd, const void *data, size_t len);
 int  ar_socket_recv(int fd, void *buf, size_t len);
 int  ar_socket_set_nonblock(int fd);
+int  ar_socket_set_recv_timeout(int fd, int timeout_ms);
 void ar_socket_close(int fd);
 
 int  ar_fs_mkdir(const char *path);

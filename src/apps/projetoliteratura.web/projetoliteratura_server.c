@@ -18,20 +18,26 @@
 #define GATEWAY_PORT  9500
 #define MAX_ATTEMPTS  30
 #define MAX_REQ       65536
-#define MAX_FILES     8
 
 static int server_port = 3003;
 
 typedef struct {
     const char *route_path;
-    const char *file;
     const char *content_type;
     char       *data;
     int         len;
+    int         not_found;
 } StaticFile;
 
-static StaticFile g_files[MAX_FILES];
+static StaticFile *g_files = NULL;
+static int g_file_cap = 0;
 static int g_file_count = 0;
+
+#ifdef _WIN32
+#define APP_SEP '\\'
+#else
+#define APP_SEP '/'
+#endif
 
 static char *read_file(const char *path, int *out_len) {
     FILE *f = fopen(path, "rb");
@@ -49,8 +55,18 @@ static char *read_file(const char *path, int *out_len) {
     return data;
 }
 
+static void files_reserve(int need) {
+    if (need <= g_file_cap) return;
+    int nc = g_file_cap > 0 ? g_file_cap * 2 : 16;
+    while (nc < need) nc *= 2;
+    StaticFile *p = (StaticFile *)ar_mem_alloc((size_t)nc * sizeof(StaticFile));
+    if (g_file_count > 0) memcpy(p, g_files, (size_t)g_file_count * sizeof(StaticFile));
+    g_files = p;
+    g_file_cap = nc;
+}
+
 static int add_file(const char *dir, const char *route, const char *file, const char *ctype) {
-    if (g_file_count >= MAX_FILES) return -1;
+    files_reserve(g_file_count + 1);
     StaticFile *sf = &g_files[g_file_count];
     char path[1400];
     snprintf(path, sizeof(path), "%s%c%s", dir,
@@ -67,11 +83,71 @@ static int add_file(const char *dir, const char *route, const char *file, const 
     }
     printf("[%s] loaded %s (%d bytes)\n", APP_NAME, path, sf->len);
     sf->route_path = route;
-    sf->file = file;
     sf->content_type = ctype;
     sf->data = data;
+    sf->not_found = (strcmp(route, "*") == 0);
     g_file_count++;
     return 0;
+}
+
+static const char *ctype_for_ext(const char *name) {
+    const char *ext = strrchr(name, '.');
+    if (ext) {
+        if (strcmp(ext, ".js") == 0 || strcmp(ext, ".mjs") == 0) return "text/javascript; charset=utf-8";
+        if (strcmp(ext, ".css") == 0) return "text/css; charset=utf-8";
+        if (strcmp(ext, ".svg") == 0) return "image/svg+xml";
+        if (strcmp(ext, ".png") == 0) return "image/png";
+        if (strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0) return "image/jpeg";
+        if (strcmp(ext, ".gif") == 0) return "image/gif";
+        if (strcmp(ext, ".webp") == 0) return "image/webp";
+        if (strcmp(ext, ".ico") == 0) return "image/x-icon";
+        if (strcmp(ext, ".woff") == 0) return "font/woff";
+        if (strcmp(ext, ".woff2") == 0) return "font/woff2";
+        if (strcmp(ext, ".ttf") == 0) return "font/ttf";
+        if (strcmp(ext, ".json") == 0) return "application/json; charset=utf-8";
+    }
+    return "application/octet-stream";
+}
+
+/* Preload every asset listed in assets.index into the mapped table. Serving is
+   exact-name only; the request path never touches the filesystem. */
+static void load_assets(const char *dir) {
+    char idx_path[1400];
+    snprintf(idx_path, sizeof(idx_path), "%s%cassets.index", dir, APP_SEP);
+    int ilen = 0;
+    char *idx = read_file(idx_path, &ilen);
+    if (!idx) {
+        printf("[%s] WARNING: assets.index not found (%s)\n", APP_NAME, idx_path);
+        return;
+    }
+    char *p = idx;
+    while (p && *p) {
+        char *nl = strchr(p, '\n');
+        if (nl) *nl = '\0';
+        char *line = p;
+        if (*line) {
+            char fpath[1400];
+            snprintf(fpath, sizeof(fpath), "%s%cassets%c%s", dir, APP_SEP, APP_SEP, line);
+            int blen = 0;
+            char *data = read_file(fpath, &blen);
+            if (data) {
+                files_reserve(g_file_count + 1);
+                StaticFile *sf = &g_files[g_file_count];
+                size_t rlen = strlen(line) + 16;
+                char *route = (char *)ar_mem_alloc(rlen);
+                snprintf(route, rlen, "/assets/%s", line);
+                sf->route_path = route;
+                sf->content_type = ctype_for_ext(line);
+                sf->data = data;
+                sf->len = blen;
+                sf->not_found = 0;
+                g_file_count++;
+            } else {
+                printf("[%s] WARNING: asset listed but unreadable: %s\n", APP_NAME, line);
+            }
+        }
+        p = nl ? nl + 1 : NULL;
+    }
 }
 
 static int load_files(void) {
@@ -79,19 +155,15 @@ static int load_files(void) {
     int loaded = 0;
 
     if (home_os_get_exe_dir(dir, sizeof(dir)) == 0) {
-        if (add_file(dir, "/projetoliteratura", "projetoliteratura.html", "text/html; charset=utf-8") == 0) loaded++;
-        if (add_file(dir, "/projetoliteratura/", "projetoliteratura.html", "text/html; charset=utf-8") == 0) loaded++;
-        if (add_file(dir, "/projetoliteratura/style.css", "projetoliteratura/style.css", "text/css; charset=utf-8") == 0) loaded++;
-        if (add_file(dir, "/projetoliteratura/images/machado-1905.png", "projetoliteratura/images/machado-1905.png", "image/png") == 0) loaded++;
-        if (add_file(dir, "/projetoliteratura/images/machado-abl.jpg", "projetoliteratura/images/machado-abl.jpg", "image/jpeg") == 0) loaded++;
+        if (add_file(dir, "/projetoliteratura", "projetoliteratura.arhtml", "text/html; charset=utf-8") == 0) loaded++;
+        if (add_file(dir, "/projetoliteratura/", "projetoliteratura.arhtml", "text/html; charset=utf-8") == 0) loaded++;
+        load_assets(dir);
         if (loaded > 0) return 0;
     }
 
-    if (add_file(".", "/projetoliteratura", "projetoliteratura.html", "text/html; charset=utf-8") == 0) loaded++;
-    if (add_file(".", "/projetoliteratura/", "projetoliteratura.html", "text/html; charset=utf-8") == 0) loaded++;
-    if (add_file(".", "/projetoliteratura/style.css", "projetoliteratura/style.css", "text/css; charset=utf-8") == 0) loaded++;
-    if (add_file(".", "/projetoliteratura/images/machado-1905.png", "projetoliteratura/images/machado-1905.png", "image/png") == 0) loaded++;
-    if (add_file(".", "/projetoliteratura/images/machado-abl.jpg", "projetoliteratura/images/machado-abl.jpg", "image/jpeg") == 0) loaded++;
+    if (add_file(".", "/projetoliteratura", "projetoliteratura.arhtml", "text/html; charset=utf-8") == 0) loaded++;
+    if (add_file(".", "/projetoliteratura/", "projetoliteratura.arhtml", "text/html; charset=utf-8") == 0) loaded++;
+    load_assets(".");
 
     if (loaded == 0) {
         fprintf(stderr, "[%s] ERROR: files not found next to executable or in cwd\n", APP_NAME);
@@ -290,7 +362,7 @@ static void send_all(int c, const char *data, int len) {
     }
 }
 
-static void send_response(int c, int status, const char *content_type, const char *body, int body_len) {
+static void send_response(int c, int status, const char *content_type, const char *body, int body_len, const char *cache_control) {
     char header[512];
     if (body_len < 0) body_len = body ? (int)strlen(body) : 0;
     const char *status_text = (status == 200) ? "OK" : (status == 500) ? "Internal Server Error" : "Not Found";
@@ -299,16 +371,23 @@ static void send_response(int c, int status, const char *content_type, const cha
                        "HTTP/1.1 %d %s\r\n"
                        "Content-Type: %s\r\n"
                        "Content-Length: %d\r\n"
-                       "Cache-Control: no-store\r\n"
+                       "Cache-Control: %s\r\n"
                        "Connection: close\r\n\r\n",
-                       status, status_text, content_type, body_len);
+                       status, status_text, content_type, body_len,
+                       cache_control ? cache_control : "no-store");
     if (len > 0) send_all(c, header, len);
     if (body_len > 0) send_all(c, body, body_len);
 }
 
 static StaticFile *find_file(const char *path) {
     for (int i = 0; i < g_file_count; i++) {
-        if (g_files[i].route_path && strcmp(g_files[i].route_path, path) == 0) {
+        if (g_files[i].route_path && strcmp(g_files[i].route_path, "*") != 0 &&
+            strcmp(g_files[i].route_path, path) == 0) {
+            return &g_files[i];
+        }
+    }
+    for (int i = 0; i < g_file_count; i++) {
+        if (g_files[i].route_path && strcmp(g_files[i].route_path, "*") == 0) {
             return &g_files[i];
         }
     }
@@ -325,9 +404,13 @@ static void serve(int c, const char *path) {
 
     StaticFile *sf = find_file(clean);
     if (sf && sf->data) {
-        send_response(c, 200, sf->content_type, sf->data, sf->len);
+        int is_asset = (strncmp(clean, "/assets/", 8) == 0);
+        const char *cache = is_asset ? "public, max-age=31536000, immutable"
+                          : sf->not_found ? "no-store"
+                          : "public, max-age=3600";
+        send_response(c, sf->not_found ? 404 : 200, sf->content_type, sf->data, sf->len, cache);
     } else {
-        send_response(c, 404, "text/plain; charset=utf-8", "Not Found", -1);
+        send_response(c, 404, "text/plain; charset=utf-8", "Not Found", -1, "no-store");
     }
 }
 

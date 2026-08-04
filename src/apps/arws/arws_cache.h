@@ -20,6 +20,6 @@ int  arws_cache_set(const char *key, const unsigned char *data, int len);
 void arws_cache_clear(void);
 void arws_cache_cleanup(void);
 void arws_cache_make_key(char *out, int out_size, const char *method,
-                         const char *host, const char *path);
+                         const char *host, const char *path, const char *query);
 
 #endif

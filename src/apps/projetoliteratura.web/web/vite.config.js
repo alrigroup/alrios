@@ -8,11 +8,27 @@
 
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { viteSingleFile } from 'vite-plugin-singlefile'
+
 import { resolve } from 'node:path'
 
+const licenseHeader = `<!--
+ * Copyright (c) ALRIGROUP and its affiliates.
+ *
+ * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
+ * found in the LICENSE file in the root directory of this source tree
+ * and at: https://github.com/alrigroup/licenses/tree/main
+ -->\n`
+
 export default defineConfig({
-  plugins: [react(), viteSingleFile()],
+  plugins: [
+    react(),
+    {
+      name: 'alrigroup-license-header',
+      transformIndexHtml(html) {
+        return html.replace('<!DOCTYPE html>', `<!DOCTYPE html>\n${licenseHeader}`)
+      }
+    }
+  ],
   esbuild: {
     legalComments: 'none'
   },

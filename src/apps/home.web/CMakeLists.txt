@@ -58,7 +58,13 @@ add_custom_target(home_web_pack ALL
     ${HOME_WEB_RENAME_COMMANDS}
     COMMAND ${CMAKE_COMMAND} -E copy
         ${CMAKE_CURRENT_SOURCE_DIR}/web/dist/index.html
-        ${HOME_WEB_STAGING}/index.html
+        ${HOME_WEB_STAGING}/index.arhtml
+    COMMAND ${CMAKE_COMMAND} -E copy
+        ${CMAKE_CURRENT_SOURCE_DIR}/web/dist/assets.index
+        ${HOME_WEB_STAGING}/assets.index
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_CURRENT_SOURCE_DIR}/web/dist/assets
+        ${HOME_WEB_STAGING}/assets
     COMMAND ${CMAKE_COMMAND} -E copy
         ${CMAKE_CURRENT_SOURCE_DIR}/web/public/robots.txt
         ${HOME_WEB_STAGING}/robots.txt

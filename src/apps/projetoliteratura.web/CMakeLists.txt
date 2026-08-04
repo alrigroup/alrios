@@ -57,18 +57,13 @@ add_custom_target(projetoliteratura_web_pack ALL
     ${PROJETOLITERATURA_WEB_RENAME_COMMANDS}
     COMMAND ${CMAKE_COMMAND} -E copy
         ${CMAKE_CURRENT_SOURCE_DIR}/web/dist/index.html
-        ${PROJETOLITERATURA_WEB_STAGING}/projetoliteratura.html
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        ${PROJETOLITERATURA_WEB_STAGING}/projetoliteratura/images
+        ${PROJETOLITERATURA_WEB_STAGING}/projetoliteratura.arhtml
     COMMAND ${CMAKE_COMMAND} -E copy
-        ${CMAKE_CURRENT_SOURCE_DIR}/web/src/projetoliteratura.css
-        ${PROJETOLITERATURA_WEB_STAGING}/projetoliteratura/style.css
-    COMMAND ${CMAKE_COMMAND} -E copy
-        ${CMAKE_CURRENT_SOURCE_DIR}/web/dist/projetoliteratura/images/machado-1905.png
-        ${PROJETOLITERATURA_WEB_STAGING}/projetoliteratura/images/machado-1905.png
-    COMMAND ${CMAKE_COMMAND} -E copy
-        ${CMAKE_CURRENT_SOURCE_DIR}/web/dist/projetoliteratura/images/machado-abl.jpg
-        ${PROJETOLITERATURA_WEB_STAGING}/projetoliteratura/images/machado-abl.jpg
+        ${CMAKE_CURRENT_SOURCE_DIR}/web/dist/assets.index
+        ${PROJETOLITERATURA_WEB_STAGING}/assets.index
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_CURRENT_SOURCE_DIR}/web/dist/assets
+        ${PROJETOLITERATURA_WEB_STAGING}/assets
     COMMAND ${CMAKE_SOURCE_DIR}/arcore/armake build
         ${PROJETOLITERATURA_WEB_STAGING}
         ${CMAKE_SOURCE_DIR}/arcore/apps/projetoliteratura.web.arapp

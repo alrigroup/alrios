@@ -38,10 +38,15 @@ static int parse_url(const char *url, char *host, int host_size,
     if (*p == ':') {
         p++;
         *port = 0;
+        int digits = 0;
         while (*p >= '0' && *p <= '9') {
+            if (digits >= 5 || *port > (65535 - (*p - '0')) / 10)
+                return -1;
             *port = (*port * 10) + (*p - '0');
+            digits++;
             p++;
         }
+        if (*port <= 0) return -1;
     }
 
     return 0;
