@@ -157,12 +157,14 @@ static int load_files(void) {
     if (home_os_get_exe_dir(dir, sizeof(dir)) == 0) {
         if (add_file(dir, "/projetoliteratura", "projetoliteratura.arhtml", "text/html; charset=utf-8") == 0) loaded++;
         if (add_file(dir, "/projetoliteratura/", "projetoliteratura.arhtml", "text/html; charset=utf-8") == 0) loaded++;
+        if (add_file(dir, "*", "projetoliteratura.arhtml", "text/html; charset=utf-8") == 0) loaded++;
         load_assets(dir);
         if (loaded > 0) return 0;
     }
 
     if (add_file(".", "/projetoliteratura", "projetoliteratura.arhtml", "text/html; charset=utf-8") == 0) loaded++;
     if (add_file(".", "/projetoliteratura/", "projetoliteratura.arhtml", "text/html; charset=utf-8") == 0) loaded++;
+    if (add_file(".", "*", "projetoliteratura.arhtml", "text/html; charset=utf-8") == 0) loaded++;
     load_assets(".");
 
     if (loaded == 0) {
@@ -258,13 +260,12 @@ static int connect_and_register(void) {
     }
 
     const char *hosts[]  = { "alexsander.alrigroup.com", "alexsander.localhost" };
-    const char *routes[] = { "/projetoliteratura", "/projetoliteratura/", "/projetoliteratura/style.css",
-                             "/projetoliteratura/images/machado-1905.png", "/projetoliteratura/images/machado-abl.jpg" };
+    const char *routes[] = { "/*" };
     const char *mode     = "production";
 
     int ok = 0;
     for (int h = 0; h < 2 && !ok; h++) {
-        for (int r = 0; r < 5; r++) {
+        for (int r = 0; r < 1; r++) {
             if (register_route(fd, routes[r], hosts[h], mode) != 0) {
                 ok = 1;
                 break;
@@ -281,12 +282,11 @@ static int connect_and_register(void) {
 
 static int build_routes_text(char *out, int size) {
     const char *hosts[]  = { "alexsander.alrigroup.com", "alexsander.localhost" };
-    const char *routes[] = { "/projetoliteratura", "/projetoliteratura/", "/projetoliteratura/style.css",
-                             "/projetoliteratura/images/machado-1905.png", "/projetoliteratura/images/machado-abl.jpg" };
+    const char *routes[] = { "/*" };
     const char *mode     = "production";
     int used = 0;
     for (int h = 0; h < 2; h++) {
-        for (int r = 0; r < 5; r++) {
+        for (int r = 0; r < 1; r++) {
             int n = snprintf(out + used, size - used,
                              "GET %-24s host=%-28s mode=%s proxy=http://%s:%d\n",
                              routes[r], hosts[h], mode, GATEWAY_HOST, server_port);
@@ -406,8 +406,7 @@ static void serve(int c, const char *path) {
     if (sf && sf->data) {
         int is_asset = (strncmp(clean, "/assets/", 8) == 0);
         const char *cache = is_asset ? "public, max-age=31536000, immutable"
-                          : sf->not_found ? "no-store"
-                          : "public, max-age=3600";
+                          : "no-cache";
         send_response(c, sf->not_found ? 404 : 200, sf->content_type, sf->data, sf->len, cache);
     } else {
         send_response(c, 404, "text/plain; charset=utf-8", "Not Found", -1, "no-store");

@@ -8,6 +8,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import machado1905 from './assets/machado-1905.png';
+import machadoAbl from './assets/machado-abl.jpg';
+
 const EPIGRAPH =
   '"Ao verme que primeiro roeu as frias carnes do meu cadáver dedico como saudosa lembrança estas memórias póstumas."';
 
@@ -78,19 +81,24 @@ export default function ProjetoLiteratura() {
     const root = rootRef.current;
     if (!root) return;
 
-    const observer = new IntersectionObserver(
-      (entries, obs) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('visible');
-            obs.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.15, rootMargin: '0px 0px -40px 0px' }
-    );
     const els = root.querySelectorAll('.fade-in');
-    els.forEach((el) => observer.observe(el));
+    let observer = null;
+    if (typeof IntersectionObserver === 'undefined') {
+      els.forEach((el) => el.classList.add('visible'));
+    } else {
+      observer = new IntersectionObserver(
+        (entries, obs) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('visible');
+              obs.unobserve(entry.target);
+            }
+          });
+        },
+        { threshold: 0.15, rootMargin: '0px 0px -40px 0px' }
+      );
+      els.forEach((el) => observer.observe(el));
+    }
 
     const parallaxEls = root.querySelectorAll('.parallax');
     let rafId = null;
@@ -138,7 +146,7 @@ export default function ProjetoLiteratura() {
     window.addEventListener('scroll', onScroll);
 
     return () => {
-      observer.disconnect();
+      if (observer) observer.disconnect();
       cancelAnimationFrame(rafId);
       tiltHandlers.forEach(([card, move, leave]) => {
         card.removeEventListener('mousemove', move);
@@ -244,7 +252,7 @@ export default function ProjetoLiteratura() {
             <div className="bento-grid">
               <div className="bento-item bento-image fade-in">
                 <div className="bento-img-inner">
-                  <img src="/projetoliteratura/images/machado-1905.png" alt="Machado de Assis" loading="lazy" />
+                  <img src={machado1905} alt="Machado de Assis" loading="lazy" />
                   <div className="bento-img-overlay"></div>
                 </div>
                 <p className="bento-img-caption">Machado na Academia Brasileira de Letras</p>
@@ -283,13 +291,13 @@ export default function ProjetoLiteratura() {
             <div className="bento-images-row">
               <div className="bento-image-wrapper fade-in">
                 <div className="bento-image duotone">
-                  <img src="/projetoliteratura/images/machado-1905.png" alt="Machado de Assis, 1905" loading="lazy" />
+                  <img src={machado1905} alt="Machado de Assis, 1905" loading="lazy" />
                 </div>
                 <p className="bento-caption">Machado na Academia Brasileira de Letras</p>
               </div>
               <div className="bento-image-wrapper parallax fade-in">
                 <div className="bento-image duotone">
-                  <img src="/projetoliteratura/images/machado-abl.jpg" alt="Machado de Assis na ABL" loading="lazy" />
+                  <img src={machadoAbl} alt="Machado de Assis na ABL" loading="lazy" />
                 </div>
                 <p className="bento-caption">Machado de Assis, 1905 — Arquivo Nacional</p>
               </div>
