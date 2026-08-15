@@ -1,0 +1,18 @@
+ALRIGROUP@APPMAKE
+{
+  "name": "arwn",
+  "bin": "arwn.arapp",
+  "version": "0.2.0",
+  "runtime": "native",
+  "entry": "arwn_build",
+  "platforms": {
+    "windows": {"entry": "arwn_build.exe"},
+    "linux": {"entry": "arwn_build"},
+    "linux-x64": {"entry": "arwn_build"},
+    "linux-arm64": {"entry": "arwn_build"}
+  },
+  "files": [
+    "arwn_build",
+    "arwn.h"
+  ]
+}

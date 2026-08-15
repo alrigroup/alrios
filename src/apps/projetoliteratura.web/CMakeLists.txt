@@ -69,4 +69,8 @@ add_custom_target(projetoliteratura_web_pack ALL
         ${CMAKE_SOURCE_DIR}/arcore/apps/projetoliteratura.web.arapp
     COMMENT "Packaging projetoliteratura.web.arapp"
 )
-add_dependencies(projetoliteratura_web_pack projetoliteratura_web_spa projetoliteratura_web armake)
+if(PROJETOLITERATURA_WEB_NODE)
+    add_dependencies(projetoliteratura_web_pack projetoliteratura_web_spa projetoliteratura_web armake)
+else()
+    add_dependencies(projetoliteratura_web_pack projetoliteratura_web armake)
+endif()

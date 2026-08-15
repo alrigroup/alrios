@@ -1,0 +1,42 @@
+ALRIGROUP@APPMAKE
+{
+  "name": "test-ecosystem-web",
+  "bin": "test_ecosystem.web.arapp",
+  "version": "1.0.0",
+  "runtime": "native",
+  "entry": "test_ecosystem_web",
+  "platforms": {
+    "linux": {
+      "entry": "test_ecosystem_web"
+    },
+    "linux-x64": {
+      "entry": "test_ecosystem_web"
+    },
+    "linux-arm64": {
+      "entry": "test_ecosystem_web"
+    },
+    "windows": {
+      "entry": "test_ecosystem_web.exe"
+    }
+  },
+  "files": [
+    "test_ecosystem_web",
+    "config.arwn",
+    "web/main.arhtml",
+    "web/main.css",
+    "web/main.js",
+    "build/main.arweb",
+    "build/c_engine.arweb",
+    "build/cpp_engine.arweb",
+    "build/go_engine.arweb",
+    "build/rust_engine.arweb",
+    "units/c/main.c",
+    "units/c/c_calc.wasm",
+    "units/cpp/main.cpp",
+    "units/cpp/cpp_calc.wasm",
+    "units/go/main.go",
+    "units/go/go_calc.wasm",
+    "units/rust/lib.rs",
+    "units/rust/rust_calc.wasm"
+  ]
+}

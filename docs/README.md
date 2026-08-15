@@ -74,7 +74,9 @@ python test_suite.py
 
 ## 📂 Infrastructure Documentation
 
+- **[ARWN Framework & .arweb Containers](arwn/README.md):** High-performance multi-language container engine and multi-threaded embedded server.
 - **[Developer Guide & IPC Specification](DEVELOPER_GUIDE.md):** `.arapp` package creation and IPC protocol.
+- **[Technical Analysis Report](ANALYSIS_REPORT.md):** Source-level review with architecture map and prioritized findings (security/concurrency).
 - **[Production & Deployment Guide](PRODUCTION.md):** Deployment manual for Debian/Linux servers and SSL configuration.
 - **[Requirements & Dependencies](REQUIREMENTS.md):** Complete software dependencies list.
 - **[ARKernel](KERNEL.md):** OS Hardware Abstraction Layer (`aros_hal.h`).
@@ -89,6 +91,7 @@ python test_suite.py
 - **[Home Web (home-web.arapp)](apps/home.web.md):** React SPA application (Port 3001).
 - **[Detroit Web (detroit-web.arapp)](apps/detroit.web.md):** React SPA application (Port 3004).
 - **[Literature Project (projetoliteratura-web.arapp)](apps/projetoliteratura.web.md):** React SPA application (Port 3003).
+- **[Ecosystem Multi-Language Demo (test_ecosystem.web)](arwn/README.md):** Benchmark suite showcasing C, C++, Rust, Go & JS in `.arweb` containers.
 
 ---
 

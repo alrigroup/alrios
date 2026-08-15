@@ -1,0 +1,23 @@
+# Configuracao ARWN para home.web
+[app]
+name=home-web
+port=3001
+bind=127.0.0.1
+
+[arws]
+gateway=127.0.0.1:9500
+route.host=alrigroup.com
+route.path=/*
+route.mode=production
+
+[unit:main]
+source=web/
+entry=index.html
+compile=src/main.jsx
+compile.lang=vite
+obfuscate=yes
+
+[assets]
+dir=web/public
+obfuscate=no
+cache=immutable

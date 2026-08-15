@@ -16,18 +16,12 @@ Release/
 *.dir/
 
 # Executables, Libraries & Binaries in arcore output directory
-arcore/arcore
-arcore/arcore.exe
-arcore/alrios
-arcore/alrios.exe
-arcore/armake
-arcore/armake.exe
-arcore/arinstall
-arcore/arinstall.exe
-arcore/apps/*.arapp
+arcore/
+arcore/.staging/
+arcore/apps/
 arcore/programfiles/
 arcore/run/
-arcore/storage/arws/certs/
+arcore/storage/
 arcore/*.log
 arcore/*.pid
 

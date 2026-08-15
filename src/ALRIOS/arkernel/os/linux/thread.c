@@ -11,7 +11,9 @@
 #include <errno.h>
 
 static int os_thread_detach(void *thread) {
-    return pthread_detach(*(pthread_t *)thread);
+    int ret = pthread_detach(*(pthread_t *)thread);
+    free(thread); /* a struct wrapper é nossa; detach = nunca join */
+    return ret;
 }
 
 static void *os_thread_create(void *(*fn)(void *), void *arg) {

@@ -76,4 +76,8 @@ add_custom_target(home_web_pack ALL
         ${CMAKE_SOURCE_DIR}/arcore/apps/home.web.arapp
     COMMENT "Packaging home.web.arapp"
 )
-add_dependencies(home_web_pack home_web_spa home_web armake)
+if(HOME_WEB_NODE)
+    add_dependencies(home_web_pack home_web_spa home_web armake)
+else()
+    add_dependencies(home_web_pack home_web armake)
+endif()
