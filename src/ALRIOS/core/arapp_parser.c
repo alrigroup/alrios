@@ -296,10 +296,75 @@ int ar_manifest_parse(const char *json, ar_app_manifest_t *out) {
                     p = skip_ws(p);
                     if (*p != ':') return -1;
                     p++;
-                    if (strcmp(bk, "command") == 0)
-                        p = parse_string(p, out->build_command, sizeof(out->build_command));
-                    else
+                    p = skip_ws(p);
+
+                    if (strcmp(bk, "command") == 0) {
+                        /* Legado: build.command */
+                        p = parse_string(p, out->build.command, sizeof(out->build.command));
+
+                    } else if (strcmp(bk, "staging") == 0) {
+                        p = parse_string(p, out->build.staging, sizeof(out->build.staging));
+
+                    } else if (strcmp(bk, "cleanup") == 0) {
+                        /* build.cleanup: array de strings */
+                        if (*p == '[') {
+                            p++;
+                            while (*p && out->build.cleanup_count < AR_BUILD_CLEANUP_MAX) {
+                                p = skip_ws(p);
+                                if (*p == ']') { p++; break; }
+                                if (*p == ',') { p++; continue; }
+                                p = parse_string(p, out->build.cleanup[out->build.cleanup_count],
+                                                 AR_BUILD_CLEANUP_PATH);
+                                if (!p) return -1;
+                                out->build.cleanup_count++;
+                            }
+                        } else {
+                            p = skip_value(p);
+                        }
+
+                    } else if (strcmp(bk, "steps") == 0) {
+                        /* build.steps: array de { name, cmd, cwd } */
+                        if (*p == '[') {
+                            p++;
+                            while (*p && out->build.step_count < AR_BUILD_MAX_STEPS) {
+                                p = skip_ws(p);
+                                if (*p == ']') { p++; break; }
+                                if (*p == ',') { p++; continue; }
+                                if (*p != '{') { p = skip_value(p); continue; }
+                                p++;
+                                ar_build_step_t *step = &out->build.steps[out->build.step_count];
+                                while (*p) {
+                                    p = skip_ws(p);
+                                    if (*p == '}') { p++; break; }
+                                    if (*p == ',') { p++; continue; }
+                                    char sk[64];
+                                    p = parse_string(p, sk, sizeof(sk));
+                                    if (!p) return -1;
+                                    p = skip_ws(p);
+                                    if (*p != ':') return -1;
+                                    p++;
+                                    if (strcmp(sk, "name") == 0)
+                                        p = parse_string(p, step->name, sizeof(step->name));
+                                    else if (strcmp(sk, "cmd") == 0)
+                                        p = parse_string(p, step->cmd, sizeof(step->cmd));
+                                    else if (strcmp(sk, "cwd") == 0)
+                                        p = parse_string(p, step->cwd, sizeof(step->cwd));
+                                    else
+                                        p = skip_value(p);
+                                    if (!p) return -1;
+                                }
+                                if (step->cmd[0])
+                                    out->build.step_count++;
+                            }
+                        } else {
+                            p = skip_value(p);
+                        }
+
+                    } else {
                         p = skip_value(p);
+                    }
+
+                    if (!p) return -1;
                 }
             } else {
                 p = skip_value(p);

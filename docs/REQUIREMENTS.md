@@ -28,7 +28,7 @@ sudo apt install -y cmake gcc make libssl-dev pkg-config nodejs npm
 
 - **`cmake` / `make` / `gcc`:** C language compilation toolchain (C11).
 - **`libssl-dev`:** OpenSSL header files for compilation.
-- **`nodejs` / `npm`:** Required to build React SPA bundles (`home.web`, `detroit.web`, `projetoliteratura.web`).
+- **`nodejs` / `npm`:** Required to build React SPA bundles (`home.web`, `detroit.web`).
 
 ---
 

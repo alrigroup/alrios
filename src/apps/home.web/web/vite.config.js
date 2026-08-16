@@ -33,7 +33,16 @@ export default defineConfig({
   build: {
     target: 'es2018',
     cssCodeSplit: false,
-    assetsInlineLimit: 100000000,
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        entryFileNames: 'main.js',
+        chunkFileNames: 'main.js',
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name && assetInfo.name.endsWith('.css')) return 'main.css'
+          return '[name][extname]'
+        }
+      }
+    }
   }
 })

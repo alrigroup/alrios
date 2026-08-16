@@ -615,7 +615,7 @@ int arws_config_get_port(void) {
 
     if (arws_config_get_mode() == ARWS_MODE_PRODUCTION)
         return 443;
-    return 8080;
+    return 80;
 }
 
 int arws_config_get_operation_mode(void) {

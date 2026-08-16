@@ -8,13 +8,16 @@
 
 /* arwn_build — CLI da ARWN (Fase 0/1):
      init <dir> [--framework vanilla|react|vue]
-     build <dir>
+     build <dir> [--out <outdir>]
      config --validate <dir>
 */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 #include "arwn.h"
 #include "aros_hal.h"
@@ -256,7 +259,7 @@ static int cmd_init(const char *dir, const char *framework) {
     return 0;
 }
 
-static int cmd_build(const char *dir) {
+static int cmd_build(const char *dir, const char *out_dir) {
     arwn_app_t *app = arwn_app_new("app");
     if (!app) return 1;
 
@@ -269,7 +272,7 @@ static int cmd_build(const char *dir) {
     }
     printf("[arwn] config ok: %d unit(s)\n", arwn_config_unit_count(app));
 
-    if (arwn_builder_execute(app) != 0) {
+    if (arwn_builder_execute_out(app, out_dir) != 0) {
         printf("[arwn] build failed\n");
         arwn_app_free(app);
         return 1;
@@ -280,13 +283,49 @@ static int cmd_build(const char *dir) {
     return 0;
 }
 
+static int get_exe_dir(char *buf, size_t size) {
+#ifdef _WIN32
+    GetModuleFileNameA(NULL, buf, (DWORD)size);
+    char *p = strrchr(buf, '\\');
+    if (p) *p = '\0';
+    return 0;
+#else
+    ssize_t len = readlink("/proc/self/exe", buf, size - 1);
+    if (len < 0) return -1;
+    buf[len] = '\0';
+    char *p = strrchr(buf, '/');
+    if (p) *p = '\0';
+    return 0;
+#endif
+}
+
 /* serve <dir>: build (se preciso) + mount (event loop do server + gateway) */
 static int cmd_serve(const char *dir) {
-    arwn_app_t *app = arwn_app_new("app");
-    if (!app) return 1;
+    char target_dir[1300];
+    snprintf(target_dir, sizeof(target_dir), "%s", dir ? dir : ".");
 
     char cfg[1300];
-    snprintf(cfg, sizeof(cfg), "%s/config.arwn", dir);
+    snprintf(cfg, sizeof(cfg), "%s/config.arwn", target_dir);
+
+    /* If config.arwn not in target_dir, check next to executable */
+    FILE *chk = fopen(cfg, "rb");
+    if (!chk) {
+        char exe_dir[1024];
+        if (get_exe_dir(exe_dir, sizeof(exe_dir)) == 0) {
+            snprintf(cfg, sizeof(cfg), "%s/config.arwn", exe_dir);
+            FILE *chk2 = fopen(cfg, "rb");
+            if (chk2) {
+                fclose(chk2);
+                snprintf(target_dir, sizeof(target_dir), "%s", exe_dir);
+            }
+        }
+    } else {
+        fclose(chk);
+    }
+
+    arwn_app_t *app = arwn_app_new(target_dir);
+    if (!app) return 1;
+
     if (arwn_config_load(app, cfg) != 0) {
         printf("config error: %s\n", arwn_config_last_error(app));
         arwn_app_free(app);
@@ -323,7 +362,10 @@ static int cmd_config_validate(const char *dir) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 2) { usage(); return 1; }
+    /* If run without arguments or with flags, default to serving current directory */
+    if (argc < 2 || (argc >= 2 && argv[1][0] == '-')) {
+        return cmd_serve(".");
+    }
 
     if (strcmp(argv[1], "init") == 0) {
         if (argc < 3) { usage(); return 1; }
@@ -333,15 +375,28 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "build") == 0) {
         if (argc < 3) { usage(); return 1; }
-        return cmd_build(argv[2]);
+        const char *out_dir = NULL;
+        /* Procura --out <dir> na linha de comando */
+        for (int i = 3; i < argc - 1; i++) {
+            if (strcmp(argv[i], "--out") == 0) {
+                out_dir = argv[i + 1];
+                break;
+            }
+        }
+        return cmd_build(argv[2], out_dir);
     }
     if (strcmp(argv[1], "serve") == 0) {
-        if (argc < 3) { usage(); return 1; }
-        return cmd_serve(argv[2]);
+        const char *dir = (argc >= 3) ? argv[2] : ".";
+        return cmd_serve(dir);
     }
     if (strcmp(argv[1], "config") == 0 && argc >= 4 &&
         strcmp(argv[2], "--validate") == 0) {
         return cmd_config_validate(argv[3]);
+    }
+
+    /* If passed a directory directly, serve it */
+    if (argc == 2 && argv[1][0] != '-') {
+        return cmd_serve(argv[1]);
     }
 
     usage();

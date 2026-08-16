@@ -55,6 +55,9 @@ int arwn_server_add_route(arwn_server_t *s, const char *path,
                           const uint8_t *data, size_t size,
                           const char *content_type, arwn_cache_t cache);
 
+/* Define uma rota de fallback customizada para 404 (ex: página notfound). */
+int arwn_server_set_notfound_route(arwn_server_t *s, const arwn_route_t *route);
+
 /* Carrega um .arweb (validado) e expõe suas seções como rotas:
  *   - <entry> e "/"  -> seção app.html (no-cache)
  *   - /mod/main.wasm -> seção mod/main.wasm (immutable, application/wasm)
@@ -75,5 +78,6 @@ void arwn_server_free(arwn_server_t *s);
 /* Rota do servidor (para logs/query). */
 int arwn_server_route_count(const arwn_server_t *s);
 const arwn_route_t *arwn_server_route(const arwn_server_t *s, int idx);
+int arwn_server_has_notfound_route(const arwn_server_t *s);
 
 #endif /* ARWN_SERVER_H */

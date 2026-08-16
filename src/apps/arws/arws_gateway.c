@@ -415,9 +415,20 @@ static void *client_handler_loop(void *arg) {
                 if (proxy_url[0] != '\0') {
                     int is_stream = (strncmp(mode, "stream", 6) == 0) ||
                                     (strcmp(type_str, "stream") == 0);
+                    int is_local = 0;
+                    if (host[0]) {
+                        size_t hlen = strlen(host);
+                        if (strcasecmp(host, "localhost") == 0 || strcmp(host, "127.0.0.1") == 0 ||
+                            (hlen > 10 && strcasecmp(host + hlen - 10, ".localhost") == 0)) {
+                            is_local = 1;
+                        }
+                    }
                     const char *route_mode = "*";
-                    if (!is_stream && mode[0] && strcmp(mode, "stream") != 0)
+                    if (is_local) {
+                        route_mode = MODE_TEST;
+                    } else if (!is_stream && mode[0] && strcmp(mode, "stream") != 0) {
                         route_mode = mode;
+                    }
                     if (is_stream) {
                         arws_add_stream_route(prefix, method, host,
                                               route_mode, proxy_url);
@@ -704,9 +715,11 @@ int arws_start(int port, int mode) {
     if (gateway_running) return 0;
     gateway_running = 1;
 
-    admin_mutex = ar_mutex_create();
+    if (!admin_mutex) admin_mutex = ar_mutex_create();
+    ar_mutex_lock(admin_mutex);
     memset(admin_client_fds, 0, sizeof(admin_client_fds));
     admin_client_count = 0;
+    ar_mutex_unlock(admin_mutex);
 
     admin_server_fd = ar_ipc_server_start(ARWS_ADMIN_PORT);
     if (admin_server_fd < 0) {
@@ -720,7 +733,6 @@ int arws_start(int port, int mode) {
                      ARWS_ADMIN_PORT);
 
     accept_thread = ar_thread_create(accept_loop, NULL);
-    if (accept_thread) ar_thread_detach(accept_thread);
 
     /* Wait up to 5s for at least one backend to register before accepting HTTP */
     int waited = 0;
@@ -749,17 +761,25 @@ void arws_stop(void) {
     arws_config_watchdog_stop();
 
     if (admin_server_fd >= 0) {
-        ar_ipc_server_stop(admin_server_fd);
+        int sfd = admin_server_fd;
         admin_server_fd = -1;
+        ar_ipc_server_stop(sfd);
     }
 
-    ar_mutex_lock(admin_mutex);
-    for (int i = 0; i < admin_client_count; i++) {
-        if (admin_client_fds[i] >= 0)
-            ar_socket_close(admin_client_fds[i]);
+    if (accept_thread) {
+        ar_thread_join(accept_thread);
+        accept_thread = NULL;
     }
-    admin_client_count = 0;
-    ar_mutex_unlock(admin_mutex);
+
+    if (admin_mutex) {
+        ar_mutex_lock(admin_mutex);
+        for (int i = 0; i < admin_client_count; i++) {
+            if (admin_client_fds[i] >= 0)
+                ar_socket_close(admin_client_fds[i]);
+        }
+        admin_client_count = 0;
+        ar_mutex_unlock(admin_mutex);
+    }
 
     arws_close_all_backends();
 

@@ -71,10 +71,14 @@ int ar_svc_start(const char *name) {
 int ar_svc_stop(const char *name) {
     svc_t *svc = find_svc(name);
     if (!svc) return -1;
-    if (svc->status != SVC_RUNNING) return -1;
+    if (svc->status != SVC_RUNNING && svc->status != SVC_CRASHED) return -1;
 
     if (svc->stop_hook)
         svc->stop_hook();
+    if (svc->thread_handle) {
+        ar_thread_join(svc->thread_handle);
+        svc->thread_handle = NULL;
+    }
     svc->status = SVC_STOPPED;
     return 0;
 }

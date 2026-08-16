@@ -15,6 +15,10 @@
    toolchains e monta um .arweb por unit. */
 int arwn_builder_execute(arwn_app_t *app);
 
+/* Igual a arwn_builder_execute, mas grava os .arweb em 'out_dir' em vez de
+   '<app_root>/build'. Passa NULL para usar o padrão. */
+int arwn_builder_execute_out(arwn_app_t *app, const char *out_dir);
+
 /* Junta dois segmentos de path com limite explícito. Retorna 0 ou -1. */
 int arwn_path_join(char *out, int cap, const char *a, const char *b);
 

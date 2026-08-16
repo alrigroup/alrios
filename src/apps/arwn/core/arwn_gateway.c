@@ -22,12 +22,16 @@
 #define ARWN_GATEWAY_IDLE_ROUNDS 60
 #define ARWN_GATEWAY_SLEEP_MS 1000
 
+static arwn_server_t *g_server = NULL;
+static char g_app_name[64] = {0};
+
 typedef struct {
     char host[64];
     uint16_t port;
     char route_host[128];
     char route_path[128];
     char route_mode[16];
+    char route_rl[32];
     char server_bind[64];
     uint16_t server_port;
 } arwn_gw_cfg_t;
@@ -55,20 +59,30 @@ static void gateway_read_cfg(arwn_app_t *app, arwn_gw_cfg_t *cfg) {
     snprintf(cfg->route_host, sizeof(cfg->route_host), "%s",
              arwn_config_get(app, "arws", "route.host", "localhost"));
     snprintf(cfg->route_path, sizeof(cfg->route_path), "%s",
-             arwn_config_get(app, "arws", "route.path", "/*"));
+             arwn_config_get(app, "arws", "route.path", ""));
     snprintf(cfg->route_mode, sizeof(cfg->route_mode), "%s",
              arwn_config_get(app, "arws", "route.mode", "production"));
+    snprintf(cfg->route_rl, sizeof(cfg->route_rl), "%s",
+             arwn_config_get(app, "arws", "route.rl", ""));
     snprintf(cfg->server_bind, sizeof(cfg->server_bind), "%s",
              arwn_config_get(app, "app", "bind", "127.0.0.1"));
     cfg->server_port = (uint16_t)arwn_config_get_int(app, "app", "port", 3001);
 }
 
-static int gw_register(int fd, const char *name, const arwn_gw_cfg_t *cfg) {
+static int gw_register_single_route(int fd, const char *name, const char *path, const arwn_gw_cfg_t *cfg) {
     char payload[512];
-    int len = snprintf(payload, sizeof(payload),
+    int len;
+    if (cfg->route_rl[0]) {
+        len = snprintf(payload, sizeof(payload),
+                       "%s %s %s %s %s proxy=http://%s:%u type=proxy rl=%s",
+                       name, path, "GET", cfg->route_host,
+                       cfg->route_mode, cfg->server_bind, cfg->server_port, cfg->route_rl);
+    } else {
+        len = snprintf(payload, sizeof(payload),
                        "%s %s %s %s %s proxy=http://%s:%u type=proxy",
-                       name, cfg->route_path, "GET", cfg->route_host,
+                       name, path, "GET", cfg->route_host,
                        cfg->route_mode, cfg->server_bind, cfg->server_port);
+    }
     if (len <= 0 || len >= (int)sizeof(payload)) return -1;
 
     if (ar_ipc_send_frame(fd, IPC_REGISTER, payload, (uint32_t)len + 1) != 0)
@@ -80,9 +94,83 @@ static int gw_register(int fd, const char *name, const arwn_gw_cfg_t *cfg) {
     if (ar_ipc_recv_frame(fd, (int *)&type, ack, &alen) != 0) return -1;
     if (type != IPC_ACK) return -1;
 
-    printf("[arwn] registered GET %s host=%s -> proxy://%s:%u (%s)\n",
-           cfg->route_path, cfg->route_host, cfg->server_bind,
-           cfg->server_port, ack);
+    return 0;
+}
+
+static int is_localhost_domain(const char *host) {
+    if (!host || !host[0]) return 0;
+    if (strcasecmp(host, "localhost") == 0 || strcmp(host, "127.0.0.1") == 0) return 1;
+    size_t len = strlen(host);
+    if (len > 10 && strcasecmp(host + len - 10, ".localhost") == 0) return 1;
+    return 0;
+}
+
+static int gw_register_host_routes(int fd, const char *name, const char *host, const arwn_gw_cfg_t *cfg, arwn_server_t *server) {
+    arwn_gw_cfg_t host_cfg = *cfg;
+    snprintf(host_cfg.route_host, sizeof(host_cfg.route_host), "%s", host);
+
+    /* Domínios localhost / *.localhost são ambientes de teste -> modo test */
+    if (is_localhost_domain(host)) {
+        snprintf(host_cfg.route_mode, sizeof(host_cfg.route_mode), "test");
+    }
+
+    int registered_wildcard = 0;
+
+    /* 1. Se route.path no config.arwn for explícito (ex: '/*'), registra */
+    if (host_cfg.route_path[0] != '\0' && strcmp(host_cfg.route_path, "none") != 0) {
+        if (gw_register_single_route(fd, name, host_cfg.route_path, &host_cfg) == 0) {
+            printf("[arwn] registered GET %s host=%s -> proxy://%s:%u\n",
+                   host_cfg.route_path, host_cfg.route_host, host_cfg.server_bind, host_cfg.server_port);
+            if (strcmp(host_cfg.route_path, "/*") == 0 || strcmp(host_cfg.route_path, "*") == 0)
+                registered_wildcard = 1;
+        }
+    }
+
+    /* 2. Se o app tem página 404 própria (unit notfound), cadastra automaticamente '/*' no ARWS */
+    if (!registered_wildcard && server && arwn_server_has_notfound_route(server)) {
+        if (gw_register_single_route(fd, name, "/*", &host_cfg) == 0) {
+            printf("[arwn] auto-registered catch-all GET /* host=%s (has custom 404) -> proxy://%s:%u\n",
+                   host_cfg.route_host, host_cfg.server_bind, host_cfg.server_port);
+            registered_wildcard = 1;
+        }
+    }
+
+    /* 3. Cadastra todas as rotas específicas conhecidas do servidor */
+    if (server) {
+        int n = arwn_server_route_count(server);
+        for (int i = 0; i < n; i++) {
+            const arwn_route_t *r = arwn_server_route(server, i);
+            if (!r || !r->path || r->path[0] == '\0') continue;
+
+            if (gw_register_single_route(fd, name, r->path, &host_cfg) == 0) {
+                printf("[arwn] registered GET %s host=%s -> proxy://%s:%u\n",
+                       r->path, host_cfg.route_host, host_cfg.server_bind, host_cfg.server_port);
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int gw_register(int fd, const char *name, const arwn_gw_cfg_t *cfg, arwn_server_t *server) {
+    char hosts_buf[256];
+    snprintf(hosts_buf, sizeof(hosts_buf), "%s", cfg->route_host);
+
+    /* Suporta múltiplos hosts separados por vírgula ou espaço (ex: "alrigroup.com, localhost") */
+    char *p = hosts_buf;
+    while (*p) {
+        while (*p == ' ' || *p == '\t' || *p == ',') p++;
+        if (!*p) break;
+        char *start = p;
+        while (*p && *p != ' ' && *p != '\t' && *p != ',') p++;
+        char saved = *p;
+        *p = '\0';
+
+        gw_register_host_routes(fd, name, start, cfg, server);
+
+        if (saved) p++;
+    }
+
     return 0;
 }
 
@@ -113,7 +201,8 @@ static void handle_query(int fd, arwn_server_t *server, const char *q, int len) 
     if (strcmp(cmd, "ping") == 0) {
         rlen = snprintf(resp, sizeof(resp), "pong");
     } else if (strcmp(cmd, "status") == 0) {
-        rlen = snprintf(resp, sizeof(resp), "arwn RUNNING routes=%d",
+        rlen = snprintf(resp, sizeof(resp), "%s RUNNING routes=%d",
+                        g_app_name[0] ? g_app_name : "arwn",
                         arwn_server_route_count(server));
     } else if (strcmp(cmd, "routes") == 0) {
         rlen = snprintf(resp, sizeof(resp), "%s",
@@ -182,7 +271,7 @@ static void *gateway_thread(void *arg) {
     for (int attempt = 1; attempt <= ARWN_GATEWAY_MAX_ATTEMPTS; attempt++) {
         int fd = ar_socket_create(1);
         if (fd >= 0 && ar_socket_connect(fd, cfg.host, cfg.port) == 0) {
-            if (gw_register(fd, name, &cfg) == 0) {
+            if (gw_register(fd, name, &cfg, server) == 0) {
                 printf("[arwn] routes registered + control channel open (attempt %d)\n",
                        attempt);
                 gw_control_loop(fd, server);
@@ -201,10 +290,6 @@ static void *gateway_thread(void *arg) {
     return NULL;
 }
 
-/* registro do server para o thread do gateway (o app pode não ter campo
-   para ele; mantemos um ponteiro global por processo). */
-static arwn_server_t *g_server = NULL;
-
 arwn_server_t *arwn_server_for_gateway(void) {
     return g_server;
 }
@@ -212,6 +297,7 @@ arwn_server_t *arwn_server_for_gateway(void) {
 int arwn_gateway_start(arwn_app_t *app, arwn_server_t *server) {
     if (!app || !server) return -1;
     g_server = server;
+    snprintf(g_app_name, sizeof(g_app_name), "%s", arwn_app_name(app));
 
     void *th = ar_thread_create(gateway_thread, app);
     if (!th) return -1;

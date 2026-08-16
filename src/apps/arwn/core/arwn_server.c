@@ -42,8 +42,8 @@ typedef struct arwn_conn {
     struct arwn_conn *next;
 } arwn_conn_t;
 
-#define ARWN_SERVER_WORKERS 4
-#define ARWN_SERVER_QUEUE_SIZE 4096
+#define ARWN_SERVER_WORKERS 28
+#define ARWN_SERVER_QUEUE_SIZE 16384
 
 typedef struct {
     int fd;
@@ -55,6 +55,8 @@ struct arwn_server {
     uint16_t port;
     arwn_route_t routes[ARWN_SERVER_MAX_ROUTES];
     int route_count;
+    arwn_route_t notfound_route;
+    int has_notfound_route;
     void *queue_mutex;
     void *queue_cond;
     arwn_work_item_t queue[ARWN_SERVER_QUEUE_SIZE];
@@ -84,10 +86,27 @@ arwn_server_t *arwn_server_create(void) {
     return s;
 }
 
+int arwn_server_set_notfound_route(arwn_server_t *s, const arwn_route_t *route) {
+    if (!s || !route) return -1;
+    s->notfound_route = *route;
+    s->has_notfound_route = 1;
+    return 0;
+}
+
 int arwn_server_add_route(arwn_server_t *s, const char *path,
                           const uint8_t *data, size_t size,
                           const char *content_type, arwn_cache_t cache) {
     if (!s || !path || !data || size == 0) return -1;
+    /* Evita registrar rotas duplicadas com mesmo path exato */
+    for (int i = 0; i < s->route_count; i++) {
+        if (s->routes[i].path && strcmp(s->routes[i].path, path) == 0) {
+            s->routes[i].data = data;
+            s->routes[i].size = size;
+            s->routes[i].content_type = content_type;
+            s->routes[i].cache = cache;
+            return 0;
+        }
+    }
     if (s->route_count >= ARWN_SERVER_MAX_ROUTES) return -1;
     arwn_route_t *r = &s->routes[s->route_count];
     r->path = path;
@@ -106,27 +125,39 @@ int arwn_server_load_arweb(arwn_server_t *s, const arwn_unit_t *unit,
     int n = arwn_pack_index(arweb, arweb_len, views, ARWN_ARWEB_MAX_SECTIONS);
     if (n <= 0) return -1;
 
-    char app_route[ARWN_UNIT_MAX_ENTRY + 2];
     char wasm_route[80];
-    const char *entry = unit->entry[0] ? unit->entry : "main.arhtml";
-
-    /* "/" sempre serve o entry (SPA); no-cache + ETag (gate). */
-    snprintf(app_route, sizeof(app_route), "/%s", entry);
+    const char *route = unit->route[0] ? unit->route : "/";
+    int is_404_unit = (strcmp(unit->name, "notfound") == 0 ||
+                       strcmp(route, "/notfound") == 0 ||
+                       strcmp(route, "/404") == 0 ||
+                       strcmp(route, "404") == 0);
 
     for (int i = 0; i < n; i++) {
         if (strcmp(views[i].name, "app.html") == 0) {
-            arwn_server_add_route(s, "/", views[i].data, views[i].size,
-                                  "text/html; charset=utf-8",
-                                  ARWN_CACHE_NO_CACHE);
-            arwn_server_add_route(s, strdup(app_route), views[i].data, views[i].size,
-                                  "text/html; charset=utf-8",
-                                  ARWN_CACHE_NO_CACHE);
-            arwn_server_add_route(s, "/main.arhtml", views[i].data, views[i].size,
-                                  "text/html; charset=utf-8",
-                                  ARWN_CACHE_NO_CACHE);
-            arwn_server_add_route(s, "/index.arhtml", views[i].data, views[i].size,
-                                  "text/html; charset=utf-8",
-                                  ARWN_CACHE_NO_CACHE);
+            if (is_404_unit) {
+                arwn_route_t nf;
+                nf.path = "/404";
+                nf.data = views[i].data;
+                nf.size = views[i].size;
+                nf.content_type = "text/html; charset=utf-8";
+                nf.cache = ARWN_CACHE_NO_CACHE;
+                arwn_server_set_notfound_route(s, &nf);
+                arwn_server_add_route(s, "/notfound", views[i].data, views[i].size,
+                                      "text/html; charset=utf-8",
+                                      ARWN_CACHE_NO_CACHE);
+                arwn_server_add_route(s, "/404", views[i].data, views[i].size,
+                                      "text/html; charset=utf-8",
+                                      ARWN_CACHE_NO_CACHE);
+            } else {
+                arwn_server_add_route(s, strdup(route), views[i].data, views[i].size,
+                                      "text/html; charset=utf-8",
+                                      ARWN_CACHE_NO_CACHE);
+                if (strcmp(unit->name, "index") == 0 || strcmp(unit->name, "main") == 0) {
+                    arwn_server_add_route(s, "/", views[i].data, views[i].size,
+                                          "text/html; charset=utf-8",
+                                          ARWN_CACHE_NO_CACHE);
+                }
+            }
         } else if (strcmp(views[i].name, "mod/main.wasm") == 0) {
             snprintf(wasm_route, sizeof(wasm_route), "/mod/%s.wasm", unit->name);
             arwn_server_add_route(s, "/mod/main.wasm", views[i].data,
@@ -135,31 +166,52 @@ int arwn_server_load_arweb(arwn_server_t *s, const arwn_unit_t *unit,
             arwn_server_add_route(s, strdup(wasm_route), views[i].data, views[i].size,
                                   "application/wasm", ARWN_CACHE_IMMUTABLE);
         } else if (strcmp(views[i].name, "bundle.js") == 0 || strcmp(views[i].name, "main.js") == 0) {
-            arwn_server_add_route(s, "/bundle.js", views[i].data,
-                                  views[i].size,
-                                  "application/javascript; charset=utf-8",
-                                  ARWN_CACHE_IMMUTABLE);
-            arwn_server_add_route(s, "/main.js", views[i].data,
-                                  views[i].size,
-                                  "application/javascript; charset=utf-8",
-                                  ARWN_CACHE_IMMUTABLE);
+            char unit_js[128];
+            snprintf(unit_js, sizeof(unit_js), "/%s.js", unit->name);
+            arwn_server_add_route(s, strdup(unit_js), views[i].data, views[i].size,
+                                  "application/javascript; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+            arwn_server_add_route(s, "/bundle.js", views[i].data, views[i].size,
+                                  "application/javascript; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+            arwn_server_add_route(s, "/main.js", views[i].data, views[i].size,
+                                  "application/javascript; charset=utf-8", ARWN_CACHE_IMMUTABLE);
         } else if (strcmp(views[i].name, "main.css") == 0 || strcmp(views[i].name, "style.css") == 0) {
-            arwn_server_add_route(s, "/main.css", views[i].data,
-                                  views[i].size,
-                                  "text/css; charset=utf-8",
-                                  ARWN_CACHE_IMMUTABLE);
-            arwn_server_add_route(s, "/style.css", views[i].data,
-                                  views[i].size,
-                                  "text/css; charset=utf-8",
-                                  ARWN_CACHE_IMMUTABLE);
+            char unit_css[128];
+            snprintf(unit_css, sizeof(unit_css), "/%s.css", unit->name);
+            arwn_server_add_route(s, strdup(unit_css), views[i].data, views[i].size,
+                                  "text/css; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+            arwn_server_add_route(s, "/main.css", views[i].data, views[i].size,
+                                  "text/css; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+            arwn_server_add_route(s, "/style.css", views[i].data, views[i].size,
+                                  "text/css; charset=utf-8", ARWN_CACHE_IMMUTABLE);
         } else if (strcmp(views[i].name, "arwn-bridge.js") == 0) {
             /* bridge (F3): servida com hash estável p/ V8 code cache */
             arwn_server_add_route(s, "/arwn-bridge.js", views[i].data,
                                   views[i].size,
                                   "application/javascript; charset=utf-8",
                                   ARWN_CACHE_IMMUTABLE);
+        } else if (strcmp(views[i].name, "config.arwn") != 0) {
+            /* Demais arquivos estáticos empacotados (ex: robots.txt, sitemap.xml, favicon.ico) */
+            char static_route[128];
+            snprintf(static_route, sizeof(static_route), "/%s", views[i].name);
+            const char *content_type = "application/octet-stream";
+            size_t nlen = strlen(views[i].name);
+            if (nlen > 4 && strcmp(views[i].name + nlen - 4, ".txt") == 0) {
+                content_type = "text/plain; charset=utf-8";
+            } else if (nlen > 4 && strcmp(views[i].name + nlen - 4, ".xml") == 0) {
+                content_type = "application/xml; charset=utf-8";
+            } else if (nlen > 4 && strcmp(views[i].name + nlen - 4, ".ico") == 0) {
+                content_type = "image/x-icon";
+            } else if (nlen > 4 && strcmp(views[i].name + nlen - 4, ".svg") == 0) {
+                content_type = "image/svg+xml";
+            } else if (nlen > 5 && strcmp(views[i].name + nlen - 5, ".json") == 0) {
+                content_type = "application/json; charset=utf-8";
+            } else if (nlen > 9 && strcmp(views[i].name + nlen - 9, ".manifest") == 0) {
+                content_type = "application/manifest+json; charset=utf-8";
+            }
+            arwn_server_add_route(s, strdup(static_route), views[i].data,
+                                  views[i].size, content_type,
+                                  ARWN_CACHE_NO_CACHE);
         }
-        /* config.arwn não é servido (interno) */
     }
 
     /* .arweb cru (F3): o browser busca via ARWN.load + verifica CRC */
@@ -177,6 +229,10 @@ int arwn_server_route_count(const arwn_server_t *s) {
 const arwn_route_t *arwn_server_route(const arwn_server_t *s, int idx) {
     if (!s || idx < 0 || idx >= s->route_count) return NULL;
     return &s->routes[idx];
+}
+
+int arwn_server_has_notfound_route(const arwn_server_t *s) {
+    return (s && s->has_notfound_route);
 }
 
 static arwn_route_t *find_route(arwn_server_t *s, const char *path,
@@ -297,7 +353,7 @@ static void handle_client_conn(arwn_server_t *s, int fd) {
         }
 
         if (!header_complete) {
-            char hbuf[512];
+            char hbuf[1024];
             size_t hlen = build_head(hbuf, sizeof(hbuf), 400, "Bad Request",
                                      "text/plain", 11, ARWN_CACHE_NO_STORE, 0, NULL);
             send_all(fd, hbuf, hlen);
@@ -317,7 +373,7 @@ static void handle_client_conn(arwn_server_t *s, int fd) {
         /* Method check */
         int is_head = arwn_http_method_is(&req, "HEAD");
         if (!arwn_http_method_is(&req, "GET") && !is_head) {
-            char hbuf[512];
+            char hbuf[1024];
             size_t hlen = build_head(hbuf, sizeof(hbuf), 405, "Method Not Allowed",
                                      "text/plain", 18, ARWN_CACHE_NO_STORE, keep_alive, NULL);
             send_all(fd, hbuf, hlen);
@@ -330,11 +386,26 @@ static void handle_client_conn(arwn_server_t *s, int fd) {
         /* Match Route */
         arwn_route_t *r = find_route(s, req.path, req.path_len);
         if (!r) {
-            char hbuf[512];
-            size_t hlen = build_head(hbuf, sizeof(hbuf), 404, "Not Found",
-                                     "text/plain", 9, ARWN_CACHE_NO_STORE, keep_alive, NULL);
-            send_all(fd, hbuf, hlen);
-            send_all(fd, "not found", 9);
+            if (s->has_notfound_route && s->notfound_route.data) {
+                char hbuf[1024];
+                size_t hlen = build_head(hbuf, sizeof(hbuf), 404, "Not Found",
+                                         s->notfound_route.content_type,
+                                         s->notfound_route.size,
+                                         s->notfound_route.cache, keep_alive, NULL);
+                if (send_all(fd, hbuf, hlen) < 0) { ar_socket_close(fd); return; }
+                if (!is_head && s->notfound_route.size > 0) {
+                    if (send_all(fd, s->notfound_route.data, s->notfound_route.size) < 0) {
+                        ar_socket_close(fd);
+                        return;
+                    }
+                }
+            } else {
+                char hbuf[1024];
+                size_t hlen = build_head(hbuf, sizeof(hbuf), 404, "Not Found",
+                                         "text/plain", 9, ARWN_CACHE_NO_STORE, keep_alive, NULL);
+                send_all(fd, hbuf, hlen);
+                send_all(fd, "not found", 9);
+            }
             if (!keep_alive) { ar_socket_close(fd); return; }
             total = 0;
             continue;

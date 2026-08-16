@@ -13,7 +13,7 @@
 #define MODE_TEST        "test"
 #define MODE_MAINTENANCE "maintenance"
 
-#define MAX_OVERRIDES       64
+#define MAX_OVERRIDES       128
 #define MAX_MAINTENANCE_IPS 32
 
 typedef enum {

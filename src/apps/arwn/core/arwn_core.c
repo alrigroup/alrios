@@ -11,7 +11,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include <signal.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 #include "arwn_config.h"
 #include "arwn_builder.h"
 #include "arwn_gateway.h"
@@ -20,6 +23,16 @@
 #include "arwn_internal.h"
 
 #define ARWN_APP_MAX_NAME 63
+
+static arwn_server_t *g_active_server = NULL;
+
+static void on_sigterm(int sig) {
+    (void)sig;
+    if (g_active_server) {
+        arwn_server_stop(g_active_server);
+    }
+    _exit(0);
+}
 
 static int file_exists(const char *path) {
     if (!path) return 0;
@@ -82,6 +95,7 @@ int arwn_unit_fill(arwn_unit_t *u, arwn_cfg_t *cfg) {
 
     const char *src = arwn_cfg_find_def(cfg, sect, "source", "");
     const char *entry = arwn_cfg_find_def(cfg, sect, "entry", "main.arhtml");
+    const char *route = arwn_cfg_find_def(cfg, sect, "route", "");
     const char *compile = arwn_cfg_find_def(cfg, sect, "compile", "");
     const char *langs = arwn_cfg_find_def(cfg, sect, "compile.lang", "");
     const char *obf = arwn_cfg_find_def(cfg, sect, "obfuscate", "no");
@@ -104,6 +118,20 @@ int arwn_unit_fill(arwn_unit_t *u, arwn_cfg_t *cfg) {
     if (nl > ARWN_UNIT_MAX_ENTRY) nl = ARWN_UNIT_MAX_ENTRY;
     memcpy(u->entry, entry, nl);
     u->entry[nl] = '\0';
+
+    /* route: path limpo da página (sem extensão). Default: "/<nome>" */
+    nl = strlen(route);
+    if (nl > ARWN_UNIT_MAX_ENTRY) nl = ARWN_UNIT_MAX_ENTRY;
+    memcpy(u->route, route, nl);
+    u->route[nl] = '\0';
+    if (u->route[0] == '\0') {
+        snprintf(u->route, sizeof(u->route), "/%s", u->name);
+    } else if (u->route[0] != '/') {
+        /* garante "/" à frente (ex: route=regras -> /regras) */
+        char tmp[ARWN_UNIT_MAX_ENTRY + 1];
+        snprintf(tmp, sizeof(tmp), "/%s", u->route);
+        snprintf(u->route, sizeof(u->route), "%s", tmp);
+    }
 
     u->obfuscate = (strcmp(obf, "yes") == 0 || strcmp(obf, "true") == 0);
 
@@ -217,10 +245,24 @@ int arwn_config_load(arwn_app_t *app, const char *path) {
         if (rlen > 0 && rlen < sizeof(app->root)) {
             memcpy(app->root, path, rlen);
             app->root[rlen] = '\0';
+        } else if (rlen == 0) {
+            strncpy(app->root, "/", sizeof(app->root) - 1);
         }
+    } else {
+        strncpy(app->root, ".", sizeof(app->root) - 1);
     }
 
-    return arwn_config_parse_buffer(app, buf, got);
+    int rc = arwn_config_parse_buffer(app, buf, got);
+    if (rc == 0) {
+        const char *app_name = arwn_config_get(app, "app", "name", "");
+        if (app_name && app_name[0] != '\0') {
+            size_t n = strlen(app_name);
+            if (n > ARWN_APP_MAX_NAME) n = ARWN_APP_MAX_NAME;
+            memcpy(app->name, app_name, n);
+            app->name[n] = '\0';
+        }
+    }
+    return rc;
 }
 
 const char *arwn_config_get(const arwn_app_t *app, const char *section, const char *key,
@@ -329,9 +371,16 @@ int arwn_mount(arwn_app_t *app) {
     const char *bind = arwn_config_get(app, "app", "bind", "127.0.0.1");
     int port = arwn_config_get_int(app, "app", "port", 3001);
 
+    g_active_server = server;
+#ifndef _WIN32
+    signal(SIGTERM, on_sigterm);
+    signal(SIGINT, on_sigterm);
+#endif
+
     arwn_gateway_start(app, server);
 
     int rc = arwn_server_run(server, bind, (uint16_t)port);
+    g_active_server = NULL;
     arwn_server_free(server);
     return rc;
 }

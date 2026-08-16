@@ -53,7 +53,21 @@ static int tool_find(const char *name) {
 
 static int mkdir_p(const char *path) {
     if (ar_fs_exists(path) == 1) return 0;
-    return ar_fs_mkdir(path) == 0 ? 0 : -1;
+    char tmp[1300];
+    snprintf(tmp, sizeof(tmp), "%s", path);
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p == '/' || *p == '\\') {
+            *p = '\0';
+            if (ar_fs_exists(tmp) != 1) {
+                if (ar_fs_mkdir(tmp) != 0) return -1;
+            }
+            *p = '/';
+        }
+    }
+    if (ar_fs_exists(tmp) != 1) {
+        if (ar_fs_mkdir(tmp) != 0) return -1;
+    }
+    return 0;
 }
 
 /* Injeta <script src="/arwn-bridge.js"> antes de </head> se ausente.
@@ -466,14 +480,41 @@ static int assemble_arweb(arwn_unit_t *u, const char *approot,
             }
         }
 
-        /* main.css / style.css: folha de estilo externa modular */
+        /* main.css / style.css / <unit>.css: folha de estilo externa modular */
         char css_path[1300];
-        if ((arwn_path_join(css_path, sizeof(css_path), html_dir, "main.css") == 0 && file_exists(css_path)) ||
+        char unit_css_name[128];
+        snprintf(unit_css_name, sizeof(unit_css_name), "%s.css", u->name);
+        if ((arwn_path_join(css_path, sizeof(css_path), html_dir, unit_css_name) == 0 && file_exists(css_path)) ||
+            (arwn_path_join(css_path, sizeof(css_path), html_dir, "main.css") == 0 && file_exists(css_path)) ||
             (arwn_path_join(css_path, sizeof(css_path), html_dir, "style.css") == 0 && file_exists(css_path))) {
             size_t clen = 0;
             char *css = read_file_alloc(css_path, &clen);
             if (css) {
                 ARWN_ADD_SECTION("main.css", css, clen);
+            }
+        }
+
+        /* SEO & Static Assets: robots.txt, sitemap.xml, favicon.ico, logo.png */
+        const char *seo_files[] = { "robots.txt", "sitemap.xml", "favicon.ico", "favicon.svg", "site.webmanifest", "logo.png", "logo.svg", NULL };
+        for (int si = 0; seo_files[si] != NULL; si++) {
+            char fpath[1300];
+            /* Primeiro tenta dentro de source (ex: web/dist/robots.txt ou web/public/robots.txt) */
+            if (arwn_path_join(fpath, sizeof(fpath), html_dir, seo_files[si]) != 0 || !file_exists(fpath)) {
+                /* Depois tenta na raiz do app (ex: robots.txt) */
+                resolve_path(approot, seo_files[si], fpath, sizeof(fpath));
+                if (!file_exists(fpath)) {
+                    /* Tenta dentro de web/public/ */
+                    char pub_dir[1300];
+                    resolve_path(approot, "web/public", pub_dir, sizeof(pub_dir));
+                    if (arwn_path_join(fpath, sizeof(fpath), pub_dir, seo_files[si]) != 0 || !file_exists(fpath)) {
+                        continue;
+                    }
+                }
+            }
+            size_t flen = 0;
+            char *fdata = read_file_alloc(fpath, &flen);
+            if (fdata) {
+                ARWN_ADD_SECTION(seo_files[si], fdata, flen);
             }
         }
     }
@@ -614,11 +655,15 @@ static int assemble_arweb(arwn_unit_t *u, const char *approot,
 /* Execução principal                                                   */
 /* ------------------------------------------------------------------ */
 
-int arwn_builder_execute(arwn_app_t *app) {
+int arwn_builder_execute_out(arwn_app_t *app, const char *out_dir) {
     if (!app) return -1;
 
     char build_dir[1300];
-    resolve_path(app->root, ARWN_BUILD_DIR, build_dir, sizeof(build_dir));
+    if (out_dir && out_dir[0] != '\0') {
+        snprintf(build_dir, sizeof(build_dir), "%s", out_dir);
+    } else {
+        resolve_path(app->root, ARWN_BUILD_DIR, build_dir, sizeof(build_dir));
+    }
     mkdir_p(build_dir);
 
     int failures = 0;
@@ -660,4 +705,8 @@ int arwn_builder_execute(arwn_app_t *app) {
     }
 
     return failures == 0 ? 0 : -1;
+}
+
+int arwn_builder_execute(arwn_app_t *app) {
+    return arwn_builder_execute_out(app, NULL);
 }

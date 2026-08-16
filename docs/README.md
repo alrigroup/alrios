@@ -21,14 +21,8 @@ Developed and maintained by **[ALRIGROUP](https://alrigroup.com/)**.
                    │ home-web.arapp      │    │ cdn.arapp    │ │ detroit-web.arapp    │
                    │ (React SPA + C)     │    │ (Static      │ │ (React SPA + C)      │
                    │ Port: 3001          │    │ Assets)      │ │ Port: 3004           │
-                   │ Route: alrigroup.com│    │ Port: 3005   │ │ Route: detroitgg.com │
-                   └─────────────────────┘    └──────────────┘ └──────────────────────┘
-                                                             ┌────────────────────────┐
-                                                             │ projetoliteratura-web  │
-                                                             │ (React SPA + C)        │
-                                                             │ Port: 3003             │
-                                                             │ Route: /literature     │
-                                                             └────────────────────────┘
+│ Route: alrigroup.com│    │ Port: 3005   │ │ Route: detroitgg.com │
+                    └─────────────────────┘    └──────────────┘ └──────────────────────┘
 ```
 
 ---
@@ -90,7 +84,6 @@ python test_suite.py
 - **[CDN (cdn.arapp)](apps/cdn.md):** Media delivery and static asset server.
 - **[Home Web (home-web.arapp)](apps/home.web.md):** React SPA application (Port 3001).
 - **[Detroit Web (detroit-web.arapp)](apps/detroit.web.md):** React SPA application (Port 3004).
-- **[Literature Project (projetoliteratura-web.arapp)](apps/projetoliteratura.web.md):** React SPA application (Port 3003).
 - **[Ecosystem Multi-Language Demo (test_ecosystem.web)](arwn/README.md):** Benchmark suite showcasing C, C++, Rust, Go & JS in `.arweb` containers.
 
 ---

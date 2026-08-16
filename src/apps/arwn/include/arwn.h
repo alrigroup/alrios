@@ -23,7 +23,7 @@ extern "C" {
 #define ARWN_CFG_MAX_KEYS        256
 #define ARWN_CFG_MAX_SECTIONS    16
 #define ARWN_CFG_KEY_MAX         63
-#define ARWN_CFG_VAL_MAX         511
+#define ARWN_CFG_VAL_MAX         4095
 #define ARWN_CFG_SECT_MAX        63
 
 #define ARWN_UNIT_MAX_NAME       63
@@ -44,12 +44,13 @@ typedef struct {
     char name[ARWN_UNIT_MAX_NAME + 1];
     char source[ARWN_UNIT_MAX_SOURCE + 1];
     char entry[ARWN_UNIT_MAX_ENTRY + 1];
+    char route[ARWN_UNIT_MAX_ENTRY + 1];
     char files[ARWN_UNIT_MAX_FILES][ARWN_UNIT_MAX_ENTRY + 1];
     int  file_count;
     char langs[ARWN_UNIT_MAX_LANGS][16];
     int  lang_count;
     int  obfuscate;
-    char copyright[512];
+    char copyright[4096];
 } arwn_unit_t;
 
 /* App: detém config parseada + resultados do builder. */
@@ -73,6 +74,7 @@ const char *arwn_config_last_error(const arwn_app_t *app);
 
 /* Builder (Fase 1) */
 int arwn_builder_execute(arwn_app_t *app);
+int arwn_builder_execute_out(arwn_app_t *app, const char *out_dir);
 
 /* Mount (Fase 2): build no start -> carrega .arweb em memória -> serve
    (event loop) + registra rotas no arws (gateway em thread separada).

@@ -6,7 +6,7 @@
 # and at: https://github.com/alrigroup/licenses/tree/main
 # Build & package the full ALRIOS ecosystem for Linux (native C + SPA).
 # Includes: arcore (kernel), alrios + armake (tools), and app packages
-# (arws, home.web, detroit.web, projetoliteratura.web).
+# (arws, home.web, detroit.web).
 # Usage (from repo root, inside WSL/Linux):
 #   bash build_linux.sh
 set -euo pipefail
@@ -33,11 +33,11 @@ cmake --build "${BUILD_DIR}" --target arcore alrios armake -- -j"${NPROC}"
 echo "[3/4] Compiling + packaging native apps"
 rm -rf "${ROOT}"/src/apps/*/web/node_modules "${ROOT}"/src/apps/*/node_modules 2>/dev/null || true
 cmake --build "${BUILD_DIR}" \
-    --target arws_pack home_web_pack detroit_web_pack projetoliteratura_web_pack \
+    --target arws_pack home_web_pack detroit_web_pack \
     -- -j"${NPROC}"
 
 echo "[4/4] Validating generated .arapp packages:"
-for app in arws home.web detroit.web projetoliteratura.web; do
+for app in arws home.web detroit.web; do
     file="${ROOT}/arcore/apps/${app}.arapp"
     if [ -f "${file}" ]; then
         echo "--- ${file}"

@@ -72,13 +72,17 @@ size_t arwn_format_copyright(char *out_buf, size_t out_buf_cap, const char *cust
     if (!out_buf || out_buf_cap == 0) return 0;
     size_t header_len = 0;
     if (custom_copyright && custom_copyright[0] != '\0') {
+        /* Se o desenvolvedor passou um bloco literal (como comentário multi-linhas, banners ou licenças completas),
+           anexamos diretamente de forma literal após o cabeçalho base do ARWN */
+        size_t cpy_len = strlen(custom_copyright);
+        int ends_with_nl = (cpy_len > 0 && custom_copyright[cpy_len - 1] == '\n');
+
         header_len = snprintf(out_buf, out_buf_cap,
             "%s"
-            "/*\n"
-            " * Custom Developer Copyright / Licensing:\n"
-            " * %s\n"
-            " */\n",
-            ARWN_COPYRIGHT_HEADER, custom_copyright);
+            "%s%s",
+            ARWN_COPYRIGHT_HEADER,
+            custom_copyright,
+            ends_with_nl ? "" : "\n");
     } else {
         header_len = snprintf(out_buf, out_buf_cap, "%s", ARWN_COPYRIGHT_HEADER);
     }

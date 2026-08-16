@@ -21,6 +21,15 @@
 #define AR_REQUIRE_MAX         64
 #define AR_PLATFORM_RAW_MAX    1024
 
+/* Build pipeline */
+#define AR_BUILD_MAX_STEPS     16
+#define AR_BUILD_STEP_CMD_MAX  512
+#define AR_BUILD_STEP_CWD_MAX  256
+#define AR_BUILD_STEP_NAME_MAX 64
+#define AR_BUILD_STAGING_MAX   512
+#define AR_BUILD_CLEANUP_MAX   16
+#define AR_BUILD_CLEANUP_PATH  256
+
 /* Platform detection result (max 32 chars) */
 void ar_platform_detect(char *out, int max);
 
@@ -39,6 +48,30 @@ typedef struct {
     char name[AR_SERVICE_NAME_MAX];
     char entry[AR_ENTRY_MAX];
 } ar_service_def_t;
+
+/* Um passo de build: { "name": "spa", "cmd": "node rebuild.mjs", "cwd": "web/" } */
+typedef struct {
+    char name[AR_BUILD_STEP_NAME_MAX];  /* identificador legível */
+    char cmd[AR_BUILD_STEP_CMD_MAX];    /* comando shell a executar */
+    char cwd[AR_BUILD_STEP_CWD_MAX];    /* subdir relativo ao app root ("" = root) */
+} ar_build_step_t;
+
+/* Bloco "build" completo do manifesto */
+typedef struct {
+    /* Steps ordenados (substitui o campo legado build_command) */
+    ar_build_step_t steps[AR_BUILD_MAX_STEPS];
+    int             step_count;
+
+    /* Diretórios/arquivos a deletar da src/ após os steps */
+    char cleanup[AR_BUILD_CLEANUP_MAX][AR_BUILD_CLEANUP_PATH];
+    int  cleanup_count;
+
+    /* Staging dir template: "$ARCORE/.staging/$APP_NAME" */
+    char staging[AR_BUILD_STAGING_MAX];
+
+    /* Legado: "build": { "command": "..." } — usado se step_count == 0 */
+    char command[512];
+} ar_build_config_t;
 
 typedef struct {
     char name[AR_APP_NAME_MAX];
@@ -59,8 +92,13 @@ typedef struct {
     int  requires_count;
     char requires[AR_MAX_REQUIRES][AR_REQUIRE_MAX];
     char platforms_raw[AR_PLATFORM_RAW_MAX]; /* raw JSON of platforms object */
-    char build_command[512];                 /* build.command from manifest */
+
+    /* Build pipeline (substitui build_command[512]) */
+    ar_build_config_t build;
 } ar_app_manifest_t;
+
+/* Compat: acesso direto ao legado build_command */
+#define AR_MANIFEST_BUILD_CMD(m) ((m)->build.command)
 
 int ar_manifest_parse(const char *json, ar_app_manifest_t *out);
 

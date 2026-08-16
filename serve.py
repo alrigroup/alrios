@@ -62,8 +62,7 @@ def wait_port(port, timeout):
 
 
 def stop_all():
-    for name in ("arcore.exe", "node.exe", "home.web.exe", "detroit.web.exe",
-                 "projetoliteratura.web.exe"):
+    for name in ("arcore.exe", "node.exe", "home.web.exe", "detroit.web.exe"):
         run("taskkill /f /im %s >nul 2>nul" % name)
 
 
@@ -122,11 +121,9 @@ def main():
         ok_adm = wait_port(9500, 30)
         ok_home = wait_port(3001, 30)
         ok_detroit = wait_port(3004, 30)
-        ok_projeto = wait_port(3003, 30)
         print("      gateway 8080 up=%s  admin 9500 up=%s  home.web 3001 up=%s"
               % (ok_gw, ok_adm, ok_home))
-        print("      detroit.web 3004 up=%s  projetoliteratura.web 3003 up=%s"
-              % (ok_detroit, ok_projeto))
+        print("      detroit.web 3004 up=%s" % ok_detroit)
         if not (ok_gw and ok_home):
             print("[5/5] FAILED to start services; log tail:")
             try:
@@ -150,8 +147,7 @@ def main():
         for host in detroit_hosts:
             for path, marker in (("/", "Detroit Roleplay"),
                                  ("/regras", "Detroit Roleplay"),
-                                 ("/regimentostaff", "Detroit Roleplay"),
-                                 ("/logo.png", "")):
+                                 ("/regimentostaff", "Detroit Roleplay")):
                 ok = check("detroit %s (Host %s)" % (path, host), 8080, path,
                            host, marker)
                 if ok:
@@ -170,14 +166,6 @@ def main():
                     failed += 1
             except Exception as e:
                 print("      [FAIL] detroit 404 (Host %s) -> %s" % (host, e))
-                failed += 1
-
-        for host in ("alexsander.alrigroup.com", "alexsander.localhost"):
-            ok = check("projetoliteratura /projetoliteratura (Host %s)" % host,
-                       8080, "/projetoliteratura", host, "Machado de Assis")
-            if ok:
-                passed += 1
-            else:
                 failed += 1
 
         print("      passed=%d failed=%d" % (passed, failed))

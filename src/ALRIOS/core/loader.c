@@ -1041,9 +1041,22 @@ int loader_stop_app(const char *name) {
     if (a->state == APP_STOPPED) return 0;
     if (a->pid > 0) {
         ar_process_kill(a->pid);
-        for (int i = 0; i < 100; i++) {
-            if (ar_process_wait_nohang(a->pid) != 0) break;
-            ar_sleep_ms(50);
+        int stopped = 0;
+        for (int i = 0; i < 20; i++) {
+            if (ar_process_wait_nohang(a->pid) != 0) {
+                stopped = 1;
+                break;
+            }
+            ar_sleep_ms(25);
+        }
+        if (!stopped) {
+#ifndef _WIN32
+            kill((pid_t)a->pid, SIGKILL);
+#endif
+            for (int i = 0; i < 10; i++) {
+                if (ar_process_wait_nohang(a->pid) != 0) break;
+                ar_sleep_ms(10);
+            }
         }
     }
     app_lock();
@@ -1124,9 +1137,11 @@ int loader_power_reload(void) {
 
     alri_printf("  " BLD "Reload" RST " " DIM "re-extracting apps..." RST "\n");
     loader_scan_phase(run_dir, 0);
-    loader_scan_phase(apps_dir, 2);
+    loader_scan_phase(apps_dir, 1);
 
     ar_svc_start_all();
+
+    loader_scan_phase(apps_dir, 2);
     return 0;
 }
 

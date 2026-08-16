@@ -128,8 +128,26 @@ int arwn_cfg_parse(arwn_cfg_t *cfg, const char *buf, size_t len) {
 
                 const char *ks = l;
                 const char *ke = trim_end(eq, ks);
-                const char *vs = skip_ws(eq + 1, le);
-                const char *ve = trim_end(le, vs);
+                const char *vs = skip_ws(eq + 1, eol);
+                const char *ve = trim_end(eol, vs);
+
+                /* Suporte a blocos literais multi-linhas delimitados por crase `...` ou aspas '...' / "..." */
+                if (vs < end && (*vs == '`' || *vs == '\'' || *vs == '"')) {
+                    char quote_char = *vs;
+                    vs++; /* pula a aspas/crase inicial */
+                    const char *closing_qt = vs;
+                    while (closing_qt < end && *closing_qt != quote_char) {
+                        if (*closing_qt == '\n') line_no++;
+                        closing_qt++;
+                    }
+                    if (closing_qt >= end) {
+                        set_error_fmt(cfg, "config line %d: unclosed multiline literal", line_no);
+                        return -1;
+                    }
+                    ve = closing_qt;
+                    eol = closing_qt;
+                    while (eol < end && *eol != '\n') eol++;
+                }
 
                 if (ks >= ke) {
                     set_error_fmt(cfg, "config line %d: empty key", line_no);
@@ -142,12 +160,6 @@ int arwn_cfg_parse(arwn_cfg_t *cfg, const char *buf, size_t len) {
                 if ((size_t)(ve - vs) > ARWN_CFG_VAL_MAX) {
                     set_error_fmt(cfg, "config line %d: value too long", line_no);
                     return -1;
-                }
-
-                /* aspas opcionais */
-                if (vs < ve && *vs == '"' && ve[-1] == '"') {
-                    vs++;
-                    ve--;
                 }
 
                 if (cfg->count >= ARWN_CFG_MAX_KEYS) {

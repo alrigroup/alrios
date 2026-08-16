@@ -49,7 +49,7 @@ Developed and maintained by **[ALRIGROUP](https://alrigroup.com/)**.
 │ Legacy / SPA Native Apps   │ │ ARWN Native Web Framework  │ │ Static Delivery System       │
 │ - home-web (3001)          │ │ - test_ecosystem.web(3055) │ │ - cdn (3005)                 │
 │ - detroit-web (3004)       │ │   ├── c_engine.arweb (WASM)│ │   ├── Assets, Media, Videos  │
-│ - projetoliteratura (3003) │ │   ├── cpp_engine.arweb     │ │   └── Zero-Copy Sendfile     │
+│                            │ │   ├── cpp_engine.arweb     │ │   └── Zero-Copy Sendfile     │
 │   (Vite + React + C Serve) │ │   ├── rust_engine.arweb    │ │                              │
 │                            │ │   └── main.arweb (Base64VM)│ │                              │
 └────────────────────────────┘ └────────────────────────────┘ └──────────────────────────────┘
@@ -331,7 +331,6 @@ cmake -B build -S . && cmake --build build
 | **`cdn`** | 3005 | `cdn.localhost` | Native C / Sendfile | Static Asset & Media Streaming Server |
 | **`home.web`** | 3001 | `alrigroup.com` | React 18 / C Backend | Official ALRIGROUP Corporate Portal |
 | **`detroit.web`** | 3004 | `detroitgg.com` | React 18 / Tailwind | Gaming Community Portal & Leaderboards |
-| **`projetoliteratura.web`** | 3003 | `localhost/literature` | React 18 / UI Suite | Machado de Assis Digital Literature Archive |
 | **`test_ecosystem.web`** | 3055 | `ecosystem.localhost` | ARWN / WASM Multi-Engine | Multi-Language Linear Memory Benchmark (C, C++, Rust, Go, JS) |
 
 ---

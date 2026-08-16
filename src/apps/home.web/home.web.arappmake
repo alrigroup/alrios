@@ -19,12 +19,29 @@ ALRIGROUP@APPMAKE
       "entry": "home_web"
     }
   },
+  "build": {
+    "staging": "$ARCORE/.staging/$APP_NAME",
+    "steps": [
+      {
+        "name": "spa",
+        "cmd": "node rebuild.mjs",
+        "cwd": "web"
+      },
+      {
+        "name": "arweb",
+        "cmd": "$ARWN_BUILD build $APP_DIR --out $STAGING/build"
+      }
+    ],
+    "cleanup": [
+      "build",
+      "web/dist"
+    ]
+  },
   "files": [
-    "assets.index",
-    "index.arhtml",
+    "home_web",
+    "config.arwn",
+    "build/main.arweb",
     "robots.txt",
-    "sitemap.xml",
-    "assets/index-BdRSIRsr.js",
-    "assets/style-CKinwZhK.css"
+    "sitemap.xml"
   ]
 }

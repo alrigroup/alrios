@@ -6,7 +6,7 @@
  * and at: https://github.com/alrigroup/licenses/tree/main
  */
 
-import { existsSync, writeFileSync, readFileSync, readdirSync, rmSync, mkdirSync } from 'node:fs'
+import { existsSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { resolve, join } from 'node:path'
 
@@ -23,66 +23,13 @@ if (!existsSync('node_modules')) {
 }
 run(npmCmd, ['run', 'build'])
 
-// Consolidate built JS/CSS assets and regenerate the .arappmake manifest so the
-// server can preload (map) every asset at startup and serve by exact name only.
+// Copy index.html -> main.arhtml for ARWN unit entry
 const dist = resolve('dist')
-const assetsDir = join(dist, 'assets')
-mkdirSync(assetsDir, { recursive: true })
-const assetFiles = existsSync(assetsDir)
-  ? readdirSync(assetsDir).filter((f) => !f.startsWith('.'))
-  : []
-writeFileSync(join(assetsDir, '..', 'assets.index'), assetFiles.join('\n') + '\n', 'utf-8')
-
-const manifestPath = resolve('..', 'home.web.arappmake')
-const manifestRaw = readFileSync(manifestPath, 'utf-8')
-const manifestHeader = manifestRaw.match(/^ALRIGROUP@APPMAKE\s*\n/)?.[0] ?? 'ALRIGROUP@APPMAKE\n'
-const manifest = JSON.parse(manifestRaw.replace(/^ALRIGROUP@APPMAKE\s*\n/, ''))
-manifest.files = [
-  'assets.index',
-  ...manifest.files.filter((f) => !f.startsWith('assets/') && f !== 'assets.index'),
-  ...assetFiles.map((f) => `assets/${f}`)
-]
-writeFileSync(manifestPath, manifestHeader + JSON.stringify(manifest, null, 2) + '\n', 'utf-8')
-console.log('[rebuild] assets:', assetFiles.join(', '))
-
-// Extract third-party license notices to dist/THIRD_PARTY_LICENSES.txt
-const thirdPartyNotices = `========================================================================
-THIRD-PARTY NOTICES AND LICENSES
-========================================================================
-
-This distribution includes third-party software components subject to the terms and
-conditions of their respective licenses:
-
-1. React / React DOM
-   License: MIT License
-   Copyright (c) Meta Platforms, Inc. and affiliates.
-
-   Permission is hereby granted, free of charge, to any person obtaining a copy
-   of this software and associated documentation files (the "Software"), to deal
-   in the Software without restriction, including without limitation the rights
-   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-   copies of the Software, and to permit persons to whom the Software is
-   furnished to do so, subject to the following conditions:
-
-   The above copyright notice and this permission notice shall be included in all
-   copies or substantial portions of the Software.
-
-   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-   SOFTWARE.
-
-========================================================================
-`
-
-if (existsSync('dist')) {
-  writeFileSync('dist/THIRD_PARTY_LICENSES.txt', thirdPartyNotices, 'utf-8')
+if (existsSync(join(dist, 'index.html'))) {
+  writeFileSync(join(dist, 'main.arhtml'), readFileSync(join(dist, 'index.html')), 'utf-8')
 }
 
-// Mandatory cleanup: delete node_modules immediately
+// Cleanup: delete node_modules (dist/ is preserved so arwn_build can read it next)
 for (let attempts = 0; attempts < 5; attempts++) {
   if (!existsSync('node_modules')) break
   try {

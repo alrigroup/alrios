@@ -65,6 +65,8 @@ static int send_and_print(int fd, int type, const char *payload) {
     uint32_t plen = payload ? (uint32_t)strlen(payload) : 0;
     if (ar_ipc_send_frame(fd, type, payload, plen) < 0) return -1;
 
+    ar_socket_set_recv_timeout(fd, 3000);
+
     unsigned char buf[AR_IPC_BUF_SIZE];
     int rtype;
     uint32_t rlen = sizeof(buf);
@@ -115,6 +117,7 @@ static int spawn_arcore_detached(const char *exe) {
 static int cmd_power_on(void) {
     int fd = ctl_connect();
     if (fd >= 0) {
+        ar_socket_set_recv_timeout(fd, 800);
         if (ar_ipc_send_frame(fd, IPC_CTL_PING, NULL, 0) == 0) {
             unsigned char buf[8];
             uint32_t rlen = sizeof(buf);
