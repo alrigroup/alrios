@@ -42,14 +42,6 @@ static int file_exists(const char *path) {
     return 1;
 }
 
-struct arwn_app {
-    char name[ARWN_APP_MAX_NAME + 1];
-    char root[1024];
-    arwn_cfg_t cfg;
-    arwn_unit_t units[ARWN_CFG_MAX_SECTIONS];
-    int unit_count;
-};
-
 arwn_app_t *arwn_app_new(const char *name) {
     if (!name || name[0] == '\0') return NULL;
     arwn_app_t *app = (arwn_app_t *)malloc(sizeof(*app));
