@@ -945,11 +945,9 @@ int server_start(int port, int mode, RequestHandler handler) {
         }
 
         ar_socket_reuseaddr(server_sock, 1);
-        http_server_sock = server_sock;
-
         if (ar_socket_bind(server_sock, global_bind_address, (uint16_t)port) < 0) {
-            if (using_ssl && port == 443) {
-                alri_print("Port 443 needs root. Falling back to HTTP on port 8080...\n");
+            if (port == 443 || port == 80) {
+                alri_print("Port %d needs root/cap_net_bind_service. Falling back to HTTP on port 8080...\n", port);
                 ar_socket_close(server_sock);
                 http_server_sock = -1;
                 ctx = NULL;

@@ -298,10 +298,27 @@ int arws_stream_proxy_forward(ClientConnection *conn, HttpRequest *req,
     while (sent < raw_len) {
         int n = ar_socket_send(target_fd, (const char*)raw_buf + sent, raw_len - sent);
         if (n <= 0) {
-            ar_mem_free(raw_buf);
+            /* Socket do pool pode estar morto pelo peer. Tenta uma nova conexão direta */
             ar_socket_close(target_fd);
-            arws_send_502(conn, "Bad Gateway");
-            return -1;
+            target_fd = ar_socket_create(1);
+            if (target_fd < 0 || ar_socket_connect(target_fd, host, (uint16_t)port) < 0) {
+                if (target_fd >= 0) ar_socket_close(target_fd);
+                ar_mem_free(raw_buf);
+                arws_send_502(conn, "Bad Gateway");
+                return -1;
+            }
+            sent = 0;
+            while (sent < raw_len) {
+                int r = ar_socket_send(target_fd, (const char*)raw_buf + sent, raw_len - sent);
+                if (r <= 0) {
+                    ar_mem_free(raw_buf);
+                    ar_socket_close(target_fd);
+                    arws_send_502(conn, "Bad Gateway");
+                    return -1;
+                }
+                sent += r;
+            }
+            break;
         }
         sent += n;
     }
