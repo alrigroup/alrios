@@ -294,26 +294,30 @@ int arws_stream_proxy_forward(ClientConnection *conn, HttpRequest *req,
         return -1;
     }
 
+    alri_print(CYN "[ARWS-PROXY]" RST " forward: target=%s, raw_len=%d, host=%s, path=%s\n",
+               target_url, raw_len, req->host, req->path);
     int sent = 0;
     while (sent < raw_len) {
         int n = ar_socket_send(target_fd, (const char*)raw_buf + sent, raw_len - sent);
         if (n <= 0) {
-            /* Socket do pool pode estar morto pelo peer. Tenta uma nova conexão direta */
+            alri_print(RED "[ARWS-PROXY]" RST " pool socket send failed (n=%d), retrying clean connect to %s:%d...\n", n, host, port);
             ar_socket_close(target_fd);
             target_fd = ar_socket_create(1);
             if (target_fd < 0 || ar_socket_connect(target_fd, host, (uint16_t)port) < 0) {
+                alri_print(RED "[ARWS-PROXY]" RST " retry connect to %s:%d failed\n", host, port);
                 if (target_fd >= 0) ar_socket_close(target_fd);
                 ar_mem_free(raw_buf);
-                arws_send_502(conn, "Bad Gateway");
+                arws_send_502(conn, "Bad Gateway (Upstream Connect Failed)");
                 return -1;
             }
             sent = 0;
             while (sent < raw_len) {
                 int r = ar_socket_send(target_fd, (const char*)raw_buf + sent, raw_len - sent);
                 if (r <= 0) {
+                    alri_print(RED "[ARWS-PROXY]" RST " retry send failed (r=%d)\n", r);
                     ar_mem_free(raw_buf);
                     ar_socket_close(target_fd);
-                    arws_send_502(conn, "Bad Gateway");
+                    arws_send_502(conn, "Bad Gateway (Upstream Send Failed)");
                     return -1;
                 }
                 sent += r;
@@ -327,14 +331,14 @@ int arws_stream_proxy_forward(ClientConnection *conn, HttpRequest *req,
     int client_fd = server_conn_get_fd(conn);
     if (client_fd < 0) {
         ar_socket_close(target_fd);
-        arws_send_502(conn, "Bad Gateway");
+        arws_send_502(conn, "Bad Gateway (Invalid Client FD)");
         return -1;
     }
 
     unsigned char *resp_buf = (unsigned char *)ar_mem_alloc(ARWS_STREAM_BUF_SIZE);
     if (!resp_buf) {
         ar_socket_close(target_fd);
-        arws_send_502(conn, "Bad Gateway");
+        arws_send_502(conn, "Bad Gateway (OOM)");
         return -1;
     }
 
@@ -349,10 +353,16 @@ int arws_stream_proxy_forward(ClientConnection *conn, HttpRequest *req,
         tv.tv_sec = ARWS_STREAM_TIMEOUT_MS / 1000;
         tv.tv_usec = (ARWS_STREAM_TIMEOUT_MS % 1000) * 1000;
         int r = eintr_select(target_fd + 1, &rfds, &tv);
-        if (r <= 0) break;
+        if (r <= 0) {
+            alri_print(RED "[ARWS-PROXY]" RST " select timeout/error r=%d (total=%d)\n", r, total);
+            break;
+        }
 
         int n = eintr_recv(target_fd, resp_buf + total, ARWS_STREAM_BUF_SIZE - total);
-        if (n <= 0) break;
+        if (n <= 0) {
+            alri_print(RED "[ARWS-PROXY]" RST " recv returned n=%d (total=%d)\n", n, total);
+            break;
+        }
         int newly = total;
         total += n;
 
@@ -366,10 +376,12 @@ int arws_stream_proxy_forward(ClientConnection *conn, HttpRequest *req,
         if (header_end >= 0) break;
     }
 
+    alri_print(CYN "[ARWS-PROXY]" RST " response header_end=%d, total=%d\n", header_end, total);
+
     if (header_end < 0 || total <= 0) {
         ar_mem_free(resp_buf);
         ar_socket_close(target_fd);
-        arws_send_502(conn, "Upstream error");
+        arws_send_502(conn, "Upstream error (No Response Headers)");
         return -1;
     }
 
