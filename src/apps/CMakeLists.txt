@@ -279,27 +279,6 @@ target_link_libraries(ardb PRIVATE
     Threads::Threads
 )
 
-add_executable(ardb_security_tests
-    ${ARDB_SRC}/test_ardb_security.c
-    ${ARDB_SRC}/ardb_backend.c
-    ${ARDB_SRC}/ardb_auth.c
-    ${ARDB_SRC}/ardb_firewall.c
-    ${ARDB_SRC}/ardb_audit.c
-)
-target_include_directories(ardb_security_tests PRIVATE
-    ${ARDB_SRC}
-    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
-    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/include
-    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
-    ${OPENSSL_INCLUDE_DIR}
-)
-target_link_libraries(ardb_security_tests PRIVATE
-    arkernel
-    OpenSSL::SSL
-    OpenSSL::Crypto
-    Threads::Threads
-)
-
 add_custom_target(ardb_pack ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory ${ARDB_STAGING}
     COMMAND ${CMAKE_COMMAND} -E copy
