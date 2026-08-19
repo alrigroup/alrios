@@ -198,7 +198,15 @@ static void handle_query(int fd, arwn_server_t *server, const char *q, int len) 
 
     char resp[4096];
     int rlen = 0;
-    if (strcmp(cmd, "ping") == 0) {
+    if (strcmp(cmd, "help") == 0 || strcmp(cmd, "--help") == 0 || strcmp(cmd, "-h") == 0 || cmd[0] == '\0') {
+        rlen = snprintf(resp, sizeof(resp),
+            "ARWN Web Application '%s' v1.0.0 (Self-Registered)\n\n"
+            "Supported Commands:\n"
+            "  status                - View application health and active route count\n"
+            "  routes                - List all embedded .arweb static views and endpoints\n"
+            "  ping                  - Check app responsiveness\n",
+            g_app_name[0] ? g_app_name : "web_app");
+    } else if (strcmp(cmd, "ping") == 0) {
         rlen = snprintf(resp, sizeof(resp), "pong");
     } else if (strcmp(cmd, "status") == 0) {
         rlen = snprintf(resp, sizeof(resp), "%s RUNNING routes=%d",
@@ -230,13 +238,13 @@ static void gw_control_loop(int fd, arwn_server_t *server) {
     int idle = 0;
 
     while (1) {
-        unsigned char type = 0;
+        int type = 0;
         uint32_t len = sizeof(buf);
-        int r = ar_ipc_recv_frame(fd, (int *)&type, buf, &len);
+        int r = ar_ipc_recv_frame(fd, &type, buf, &len);
         if (r == 0) {
             idle = 0;
             if (type == IPC_QUERY) {
-                handle_query(fd, server, buf, (int)strlen(buf));
+                handle_query(fd, server, buf, (int)len);
             }
             continue;
         }
@@ -261,6 +269,7 @@ static void *gateway_thread(void *arg) {
 
     char name[64];
     snprintf(name, sizeof(name), "%s", arwn_app_name(app));
+    strncpy(g_app_name, name, sizeof(g_app_name) - 1);
 
     printf("[arwn] gateway %s:%u (route %s host=%s)\n",
            cfg.host, cfg.port, cfg.route_path, cfg.route_host);

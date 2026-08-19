@@ -44,8 +44,10 @@ static void print_usage(void) {
     printf("  alrios stop <app>\n");
     printf("  alrios restart <app>\n");
     printf("  alrios start add|del <app>   (manage autostart.cfg)\n");
-    printf("  alrios <app> <command>       (query via gateway 9500)\n");
-    printf("  alrios arws <subcommand>     (e.g.: cfg reload, status, routes)\n");
+    printf("  alrios arws help             (gateway, routes, load balancer pools)\n");
+    printf("  alrios ardb help             (sovereign DB, tokens, SQL firewall, audit)\n");
+    printf("  alrios arwn help             (web native runtime & .arweb containers)\n");
+    printf("  alrios cdn help              (static assets & streaming engine)\n");
     printf("  alrios update all|alrios|armake|arinstall\n");
     printf("  alrios build -p <SRC> [-o <OUT>]   (compile app -> arcore/apps)\n");
     printf("  alrios refresh                   (reload app list without restart)\n");
@@ -73,7 +75,7 @@ static int send_and_print(int fd, int type, const char *payload) {
     if (ar_ipc_recv_frame(fd, &rtype, buf, &rlen) < 0) return -1;
     buf[rlen] = '\0';
     printf("%s\n", buf);
-    return (rtype == IPC_RESPONSE) ? 0 : 1;
+    return (rtype == IPC_RESPONSE || rtype == IPC_QUERY_RESP || rtype == IPC_ACK) ? 0 : 1;
 }
 
 static int run_ctl(int type, const char *payload) {
@@ -241,6 +243,10 @@ static int cmd_app_query(const char *app, const char *cmd) {
 static int cmd_app_query_args(const char *app, int argc, char *argv[]) {
     char cmd[AR_IPC_BUF_SIZE];
     int off = 0;
+    if (argc < 3) {
+        snprintf(cmd, sizeof(cmd), "help");
+        return cmd_app_query(app, cmd);
+    }
     for (int i = 2; i < argc; i++) {
         if (i > 2 && off < (int)sizeof(cmd) - 1) cmd[off++] = ' ';
         int n = snprintf(cmd + off, sizeof(cmd) - off, "%s", argv[i]);
@@ -451,6 +457,7 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
+    /* Comandos do Ciclo de Vida do SO (arcore 9600) */
     if (strcmp(a1, "status") == 0 || strcmp(a1, "list") == 0)
         return run_ctl(IPC_CTL_LIST, NULL);
 
@@ -496,10 +503,7 @@ int main(int argc, char *argv[]) {
     if (strcmp(a1, "refresh") == 0)
         return run_ctl(IPC_CTL_REFRESH, NULL);
 
-    /* alrios <app> <command...>  (or alrios arws <subcommand...>) */
-    if (argc >= 3)
-        return cmd_app_query_args(a1, argc, argv);
-
-    print_usage();
-    return 1;
+    /* ROTEAMENTO UNIVERSAL DINÂMICO PARA APPS (IPC 9500)
+       O aplicativo alvo é o dono exclusivo do seu catálogo de comandos e do seu help! */
+    return cmd_app_query_args(a1, argc, argv);
 }

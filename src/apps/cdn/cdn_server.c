@@ -471,7 +471,17 @@ static void handle_query(int fd, const char *q, int len) {
     int rlen = 0;
     (void)len;
 
-    if (strncmp(q, "ping", 4) == 0 && (q[4] == '\0' || q[4] == ' ')) {
+    if (strncmp(q, "help", 4) == 0 || strncmp(q, "--help", 6) == 0 || strncmp(q, "-h", 2) == 0 || q[0] == '\0') {
+        rlen = snprintf(resp, sizeof(resp),
+            "CDN Delivery Engine & Media Streamer v1.0.0 (Self-Registered)\n\n"
+            "Supported Commands:\n"
+            "  status                - View server port, active entries and worker status\n"
+            "  routes                - List all active static URL routes and mappings\n"
+            "  list                  - Display detailed list of hosted assets and sizes\n"
+            "  add <path> <file>     - Register a new static file into CDN storage\n"
+            "  del <path>            - Delete a static asset from memory and cdn.cfg\n"
+            "  ping                  - Check CDN control channel connectivity\n");
+    } else if (strncmp(q, "ping", 4) == 0 && (q[4] == '\0' || q[4] == ' ')) {
         rlen = snprintf(resp, sizeof(resp), "pong");
     } else if (strncmp(q, "status", 6) == 0 && (q[6] == '\0' || q[6] == ' ')) {
         rlen = snprintf(resp, sizeof(resp), "%s RUNNING port=%d entries=%d", APP_NAME, server_port, g_entry_count);

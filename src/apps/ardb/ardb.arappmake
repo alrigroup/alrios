@@ -1,0 +1,17 @@
+ALRIGROUP@APPMAKE
+{
+  "name": "ardb",
+  "bin": "ardb.arapp",
+  "version": "1.0.0",
+  "runtime": "native",
+  "entry": "ardb",
+  "platforms": {
+    "windows": {"entry": "ardb"},
+    "linux": {"entry": "ardb"},
+    "linux-x64": {"entry": "ardb"},
+    "linux-arm64": {"entry": "ardb"}
+  },
+  "files": [
+    "ardb"
+  ]
+}

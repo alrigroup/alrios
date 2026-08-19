@@ -12,6 +12,7 @@
 #include "arws_config.h"
 #include "arws_proxy.h"
 #include "arws_stream_proxy.h"
+#include "arws_upstream.h"
 #include "log.h"
 #include "aros_hal.h"
 #include <string.h>
@@ -165,15 +166,35 @@ int arws_dispatch(ClientConnection *conn, HttpRequest *req, const char *effectiv
         return 0;
     }
 
-    if (result == 1 && route.use_stream && route.proxy_target[0] != '\0') {
-        alri_print(CYN "[ARWS]" RST " dispatch: stream proxy -> %s\n", route.proxy_target);
-        arws_stream_proxy_forward(conn, req, route.proxy_target);
-        return 0;
-    }
+    if (result == 1 && route.proxy_target[0] != '\0') {
+        char final_target[256];
+        ArwsBackendNode *selected_node = NULL;
+        const char *pool_name = NULL;
 
-    if (result == 1 && !route.use_stream && route.proxy_target[0] != '\0') {
-        alri_print(CYN "[ARWS]" RST " dispatch: proxy (stream) -> %s\n", route.proxy_target);
-        arws_stream_proxy_forward(conn, req, route.proxy_target);
+        if (route.proxy_target[0] == '@') {
+            /* Roteamento dinâmico via Load Balancer */
+            pool_name = route.proxy_target + 1;
+            const char *client_ip = server_get_client_ip(conn);
+            selected_node = arws_upstream_select(pool_name, client_ip);
+            if (!selected_node) {
+                alri_print(RED "[ARWS-LB]" RST " No healthy backends in pool '@%s'\n", pool_name);
+                arws_send_503(conn, "No healthy backend available in upstream pool");
+                return 0;
+            }
+            snprintf(final_target, sizeof(final_target), "http://%s:%d",
+                     selected_node->host, selected_node->port);
+            alri_print(CYN "[ARWS-LB]" RST " dispatch: pool '@%s' -> %s (active=%d)\n",
+                       pool_name, final_target, selected_node->active_conns);
+        } else {
+            strncpy(final_target, route.proxy_target, sizeof(final_target) - 1);
+            final_target[sizeof(final_target) - 1] = '\0';
+        }
+
+        int fwd_status = arws_stream_proxy_forward(conn, req, final_target);
+
+        if (selected_node && pool_name) {
+            arws_upstream_release(pool_name, selected_node, fwd_status);
+        }
         return 0;
     }
 

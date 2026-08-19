@@ -57,4 +57,36 @@ Command-line reference for `alrios` management tool.
 # Set domain override
 ./alrios arws override alrigroup.com * maintenance
 ./alrios arws override alrigroup.com * production
+
+# Manage Upstream Load Balancing Pools
+./alrios arws upstream list
+./alrios arws upstream add <pool> <host> <port> [weight] [backup]
+./alrios arws upstream drain <pool> <host> <port> [1|0]
+```
+
+---
+
+## 🛡️ ALRI DB Sovereign Data Guardian Commands
+
+```bash
+# Display help menu for ardb
+./alrios ardb help
+
+# Check status of ALRI DB engine and isolated PostgreSQL
+./alrios ardb status
+
+# Authenticate user with 2FA and generate 4-hour ephemeral session token for DBeaver
+./alrios ardb auth login <username>
+
+# Immediately revoke an active session token
+./alrios ardb auth revoke <token>
+
+# Create a new tenant user with RBAC role
+./alrios ardb user add <username> <password> <tenant_id> [role]
+
+# Validate cryptographic integrity of the SHA-256 blockchain audit log
+./alrios ardb audit verify
+
+# Stream audit logs in real-time
+./alrios ardb audit tail
 ```

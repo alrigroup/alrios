@@ -13,6 +13,8 @@
 #include "arws_session.h"
 #include "arws_cache.h"
 #include "arws_proxy.h"
+#include "arws_upstream.h"
+#include "arws_health.h"
 #include "ipc/ipc.h"
 #include "ar_ipc.h"
 #include "log.h"
@@ -194,10 +196,21 @@ static void named_add(int fd, const char *name) {
     ar_mutex_unlock(admin_mutex);
 }
 
+static int match_app_alias(const char *registered, const char *target) {
+    if (strcmp(registered, target) == 0) return 1;
+    if ((strcmp(registered, "ardb") == 0 || strcmp(registered, "db") == 0) &&
+        (strcmp(target, "ardb") == 0 || strcmp(target, "db") == 0)) return 1;
+    if ((strcmp(registered, "home.web") == 0 || strcmp(registered, "home-web") == 0) &&
+        (strcmp(target, "home.web") == 0 || strcmp(target, "home-web") == 0)) return 1;
+    if ((strcmp(registered, "detroit.web") == 0 || strcmp(registered, "detroit-web") == 0) &&
+        (strcmp(target, "detroit.web") == 0 || strcmp(target, "detroit-web") == 0)) return 1;
+    return 0;
+}
+
 static int named_find(const char *name) {
     ar_mutex_lock(admin_mutex);
     for (int i = 0; i < named_client_count; i++) {
-        if (strcmp(named_client_names[i], name) == 0) {
+        if (match_app_alias(named_client_names[i], name)) {
             int fd = named_client_fds[i];
             ar_mutex_unlock(admin_mutex);
             return fd;
@@ -261,7 +274,20 @@ static void handle_arws_query(int fd, const char *q, int len) {
     char resp[4096];
     int rlen = 0;
 
-    if (strcmp(cmd, "cfg") == 0) {
+    if (strcmp(cmd, "help") == 0 || strcmp(cmd, "--help") == 0 || strcmp(cmd, "-h") == 0 || cmd[0] == '\0') {
+        rlen = snprintf(resp, sizeof(resp),
+            "ARWS Gateway & Layer 7 Load Balancer v3.0.0 (Self-Registered)\n\n"
+            "Supported Commands:\n"
+            "  status                                      - View runtime status, active mode and bind port\n"
+            "  cfg reload                                  - Reload arws.cfg live from disk without downtime\n"
+            "  routes                                      - List all active dynamic and static routes\n"
+            "  <production|test|maintenance>               - Switch global gateway operational mode\n"
+            "  <production|test|maintenance> <host> [path] - Set domain/route specific operational override\n"
+            "  upstream list                               - List all backend upstream pools and node health\n"
+            "  upstream add <pool> <host> <port> [w] [b]   - Register backend node to load balancer pool\n"
+            "  upstream drain <pool> <host> <port> [1|0]   - Enable/disable graceful connection draining\n"
+            "  ping                                        - Check gateway control channel connectivity\n");
+    } else if (strcmp(cmd, "cfg") == 0) {
         char sub[32] = {0};
         if (sscanf(q + i, "%31s", sub) == 1 && strcmp(sub, "reload") == 0) {
             arws_config_reload_from_disk();
@@ -298,6 +324,72 @@ static void handle_arws_query(int fd, const char *q, int len) {
     } else if (strcmp(cmd, "routes") == 0) {
         rlen = arws_config_dump_routes(resp, sizeof(resp));
         if (rlen <= 0) rlen = snprintf(resp, sizeof(resp), "no routes");
+    } else if (strcmp(cmd, "upstream") == 0) {
+        char subcmd[32] = {0};
+        int off = 0;
+        sscanf(q + i, "%31s%n", subcmd, &off);
+        const char *args = q + i + off;
+
+        if (strcmp(subcmd, "list") == 0) {
+            ArwsUpstreamPool pools[ARWS_MAX_POOLS];
+            int pcount = arws_upstream_get_all_pools(pools, ARWS_MAX_POOLS);
+            if (pcount == 0) {
+                rlen = snprintf(resp, sizeof(resp), "No upstream pools registered.\n");
+            } else {
+                rlen = snprintf(resp, sizeof(resp), "UPSTREAM POOLS (%d):\n", pcount);
+                for (int p = 0; p < pcount; p++) {
+                    ArwsUpstreamPool *up = &pools[p];
+                    const char *algo_str = (up->algo == ARWS_LB_ROUND_ROBIN) ? "round_robin" :
+                                           (up->algo == ARWS_LB_LEAST_CONN) ? "least_conn" :
+                                           (up->algo == ARWS_LB_IP_HASH) ? "ip_hash" : "weighted_round_robin";
+                    rlen += snprintf(resp + rlen, sizeof(resp) - rlen,
+                                     "  Pool '@%s' [algo=%s, nodes=%d]:\n",
+                                     up->name, algo_str, up->node_count);
+                    for (int n = 0; n < up->node_count; n++) {
+                        ArwsBackendNode *bn = &up->nodes[n];
+                        rlen += snprintf(resp + rlen, sizeof(resp) - rlen,
+                                         "    - %s:%d weight=%d conns=%d alive=%s backup=%s drain=%s reqs=%llu errs=%llu\n",
+                                         bn->host, bn->port, bn->weight, bn->active_conns,
+                                         bn->is_alive ? "UP" : "DOWN",
+                                         bn->is_backup ? "YES" : "NO",
+                                         bn->is_draining ? "YES" : "NO",
+                                         (unsigned long long)bn->total_requests,
+                                         (unsigned long long)bn->total_errors);
+                    }
+                }
+            }
+        } else if (strcmp(subcmd, "add") == 0) {
+            char pool_name[64] = {0};
+            char host[128] = {0};
+            int port = 0, weight = 1, backup = 0;
+            if (sscanf(args, "%63s %127s %d %d %d", pool_name, host, &port, &weight, &backup) >= 3) {
+                if (arws_upstream_add_node(pool_name, host, port, weight, backup) == 0) {
+                    rlen = snprintf(resp, sizeof(resp), "Node %s:%d added to pool '@%s' (weight=%d, backup=%d)",
+                                    host, port, pool_name, weight, backup);
+                } else {
+                    rlen = snprintf(resp, sizeof(resp), "Failed to add node to pool '@%s'", pool_name);
+                }
+            } else {
+                rlen = snprintf(resp, sizeof(resp), "usage: upstream add <pool> <host> <port> [weight=1] [backup=0]");
+            }
+        } else if (strcmp(subcmd, "drain") == 0) {
+            char pool_name[64] = {0};
+            char host[128] = {0};
+            int port = 0, drain = 1;
+            if (sscanf(args, "%63s %127s %d %d", pool_name, host, &port, &drain) >= 3) {
+                if (arws_upstream_set_node_drain(pool_name, host, port, drain) == 0) {
+                    rlen = snprintf(resp, sizeof(resp), "Node %s:%d drain=%d in pool '@%s'",
+                                    host, port, drain, pool_name);
+                } else {
+                    rlen = snprintf(resp, sizeof(resp), "Failed to set drain for %s:%d in pool '@%s'",
+                                    host, port, pool_name);
+                }
+            } else {
+                rlen = snprintf(resp, sizeof(resp), "usage: upstream drain <pool> <host> <port> [drain=1|0]");
+            }
+        } else {
+            rlen = snprintf(resp, sizeof(resp), "usage: upstream list | add | drain");
+        }
     } else if (strcmp(cmd, "ping") == 0) {
         rlen = snprintf(resp, sizeof(resp), "pong");
     } else {
@@ -326,11 +418,7 @@ static void *client_handler_loop(void *arg) {
         if (!peek_is_ipc_frame(client_fd)) {
             query_unlock_fd(client_fd);
             idle_rounds++;
-            /* Keep trying for ~2s (40 rounds x 50ms) before giving up */
-            if (idle_rounds > 40) {
-                alri_print(CYN "[ARWS]" RST " client_handler_loop: idle timeout on fd=%d, exiting\n", client_fd);
-                break;
-            }
+            /* Para canais de controle persistentes, não fecha por ociosidade (ar_sleep_ms) */
             ar_sleep_ms(50);
             continue;
         }
@@ -632,6 +720,7 @@ static void *client_handler_loop(void *arg) {
                             }
                             if (resp_type == IPC_QUERY_RESP) break;
                         }
+                        ar_sleep_ms(10);
                     }
                     if (resp_type != IPC_QUERY_RESP) resp_type = 0;
                 }
@@ -697,12 +786,14 @@ static void *accept_loop(void *arg) {
 
 int arws_init(void) {
     alri_print_force(CYN "[ARWS]" RST " Initializing Gateway...\n");
+    arws_upstream_init();
     arws_route_init();
     arws_registry_init();
     arws_ratelimit_init();
     arws_session_init();
     arws_cache_init();
     arws_proxy_init();
+    arws_health_start();
     int cache_ttl = arws_config_get_cache_ttl();
     arws_cache_set_ttl(cache_ttl);
     query_mutex = ar_mutex_create();
@@ -757,6 +848,8 @@ int arws_start(int port, int mode) {
 
 void arws_stop(void) {
     gateway_running = 0;
+    arws_health_stop();
+    arws_upstream_cleanup();
     server_stop();
     arws_config_watchdog_stop();
 

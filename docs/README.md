@@ -68,23 +68,25 @@ python test_suite.py
 
 ## 📂 Infrastructure Documentation
 
-- **[ARWN Framework & .arweb Containers](arwn/README.md):** High-performance multi-language container engine and multi-threaded embedded server.
+- **[ALRI DB Sovereign Data Guardian Plan](ALRI_DB_PLAN.md):** Architectural specification for zero-trust PostgreSQL proxy.
+- **[ALRI DB Security Tests Suite](ALRI_DB_SECURITY_TESTS.md):** Mandatory automated tests for memory safety, fuzzing, timing attacks, and RLS bypass.
+- **[ARWN Framework & .arweb Containers](apps/arwn.md):** High-performance multi-language container engine and multi-threaded embedded server.
 - **[Developer Guide & IPC Specification](DEVELOPER_GUIDE.md):** `.arapp` package creation and IPC protocol.
-- **[Technical Analysis Report](ANALYSIS_REPORT.md):** Source-level review with architecture map and prioritized findings (security/concurrency).
 - **[Production & Deployment Guide](PRODUCTION.md):** Deployment manual for Debian/Linux servers and SSL configuration.
 - **[Requirements & Dependencies](REQUIREMENTS.md):** Complete software dependencies list.
 - **[ARKernel](KERNEL.md):** OS Hardware Abstraction Layer (`aros_hal.h`).
 - **[Core Daemon (arcore.exe)](CORE.md):** Lifecycle manager and service runner.
-- **[Tools armake & arinstall](TOOLS.md):** Package manager and runtime installer.
+- **[Tools armake & arinstall](TOOLS.md):** Package manager, runtime installer, and `alrios db` CLI.
 - **[alrios CLI Reference](comands.md):** Command-line interface reference guide.
-- **[Changelog](CHANGELOG.md):** Performance optimization history.
+- **[Changelog](CHANGELOG.md):** Complete feature and optimization history (v4.0.0).
 
 ### Native Applications (`/docs/apps/`)
+- **[ALRI DB Sovereign Guardian (ardb.arapp)](apps/ardb.md):** Sovereign PostgreSQL proxy, SQL Firewall, and forensic audit engine (Port 5432).
 - **[ARWS Gateway (arws.arapp)](apps/arws.md):** HTTP/HTTPS server and Reverse Proxy.
 - **[CDN (cdn.arapp)](apps/cdn.md):** Media delivery and static asset server.
 - **[Home Web (home-web.arapp)](apps/home.web.md):** React SPA application (Port 3001).
 - **[Detroit Web (detroit-web.arapp)](apps/detroit.web.md):** React SPA application (Port 3004).
-- **[Ecosystem Multi-Language Demo (test_ecosystem.web)](arwn/README.md):** Benchmark suite showcasing C, C++, Rust, Go & JS in `.arweb` containers.
+- **[Ecosystem Multi-Language Demo (test_ecosystem.web)](apps/arwn.md):** Benchmark suite showcasing C, C++, Rust, Go & JS in `.arweb` containers.
 
 ---
 

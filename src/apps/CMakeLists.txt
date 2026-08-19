@@ -164,6 +164,8 @@ add_library(arws MODULE
     ${ARWS_SRC}/arws_cache.c
     ${ARWS_SRC}/arws_proxy.c
     ${ARWS_SRC}/arws_stream_proxy.c
+    ${ARWS_SRC}/arws_upstream.c
+    ${ARWS_SRC}/arws_health.c
     ${ARWS_SRC}/modes.c
     ${ARWS_SRC}/router_ex.c
     ${ARWS_SRC}/registry.c
@@ -244,4 +246,71 @@ add_custom_target(detroit_web_pack ALL
         --arwn-build ${ARWN_BUILD_BIN}
     DEPENDS armake arwn_build
     COMMENT "Building + packaging detroit.web via armake"
+)
+
+# ------------------------------------------------------------------
+# ALRI DB — Motor Soberano de Banco de Dados & Testes de Segurança Zero-Trust
+# ------------------------------------------------------------------
+find_package(OpenSSL REQUIRED)
+find_package(Threads REQUIRED)
+
+set(ARDB_SRC "${CMAKE_CURRENT_SOURCE_DIR}/ardb")
+set(ARDB_STAGING "${ARCORE_DIR}/.staging/ardb")
+
+add_executable(ardb
+    ${ARDB_SRC}/ardb_entry.c
+    ${ARDB_SRC}/ardb_pgwire.c
+    ${ARDB_SRC}/ardb_backend.c
+    ${ARDB_SRC}/ardb_auth.c
+    ${ARDB_SRC}/ardb_firewall.c
+    ${ARDB_SRC}/ardb_audit.c
+)
+target_include_directories(ardb PRIVATE
+    ${ARDB_SRC}
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/include
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
+    ${OPENSSL_INCLUDE_DIR}
+)
+target_link_libraries(ardb PRIVATE
+    arkernel
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    Threads::Threads
+)
+
+add_executable(ardb_security_tests
+    ${ARDB_SRC}/test_ardb_security.c
+    ${ARDB_SRC}/ardb_backend.c
+    ${ARDB_SRC}/ardb_auth.c
+    ${ARDB_SRC}/ardb_firewall.c
+    ${ARDB_SRC}/ardb_audit.c
+)
+target_include_directories(ardb_security_tests PRIVATE
+    ${ARDB_SRC}
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/include
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
+    ${OPENSSL_INCLUDE_DIR}
+)
+target_link_libraries(ardb_security_tests PRIVATE
+    arkernel
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    Threads::Threads
+)
+
+add_custom_target(ardb_pack ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${ARDB_STAGING}
+    COMMAND ${CMAKE_COMMAND} -E copy
+        ${ARDB_SRC}/ardb.arappmake
+        ${ARDB_STAGING}/ardb.arappmake
+    COMMAND ${CMAKE_COMMAND} -E copy
+        $<TARGET_FILE:ardb>
+        ${ARDB_STAGING}/ardb
+    COMMAND ${ARCORE_DIR}/armake build
+        ${ARDB_STAGING}
+        ${ARCORE_DIR}/apps/ardb.arapp
+    DEPENDS ardb armake
+    COMMENT "Packaging ardb.arapp"
 )
