@@ -103,7 +103,7 @@ static void query_lock_fd(int fd) {
     ar_mutex_lock(query_mutex);
     while (gateway_running) {
         if (query_locks_ensure(fd) == 0 && query_locks[fd] == 0) {
-            query_locks[fd] = fd;
+            query_locks[fd] = 1;
             ar_mutex_unlock(query_mutex);
             return;
         }
@@ -148,9 +148,10 @@ void arws_dispatch_unlock(int backend_id) {
 }
 
 static int is_query_locked(int fd) {
+    if (fd < 0 || !query_mutex) return 0;
     int locked;
     ar_mutex_lock(query_mutex);
-    locked = (fd >= 0 && fd < query_locks_max) ? query_locks[fd] : 0;
+    locked = (fd < query_locks_max && query_locks) ? query_locks[fd] : 0;
     ar_mutex_unlock(query_mutex);
     return locked;
 }
@@ -200,6 +201,10 @@ static int match_app_alias(const char *registered, const char *target) {
     if (strcmp(registered, target) == 0) return 1;
     if ((strcmp(registered, "ardb") == 0 || strcmp(registered, "db") == 0) &&
         (strcmp(target, "ardb") == 0 || strcmp(target, "db") == 0)) return 1;
+    if ((strcmp(registered, "arauth") == 0 || strcmp(registered, "auth") == 0) &&
+        (strcmp(target, "arauth") == 0 || strcmp(target, "auth") == 0)) return 1;
+    if ((strcmp(registered, "arcdn") == 0 || strcmp(registered, "cdn") == 0) &&
+        (strcmp(target, "arcdn") == 0 || strcmp(target, "cdn") == 0)) return 1;
     if ((strcmp(registered, "home.web") == 0 || strcmp(registered, "home-web") == 0) &&
         (strcmp(target, "home.web") == 0 || strcmp(target, "home-web") == 0)) return 1;
     if ((strcmp(registered, "detroit.web") == 0 || strcmp(registered, "detroit-web") == 0) &&
@@ -260,7 +265,7 @@ static int peek_is_ipc_frame(int fd) {
                          ((uint32_t)peek[3]);
     int type = peek[4];
 
-    return (frame_len <= AR_IPC_BUF_SIZE && type >= 1 && type <= 10);
+    return (frame_len <= AR_IPC_BUF_SIZE && type >= 1 && type <= 12);
 }
 
 static void handle_arws_query(int fd, const char *q, int len) {
@@ -410,7 +415,7 @@ static void *client_handler_loop(void *arg) {
     int idle_rounds = 0;
 
     while (gateway_running) {
-        if (!peek_is_ipc_frame(client_fd)) {
+        if (is_query_locked(client_fd) || !peek_is_ipc_frame(client_fd)) {
             idle_rounds++;
             /* Para canais de controle persistentes, não fecha por ociosidade (ar_sleep_ms) */
             ar_sleep_ms(20);
@@ -418,13 +423,13 @@ static void *client_handler_loop(void *arg) {
         }
         idle_rounds = 0;
 
-        query_lock_fd(client_fd);
         int type;
         uint32_t len = sizeof(buf);
         if (ar_ipc_recv_frame(client_fd, &type, buf, &len) < 0) {
-            query_unlock_fd(client_fd);
             break;
         }
+        if (len < sizeof(buf)) buf[len] = '\0';
+        else buf[sizeof(buf) - 1] = '\0';
 
         switch (type) {
             case IPC_REGISTER: {
@@ -729,8 +734,6 @@ static void *client_handler_loop(void *arg) {
                 break;
             }
         }
-
-        query_unlock_fd(client_fd);
     }
 
     /* Clean up backend registration and routes for this fd */

@@ -66,7 +66,6 @@ int arws_unregister_backend(int backend_id) {
     ar_mutex_lock(registry_mutex);
     for (int i = 0; i < backend_count; i++) {
         if (backends[i].id == backend_id) {
-            if (backends[i].fd > 0) ar_socket_close(backends[i].fd);
             backends[i] = backends[--backend_count];
             ar_mutex_unlock(registry_mutex);
             alri_print(CYN "[ARWS]" RST " Backend id=%d unregistered\n", backend_id);

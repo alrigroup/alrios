@@ -503,7 +503,8 @@ int main(int argc, char *argv[]) {
     if (strcmp(a1, "refresh") == 0)
         return run_ctl(IPC_CTL_REFRESH, NULL);
 
-    /* ROTEAMENTO UNIVERSAL DINÂMICO PARA APPS (IPC 9500)
-       O aplicativo alvo é o dono exclusivo do seu catálogo de comandos e do seu help! */
-    return cmd_app_query_args(a1, argc, argv);
+    /* Universal dynamic routing for apps (IPC 9500).
+       The target application owns and serves its own command catalogue and help! */
+    const char *target_app = (strcmp(a1, "auth") == 0) ? "arauth" : a1;
+    return cmd_app_query_args(target_app, argc, argv);
 }
