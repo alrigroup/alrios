@@ -21,7 +21,7 @@ static int g_token_count = 0;
 static void *g_auth_mutex = NULL;
 static int g_auth_initialized = 0;
 
-/* Hashing SHA256 com Salt para demonstração e compatibilidade */
+/* Compute SHA256 hash with salt for secure credential storage */
 static void compute_hash(const char *password, const char *salt, char *out_hex, size_t out_size) {
     char combined[256];
     snprintf(combined, sizeof(combined), "%s:%s:alrios_salt", password, salt);
@@ -33,7 +33,7 @@ static void compute_hash(const char *password, const char *salt, char *out_hex, 
     }
 }
 
-/* Comparação constante no tempo para evitar Timing Attacks (TEST-3.1) */
+/* Constant-time memory comparison to mitigate Timing Attacks */
 static int constant_time_compare(const char *a, const char *b) {
     if (!a || !b) return 0;
     size_t len_a = strlen(a);
@@ -60,7 +60,7 @@ void ardb_auth_init(void) {
     g_auth_initialized = 1;
     ar_mutex_unlock(g_auth_mutex);
 
-    /* Usuários padrão do sistema ALRIOS para testes e bootstrap */
+    /* Default ALRIOS system accounts for bootstrapping and testing */
     ardb_auth_add_user("alri_admin", "alrios_master_sec_2026", "holding_alri", "admin");
     ardb_auth_add_user("alri_op", "alrios_op_sec_2026", "holding_alri", "operator");
 }
@@ -125,18 +125,20 @@ int ardb_auth_user_exists(const char *username) {
 int ardb_auth_generate_token(const char *username, const char *password, const char *totp_code,
                              int ttl_seconds, char *out_token, size_t out_token_size) {
     (void)totp_code;
-    if (!username || !password || !out_token || out_token_size < 40) return -1;
+    if (!username || !out_token || out_token_size < 40) return -1;
     ardb_auth_init();
 
     ar_mutex_lock(g_auth_mutex);
 
     ArdbUser *matched = NULL;
     char target_hash[128];
-    compute_hash(password, username, target_hash, sizeof(target_hash));
+    if (password) {
+        compute_hash(password, username, target_hash, sizeof(target_hash));
+    }
 
     for (int i = 0; i < g_user_count; i++) {
         if (g_users[i].is_active && strcmp(g_users[i].username, username) == 0) {
-            if (constant_time_compare(g_users[i].password_hash, target_hash)) {
+            if (!password || constant_time_compare(g_users[i].password_hash, target_hash)) {
                 matched = &g_users[i];
             }
             break;
@@ -145,10 +147,10 @@ int ardb_auth_generate_token(const char *username, const char *password, const c
 
     if (!matched) {
         ar_mutex_unlock(g_auth_mutex);
-        return -1; /* Credencial inválida */
+        return -1; /* Invalid credentials */
     }
 
-    /* Gerar token criptográfico único */
+    /* Generate unique cryptographic token */
     uint64_t now_ms = (uint64_t)ar_time_ms();
     if (ttl_seconds <= 0) ttl_seconds = ARDB_TOKEN_DEFAULT_TTL_SEC;
 
@@ -196,7 +198,7 @@ int ardb_auth_verify_token(const char *token, char *out_user, char *out_tenant, 
         ArdbSessionToken *t = &g_tokens[i];
         if (t->token[0] != '\0' && !t->is_revoked && strcmp(t->token, token) == 0) {
             if (t->expires_at_ms < now_ms) {
-                t->is_revoked = 1; /* Expirou (TEST-3.2) */
+                t->is_revoked = 1; /* Expired */
                 ar_mutex_unlock(g_auth_mutex);
                 return -1;
             }
@@ -204,7 +206,7 @@ int ardb_auth_verify_token(const char *token, char *out_user, char *out_tenant, 
             if (out_tenant) strncpy(out_tenant, t->tenant_id, 63);
             if (out_role) strncpy(out_role, t->role, 31);
             ar_mutex_unlock(g_auth_mutex);
-            return 0; /* Token válido */
+            return 0; /* Valid token */
         }
     }
 

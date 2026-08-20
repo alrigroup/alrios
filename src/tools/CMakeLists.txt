@@ -12,10 +12,12 @@ if(WIN32)
     )
 endif()
 
+find_package(OpenSSL REQUIRED)
+find_package(Threads REQUIRED)
 add_executable(alrios
     alrios.c
 )
-target_link_libraries(alrios PRIVATE arkernel)
+target_link_libraries(alrios PRIVATE arkernel OpenSSL::SSL OpenSSL::Crypto Threads::Threads ${CMAKE_DL_LIBS})
 if(WIN32)
     set_target_properties(alrios PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"

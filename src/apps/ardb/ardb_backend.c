@@ -44,7 +44,7 @@ static uint32_t read_uint32_be(const unsigned char *buf) {
            ((uint32_t)buf[3]);
 }
 
-/* Estabelece handshake nativo PG-Wire com a instância isolada do Postgres */
+/* Establish native PG-Wire handshake with isolated PostgreSQL backend */
 static int connect_to_postgres(ArdbBackendConn *conn) {
     if (conn->socket_fd >= 0) {
         ar_socket_close(conn->socket_fd);
@@ -63,7 +63,7 @@ static int connect_to_postgres(ArdbBackendConn *conn) {
         return -1;
     }
 
-    /* 1. Enviar StartupMessage */
+    /* 1. Send StartupMessage */
     char params[256];
     int plen = snprintf(params, sizeof(params), "user%c%s%cdatabase%c%s%c%c",
                         '\0', conn->user, '\0', '\0', conn->database, '\0', '\0');
@@ -79,7 +79,7 @@ static int connect_to_postgres(ArdbBackendConn *conn) {
         return -1;
     }
 
-    /* 2. Processar autenticação com o PostgreSQL nativo */
+    /* 2. Process authentication with PostgreSQL backend */
     unsigned char hdr[5];
     while (1) {
         int r = ar_socket_recv(fd, (char*)hdr, 5);
@@ -108,13 +108,13 @@ static int connect_to_postgres(ArdbBackendConn *conn) {
                 free(pbuf);
             }
         } else if (type == PG_TYPE_READY_FOR_QUERY) {
-            /* Handshake concluído com o Postgres interno */
+            /* Backend handshake complete */
             break;
         } else if (type == PG_TYPE_ERROR_RESP) {
             ar_socket_close(fd);
             return -1;
         } else {
-            /* Drenar outros pacotes (ParameterStatus, BackendKeyData, etc.) */
+            /* Drain other parameter/key packets */
             if (len > 4) {
                 char *discard = (char*)malloc(len - 4);
                 if (discard) {
@@ -215,7 +215,7 @@ void ardb_backend_release(ArdbBackendConn *conn) {
 int ardb_backend_relay_query(ArdbBackendConn *conn, const char *sql_query, int client_fd) {
     if (!conn || !sql_query || client_fd < 0) return -1;
 
-    /* 1. Enviar mensagem 'Q' (Query) para o PostgreSQL interno */
+    /* 1. Send 'Q' (Query) packet to backend PostgreSQL */
     size_t qlen = strlen(sql_query) + 1;
     uint32_t pkt_len = 4 + (uint32_t)qlen;
 
@@ -233,7 +233,7 @@ int ardb_backend_relay_query(ArdbBackendConn *conn, const char *sql_query, int c
     }
     free(qbuf);
 
-    /* 2. Transmitir respostas em streaming para o cliente (DBeaver) até ReadyForQuery ('Z') */
+    /* 2. Stream responses back to client until ReadyForQuery ('Z') */
     unsigned char hdr[5];
     while (1) {
         int r = ar_socket_recv(conn->socket_fd, (char*)hdr, 5);
@@ -245,10 +245,10 @@ int ardb_backend_relay_query(ArdbBackendConn *conn, const char *sql_query, int c
         char type = (char)hdr[0];
         uint32_t len = read_uint32_be(hdr + 1);
 
-        /* Encaminha o cabeçalho do pacote para o cliente */
+        /* Forward packet header */
         ar_socket_send(client_fd, (const char*)hdr, 5);
 
-        /* Encaminha o corpo do pacote */
+        /* Forward packet payload */
         if (len > 4) {
             uint32_t remaining = len - 4;
             char chunk[4096];
@@ -265,7 +265,7 @@ int ardb_backend_relay_query(ArdbBackendConn *conn, const char *sql_query, int c
         }
 
         if (type == PG_TYPE_READY_FOR_QUERY) {
-            break; /* Query concluída no Postgres interno */
+            break; /* Completed */
         }
     }
 

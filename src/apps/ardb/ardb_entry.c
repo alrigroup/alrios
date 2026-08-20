@@ -6,87 +6,116 @@
  * and at: https://github.com/alrigroup/licenses/tree/main
  */
 
+#include "ardb_config.h"
+#include "ardb_http.h"
 #include "ardb_pgwire.h"
 #include "ardb_backend.h"
 #include "ardb_auth.h"
 #include "ardb_firewall.h"
 #include "ardb_audit.h"
+#include "aros_hal.h"
+#include "ar_ipc.h"
 #include "log.h"
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <signal.h>
-
-#include "ar_ipc.h"
-#include <string.h>
 
 static volatile int g_app_running = 1;
 static int g_ipc_fd = -1;
 
-static void handle_sig(int sig) {
-    (void)sig;
+static void handle_sig(int s) {
+    (void)s;
     g_app_running = 0;
+    ardb_http_server_stop();
+    ardb_pgwire_server_stop();
 }
 
-static void handle_ardb_ipc_query(int fd, const char *q, int len) {
-    char resp[4096];
+/* Handle IPC queries received from CLI 'alrios ardb <cmd>' */
+static void handle_ardb_ipc_query(int fd, const char *payload, int payload_len) {
+    char resp[AR_IPC_BUF_SIZE];
     int rlen = 0;
-    (void)len;
+
+    char q[256] = {0};
+    int qlen = payload_len < (int)sizeof(q) - 1 ? payload_len : (int)sizeof(q) - 1;
+    memcpy(q, payload, qlen);
+    q[qlen] = '\0';
 
     char cmd[64] = {0};
     int i = 0;
-    while (i < len && i < 63 && q[i] != ' ' && q[i] != '\t' && q[i] != '\n') {
+    while (q[i] && q[i] != ' ' && q[i] != '\n' && q[i] != '\r' && i < 63) {
         cmd[i] = q[i];
         i++;
     }
+    cmd[i] = '\0';
 
-    if (strcmp(cmd, "help") == 0 || strcmp(cmd, "--help") == 0 || strcmp(cmd, "-h") == 0 || cmd[0] == '\0') {
+    ArdbConfig *cfg = ardb_config_get();
+
+    if (strcmp(cmd, "status") == 0) {
         rlen = snprintf(resp, sizeof(resp),
-            "ALRI DB Sovereign Data Guardian & Zero-Trust PG-Wire v1.0.0 (Self-Registered)\n\n"
-            "Supported Commands:\n"
-            "  status                                  - Check engine health, isolated Postgres and active firewall\n"
-            "  auth login [user]                       - Authenticate with 2FA and generate 4-hour ephemeral session token\n"
-            "  auth revoke <token>                     - Immediately invalidate an active session token\n"
-            "  user add <user> <pass> <tenant> [role]  - Create tenant user with strict RLS isolation\n"
-            "  audit verify                            - Verify SHA-256 blockchain forensic hash integrity\n"
-            "  audit tail                              - Stream real-time forensic query log entries\n"
-            "  ping                                    - Check ardb daemon responsiveness\n");
-    } else if (strcmp(cmd, "status") == 0) {
-        rlen = snprintf(resp, sizeof(resp),
-            "[ALRI DB] Sovereign Data Guardian Status:\n"
-            "  - Engine: ACTIVE (PG-Wire Listening on port %d)\n"
-            "  - Isolated PostgreSQL: CONNECTED (Port %d)\n"
-            "  - Firewall: ENFORCING (Anti-RLS Bypass & DDL Shield Active)\n"
-            "  - Audit Chain: 100%% VERIFIED (Immutable Forensics)\n",
-            ARDB_DEFAULT_PORT, ARDB_BACKEND_DEFAULT_PORT);
+            "[ALRI DB] Sovereign Database Guardian Status:\n"
+            "  State: RUNNING\n"
+            "  PG-Wire Port: %d (Active)\n"
+            "  HTTP REST API: %s (Port %d, Route: %s)\n"
+            "  SQL Firewall: %s\n"
+            "  Forensic Audit Log: %s\n",
+            cfg->server_port,
+            ardb_http_is_running() ? "ENABLED" : "DISABLED",
+            cfg->http_port, cfg->http_route_prefix,
+            cfg->sql_firewall,
+            cfg->audit_log);
+    } else if (strcmp(cmd, "cfg") == 0) {
+        char sub[32] = {0};
+        sscanf(q + i, "%31s", sub);
+        if (strcmp(sub, "reload") == 0) {
+            ardb_config_reload(NULL);
+            ArdbConfig *new_cfg = ardb_config_get();
+            if (new_cfg->http_enabled && !ardb_http_is_running()) {
+                ardb_http_server_start(new_cfg->http_bind, new_cfg->http_port);
+            } else if (!new_cfg->http_enabled && ardb_http_is_running()) {
+                ardb_http_server_stop();
+            }
+            rlen = snprintf(resp, sizeof(resp),
+                "[ALRI DB] Configuration reloaded successfully.\n"
+                "  HTTP REST API: %s (Port %d)\n",
+                ardb_http_is_running() ? "ENABLED" : "DISABLED", new_cfg->http_port);
+        } else {
+            rlen = snprintf(resp, sizeof(resp), "usage: alrios ardb cfg reload");
+        }
     } else if (strcmp(cmd, "auth") == 0) {
         char sub[32] = {0};
-        char user_or_tok[128] = {0};
-        int n = sscanf(q + i, "%31s %127s", sub, user_or_tok);
-        if (n >= 1 && strcmp(sub, "login") == 0) {
-            const char *u = user_or_tok[0] ? user_or_tok : "alri_admin";
-            char token[128] = {0};
-            /* Registra usuário se não existir */
-            ardb_auth_add_user(u, "temp_pass_2026", "holding_alri", "admin");
-            ardb_auth_generate_token(u, "temp_pass_2026", NULL, 14400, token, sizeof(token));
-            rlen = snprintf(resp, sizeof(resp),
-                "[ALRI DB] Authenticated user '%s' successfully!\n"
-                "  Session Token: %s\n"
-                "  TTL: 4 hours (Zero-Knowledge Session)\n"
-                "  Host: 127.0.0.1 | Port: 5432 | Database: alrios_db\n\n"
-                "Use this token as the password in DBeaver or database clients.\n",
-                u, token);
-        } else if (n >= 1 && strcmp(sub, "revoke") == 0) {
-            if (user_or_tok[0]) ardb_auth_revoke_token(user_or_tok);
-            rlen = snprintf(resp, sizeof(resp), "[ALRI DB] Revoked session for token '%s'. Session terminated.\n", user_or_tok);
+        char target[128] = {0};
+        int parsed = sscanf(q + i, "%31s %127s", sub, target);
+
+        if (strcmp(sub, "login") == 0 && parsed >= 2) {
+            char tok[128] = {0};
+            int ok = ardb_auth_generate_token(target, NULL, NULL, 14400, tok, sizeof(tok));
+            if (ok == 0) {
+                rlen = snprintf(resp, sizeof(resp),
+                    "[ALRI DB] Authenticated user '%s' successfully!\n"
+                    "  Session Token: %s\n"
+                    "  TTL: 4 hours (Zero-Knowledge Session)\n"
+                    "  Host: 127.0.0.1 | Port: %d | Database: alrios_db\n\n"
+                    "Use this token as the password in DBeaver, or in X-ARDB-Token HTTP Header.\n",
+                    target, tok, cfg->server_port);
+            } else {
+                rlen = snprintf(resp, sizeof(resp), "[ALRI DB] Error: User '%s' not found or inactive.\n", target);
+            }
+        } else if (strcmp(sub, "revoke") == 0 && parsed >= 2) {
+            int ok = ardb_auth_revoke_token(target);
+            if (ok == 0) {
+                rlen = snprintf(resp, sizeof(resp), "[ALRI DB] Session token revoked successfully.\n");
+            } else {
+                rlen = snprintf(resp, sizeof(resp), "[ALRI DB] Error: Token not found or already expired.\n");
+            }
         } else {
-            rlen = snprintf(resp, sizeof(resp), "usage: auth login [user] | auth revoke <token>");
+            rlen = snprintf(resp, sizeof(resp), "usage: auth <login|revoke> <user|token>");
         }
     } else if (strcmp(cmd, "user") == 0) {
         char sub[32] = {0};
-        char u[64] = {0}, p[64] = {0}, t[64] = {0}, r[32] = {0};
-        int n = sscanf(q + i, "%31s %63s %63s %63s %31s", sub, u, p, t, r);
-        if (n >= 4 && strcmp(sub, "add") == 0) {
-            if (!r[0]) strncpy(r, "operator", sizeof(r) - 1);
+        char u[64] = {0}, p[64] = {0}, t[64] = {0}, r[32] = "operator";
+        int parsed = sscanf(q + i, "%31s %63s %63s %63s %31s", sub, u, p, t, r);
+        if (strcmp(sub, "add") == 0 && parsed >= 4) {
             ardb_auth_add_user(u, p, t, r);
             rlen = snprintf(resp, sizeof(resp), "[ALRI DB] User '%s' created for tenant '%s' with role '%s'.\n", u, t, r);
         } else {
@@ -97,7 +126,7 @@ static void handle_ardb_ipc_query(int fd, const char *q, int len) {
         sscanf(q + i, "%31s", sub);
         if (strcmp(sub, "verify") == 0) {
             char err[256] = {0};
-            int ok = ardb_audit_verify_integrity("storage/ardb/audit.log", err, sizeof(err));
+            int ok = ardb_audit_verify_integrity(cfg->audit_log, err, sizeof(err));
             if (ok == 0) {
                 rlen = snprintf(resp, sizeof(resp),
                     "[ALRI DB] Auditing forensic integrity chain...\n"
@@ -133,10 +162,7 @@ static void *ardb_ipc_thread(void *arg) {
             continue;
         }
 
-        /* Registrar como ardb no Gateway */
-        char reg[256];
-        snprintf(reg, sizeof(reg), "ardb /ardb-internal GET 127.0.0.1:5432 production");
-        ar_ipc_send_frame(g_ipc_fd, IPC_REGISTER, reg, (uint32_t)strlen(reg) + 1);
+        ar_ipc_send_frame(g_ipc_fd, IPC_REGISTER, "ardb", 4);
 
         char buf[AR_IPC_BUF_SIZE];
         while (g_app_running) {
@@ -167,18 +193,27 @@ int main(int argc, char **argv) {
 
     alri_print_force(CYN "[ALRI DB]" RST " Starting Sovereign Database Guardian Service...\n");
 
-    /* Inicializar módulos de segurança */
-    ardb_auth_init();
-    ardb_audit_init("storage/ardb/audit.log");
-    ardb_backend_init(ARDB_BACKEND_DEFAULT_HOST, ARDB_BACKEND_DEFAULT_PORT, "postgres", "postgres", "postgres");
+    /* Load ardb.cfg */
+    ardb_config_load("ardb.cfg", ardb_config_get());
+    ArdbConfig *cfg = ardb_config_get();
 
-    /* Iniciar servidor PG-Wire na porta 5432 */
-    if (ardb_pgwire_server_start(ARDB_DEFAULT_PORT) != 0) {
-        alri_print(RED "[ALRI DB]" RST " Fatal: Unable to bind PG-Wire server on port %d\n", ARDB_DEFAULT_PORT);
+    /* Initialize security modules */
+    ardb_auth_init();
+    ardb_audit_init(cfg->audit_log);
+    ardb_backend_init(cfg->backend_host, cfg->backend_port, cfg->backend_user, cfg->backend_password, cfg->backend_database);
+
+    /* Start PG-Wire server */
+    if (ardb_pgwire_server_start(cfg->server_port) != 0) {
+        alri_print(RED "[ALRI DB]" RST " Fatal: Unable to bind PG-Wire server on port %d\n", cfg->server_port);
         return 1;
     }
 
-    /* Iniciar thread IPC para receber comandos dinâmicos */
+    /* Start optional HTTP REST server if configured */
+    if (cfg->http_enabled) {
+        ardb_http_server_start(cfg->http_bind, cfg->http_port);
+    }
+
+    /* Start IPC control channel thread */
     ar_thread_create(ardb_ipc_thread, NULL);
 
     alri_print_force(GRN "[ALRI DB]" RST " Sovereign Data Guardian is ACTIVE and PROTECTED.\n");
@@ -188,11 +223,8 @@ int main(int argc, char **argv) {
     }
 
     alri_print_force("[ALRI DB] Stopping Sovereign Database Guardian gracefully...\n");
+    ardb_http_server_stop();
     ardb_pgwire_server_stop();
-    ardb_backend_cleanup();
     ardb_audit_cleanup();
-    ardb_auth_cleanup();
-
-    alri_print_force(GRN "[ALRI DB]" RST " Shutdown complete.\n");
     return 0;
 }

@@ -779,7 +779,21 @@ static int find_arcore_dir(const char *start, char *out, int cap) {
     const char *env = getenv("ARCORE_HOME");
     if (env && env[0]) { snprintf(out, cap, "%s", env); return 0; }
     char cur[1024];
-    snprintf(cur, sizeof(cur), "%s", start);
+    if (is_abs_path(start)) {
+        snprintf(cur, sizeof(cur), "%s", start);
+    } else {
+        char cwd[1024] = {0};
+#ifdef _WIN32
+        if (!_getcwd(cwd, sizeof(cwd))) cwd[0] = '\0';
+#else
+        if (!getcwd(cwd, sizeof(cwd))) cwd[0] = '\0';
+#endif
+        if (cwd[0]) {
+            snprintf(cur, sizeof(cur), "%s%c%s", cwd, SEPARATOR, start);
+        } else {
+            snprintf(cur, sizeof(cur), "%s", start);
+        }
+    }
     for (int depth = 0; depth < 16; depth++) {
         char candidate[1300];
         snprintf(candidate, sizeof(candidate), "%s%carcore", cur, SEPARATOR);

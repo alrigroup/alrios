@@ -1,7 +1,7 @@
 ALRIGROUP@APPMAKE
 {
-  "name": "cdn",
-  "bin": "cdn.arapp",
+  "name": "arcdn",
+  "bin": "arcdn.arapp",
   "version": "1.0.0",
   "runtime": "native",
   "entry": "cdn_web",

@@ -410,20 +410,15 @@ static void *client_handler_loop(void *arg) {
     int idle_rounds = 0;
 
     while (gateway_running) {
-        /* Serialize reads on this fd with cross-queries: hold the same per-fd
-           lock the IPC_QUERY forwarder uses, so the response is never stolen
-           by this loop while a cross-query is awaiting it. */
-        query_lock_fd(client_fd);
-
         if (!peek_is_ipc_frame(client_fd)) {
-            query_unlock_fd(client_fd);
             idle_rounds++;
             /* Para canais de controle persistentes, não fecha por ociosidade (ar_sleep_ms) */
-            ar_sleep_ms(50);
+            ar_sleep_ms(20);
             continue;
         }
         idle_rounds = 0;
 
+        query_lock_fd(client_fd);
         int type;
         uint32_t len = sizeof(buf);
         if (ar_ipc_recv_frame(client_fd, &type, buf, &len) < 0) {

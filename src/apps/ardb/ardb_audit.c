@@ -35,7 +35,14 @@ void ardb_audit_init(const char *log_path) {
         strncpy(g_audit_log_path, log_path, sizeof(g_audit_log_path) - 1);
     }
 
-    /* Carregar o último hash da cadeia se o arquivo já existir */
+#ifdef _WIN32
+    CreateDirectoryA("storage", NULL);
+    CreateDirectoryA("storage\\ardb", NULL);
+#else
+    system("mkdir -p storage/ardb 2>/dev/null");
+#endif
+
+    /* Load last hash from the chain if file already exists */
     strncpy(g_prev_hash, "0000000000000000000000000000000000000000000000000000000000000000", 64);
     FILE *f = fopen(g_audit_log_path, "r");
     if (f) {
@@ -70,10 +77,10 @@ void ardb_audit_log_query(const char *user, const char *tenant_id, const char *c
     }
     ar_mutex_lock(g_audit_mutex);
 
-    /* TEST-5.2: Timestamp em microssegundos direto do SO host */
+    /* Timestamp in microseconds directly from host OS clock */
     uint64_t ts_ms = (uint64_t)ar_time_ms();
 
-    /* Montar entrada do log */
+    /* Build log entry */
     char entry_raw[4096];
     snprintf(entry_raw, sizeof(entry_raw),
              "ts=%llu user=%s tenant=%s ip=%s status=%d duration_us=%llu sql=[%s] prev_hash=%s",
@@ -86,11 +93,11 @@ void ardb_audit_log_query(const char *user, const char *tenant_id, const char *c
              sql_query ? sql_query : "",
              g_prev_hash);
 
-    /* TEST-5.1: Hash_Atual = SHA256(Log_Atual + Hash_Anterior) */
+    /* Current_Hash = SHA256(Current_Log + Prev_Hash) */
     char current_hash[65];
     sha256_hex(entry_raw, current_hash);
 
-    /* Gravar em append-only */
+    /* Append-only write */
     FILE *f = fopen(g_audit_log_path, "a");
     if (f) {
         fprintf(f, "%s hash=%s\n", entry_raw, current_hash);
@@ -98,7 +105,7 @@ void ardb_audit_log_query(const char *user, const char *tenant_id, const char *c
         fclose(f);
     }
 
-    /* Atualizar hash para o próximo elo da cadeia */
+    /* Advance chain state */
     strncpy(g_prev_hash, current_hash, sizeof(g_prev_hash) - 1);
 
     ar_mutex_unlock(g_audit_mutex);
@@ -109,7 +116,7 @@ int ardb_audit_verify_integrity(const char *log_path, char *out_error, size_t ou
     FILE *f = fopen(path, "r");
     if (!f) {
         if (out_error) snprintf(out_error, out_error_size, "Log file not found: %s", path);
-        return 0; /* Vazio ou inexistente */
+        return 0; /* Empty or non-existent */
     }
 
     char line[8192];
@@ -118,7 +125,7 @@ int ardb_audit_verify_integrity(const char *log_path, char *out_error, size_t ou
 
     while (fgets(line, sizeof(line), f)) {
         line_num++;
-        /* Remover \n */
+        /* Strip newlines */
         size_t len = strlen(line);
         while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
             line[--len] = '\0';
@@ -126,7 +133,7 @@ int ardb_audit_verify_integrity(const char *log_path, char *out_error, size_t ou
 
         char *hash_pos = strstr(line, " hash=");
         if (!hash_pos) {
-            if (out_error) snprintf(out_error, out_error_size, "Linha %d sem hash de integridade", line_num);
+            if (out_error) snprintf(out_error, out_error_size, "Line %d missing cryptographic hash", line_num);
             fclose(f);
             return -1;
         }
@@ -141,13 +148,13 @@ int ardb_audit_verify_integrity(const char *log_path, char *out_error, size_t ou
         if (strcmp(recorded_hash, calculated_hash) != 0) {
             if (out_error) {
                 snprintf(out_error, out_error_size,
-                         "CRITICAL: Falha de Integridade Forense na linha %d. Cadeia de Hash corrompida.", line_num);
+                         "CRITICAL: Forensic Integrity Failure at line %d. Hash chain corrupted.", line_num);
             }
             fclose(f);
             return -1;
         }
 
-        /* Verificar se o prev_hash bate */
+        /* Verify previous hash match */
         char *prev_pos = strstr(line, "prev_hash=");
         if (prev_pos) {
             char line_prev_hash[65] = {0};
@@ -155,7 +162,7 @@ int ardb_audit_verify_integrity(const char *log_path, char *out_error, size_t ou
             if (strcmp(line_prev_hash, expected_prev_hash) != 0) {
                 if (out_error) {
                     snprintf(out_error, out_error_size,
-                             "CRITICAL: Quebra de Elo na linha %d (prev_hash divergente).", line_num);
+                             "CRITICAL: Link Failure at line %d (prev_hash mismatch).", line_num);
                 }
                 fclose(f);
                 return -1;
@@ -166,5 +173,5 @@ int ardb_audit_verify_integrity(const char *log_path, char *out_error, size_t ou
     }
 
     fclose(f);
-    return 0; /* 100% íntegro */
+    return 0; /* 100% Verified */
 }

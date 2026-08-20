@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <ctype.h>
 
-/* Converte string para minúsculo para análise de palavras-chave */
+/* Convert string to lowercase for keyword analysis */
 static void to_lower_str(const char *src, char *dst, size_t dst_size) {
     size_t i = 0;
     while (src[i] && i < dst_size - 1) {
@@ -32,7 +32,7 @@ ArdbFwAction ardb_firewall_inspect(const char *raw_sql, const char *tenant_id, c
     char lower[2048];
     to_lower_str(raw_sql, lower, sizeof(lower));
 
-    /* 1. TEST-4.2: Bloqueio de Comandos Destrutivos por apps e operadores comuns */
+    /* 1. Block destructive DDL/DML commands for non-admin roles */
     int is_admin = (role && strcmp(role, "admin") == 0);
     if (!is_admin) {
         if (strstr(lower, "drop table") || strstr(lower, "drop database") ||
@@ -41,29 +41,28 @@ ArdbFwAction ardb_firewall_inspect(const char *raw_sql, const char *tenant_id, c
             
             if (out_reason) {
                 snprintf(out_reason, out_reason_size,
-                         "ERROR: 42501: Permissao negada pelo ALRI Firewall (Comando DDL/DML destrutivo)");
+                         "ERROR: 42501: Permission denied by ALRI Firewall (Destructive DDL/DML command)");
             }
             return ARDB_FW_BLOCK_DESTRUCTIVE;
         }
     }
 
-    /* 2. TEST-4.1: Detecção de tentativa de Bypass de RLS com comentários e injeção */
+    /* 2. Detect RLS bypass attempts using comments and forged tenant clauses */
     if (strstr(lower, "where tenant_id") || strstr(lower, "/*") || strstr(lower, "--")) {
-        /* Se tentar forjar diretamente um tenant_id diferente do seu */
         char forged_tenant_check[128];
         if (tenant_id && tenant_id[0]) {
             snprintf(forged_tenant_check, sizeof(forged_tenant_check), "tenant_id = '%s'", tenant_id);
             if (!strstr(lower, forged_tenant_check) && strstr(lower, "tenant_id =")) {
                 if (out_reason) {
                     snprintf(out_reason, out_reason_size,
-                             "CRITICAL: RLS Bypass Attempt detectado (Tentativa de acesso a outro tenant)");
+                             "CRITICAL: RLS Bypass Attempt detected (Unauthorized cross-tenant access)");
                 }
                 return ARDB_FW_BLOCK_RLS_BYPASS;
             }
         }
     }
 
-    /* 3. Injeção dinâmica e segura do Tenant ID do ALRIOS via SET LOCAL */
+    /* 3. Securely inject tenant ID via SET LOCAL */
     if (tenant_id && tenant_id[0]) {
         snprintf(out_rewritten_sql, out_size,
                  "SET LOCAL alri.tenant_id = '%s'; %s", tenant_id, raw_sql);

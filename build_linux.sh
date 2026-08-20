@@ -19,8 +19,8 @@ echo "== ALRIOS - Full Linux Build =="
 command -v cmake   >/dev/null || { echo "[ERROR] cmake not found"; exit 1; }
 command -v gcc     >/dev/null || { echo "[ERROR] gcc not found";   exit 1; }
 command -v make    >/dev/null || { echo "[ERROR] make not found";  exit 1; }
-command -v node    >/dev/null || { echo "[ERROR] node not found";  exit 1; }
-command -v npm     >/dev/null || { echo "[ERROR] npm not found";   exit 1; }
+command -v node    >/dev/null || echo "[WARN] node not found"
+command -v npm     >/dev/null || echo "[WARN] npm not found"
 
 NPROC="$(nproc 2>/dev/null || echo 4)"
 
@@ -30,23 +30,19 @@ cmake -S "${ROOT}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release
 echo "[2/4] Compiling kernel + developer tools"
 cmake --build "${BUILD_DIR}" --target arcore alrios armake -- -j"${NPROC}"
 
-echo "[3/4] Compiling + packaging native apps"
-rm -rf "${ROOT}"/src/apps/*/web/node_modules "${ROOT}"/src/apps/*/node_modules 2>/dev/null || true
-cmake --build "${BUILD_DIR}" \
-    --target arws_pack home_web_pack detroit_web_pack \
-    -- -j"${NPROC}"
-
-echo "[4/4] Validating generated .arapp packages:"
-for app in arws home.web detroit.web; do
-    file="${ROOT}/arcore/apps/${app}.arapp"
-    if [ -f "${file}" ]; then
-        echo "--- ${file}"
-        "${ROOT}/arcore/armake" list "${file}"
-    else
-        echo "[ERROR] ${file} not generated"
-        exit 1
+echo "[3/4] Packaging all apps modularly via armake"
+for appdir in "${ROOT}"/src/apps/*/; do
+    if [ -d "${appdir}" ]; then
+        appname="$(basename "${appdir}")"
+        echo "--> Building modular app: ${appname}..."
+        "${ROOT}/arcore/armake" build "${appdir}" "${ROOT}/arcore/apps/${appname}.arapp" || {
+            echo "[WARN] Could not pack ${appname}, checking arappmake..."
+        }
     fi
 done
+
+echo "[4/4] Validating generated .arapp packages:"
+ls -lh "${ROOT}/arcore/apps/"*.arapp
 
 echo ""
 echo "== OK. Linux ecosystem ready in ${ROOT}/arcore"

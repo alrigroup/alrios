@@ -31,7 +31,7 @@ static volatile int g_pgwire_running = 0;
 static void *g_pgwire_listen_thread = NULL;
 static int g_pgwire_listen_fd = -1;
 
-/* Funções auxiliares para leitura/escrita Big-Endian do PG-Wire */
+/* Big-Endian helper functions for PG-Wire protocol */
 static uint32_t read_uint32_be(const unsigned char *buf) {
     return ((uint32_t)buf[0] << 24) |
            ((uint32_t)buf[1] << 16) |
@@ -62,11 +62,19 @@ int ardb_pgwire_send_auth_cleartext_req(int fd) {
     return ar_socket_send(fd, (const char*)buf, 9);
 }
 
+int ardb_pgwire_send_auth_md5_req(int fd, const char salt[4]) {
+    unsigned char buf[13];
+    buf[0] = PG_TYPE_AUTH_REQ;
+    write_uint32_be(buf + 1, 12);
+    write_uint32_be(buf + 5, 5); /* 5 = MD5Password */
+    memcpy(buf + 9, salt, 4);
+    return ar_socket_send(fd, (const char*)buf, 13);
+}
+
 int ardb_pgwire_send_param_status(int fd, const char *param, const char *value) {
-    if (!param || !value) return -1;
     size_t plen = strlen(param) + 1;
     size_t vlen = strlen(value) + 1;
-    uint32_t len = 4 + (uint32_t)plen + (uint32_t)vlen;
+    uint32_t len = 4 + (uint32_t)(plen + vlen);
 
     unsigned char *buf = (unsigned char*)malloc(1 + len);
     if (!buf) return -1;
@@ -99,23 +107,22 @@ int ardb_pgwire_send_ready_for_query(int fd, char tx_status) {
 }
 
 int ardb_pgwire_send_error(int fd, const char *severity, const char *code, const char *message) {
-    if (!severity) severity = "ERROR";
-    if (!code) code = "42501";
-    if (!message) message = "Permission denied by ALRI DB";
-
     char payload[1024];
     int off = 0;
 
     payload[off++] = 'S';
-    off += snprintf(payload + off, sizeof(payload) - off, "%s", severity) + 1;
+    size_t slen = strlen(severity) + 1;
+    memcpy(payload + off, severity, slen); off += (int)slen;
 
     payload[off++] = 'C';
-    off += snprintf(payload + off, sizeof(payload) - off, "%s", code) + 1;
+    size_t clen = strlen(code) + 1;
+    memcpy(payload + off, code, clen); off += (int)clen;
 
     payload[off++] = 'M';
-    off += snprintf(payload + off, sizeof(payload) - off, "%s", message) + 1;
+    size_t mlen = strlen(message) + 1;
+    memcpy(payload + off, message, mlen); off += (int)mlen;
 
-    payload[off++] = '\0'; /* Terminador do erro */
+    payload[off++] = '\0';
 
     uint32_t len = 4 + (uint32_t)off;
     unsigned char *buf = (unsigned char*)malloc(1 + len);
@@ -147,7 +154,47 @@ int ardb_pgwire_send_command_complete(int fd, const char *tag) {
     return r;
 }
 
-/* Loop de atendimento por conexão de cliente (DBeaver / App) */
+int ardb_pgwire_send_single_row(int fd, const char *col_name, const char *val) {
+    /* 1. RowDescription ('T') */
+    size_t clen = strlen(col_name) + 1;
+    uint32_t rd_len = 4 + 2 + (uint32_t)clen + 4 + 2 + 4 + 2 + 4 + 2;
+    unsigned char *rd_buf = (unsigned char*)malloc(1 + rd_len);
+    if (!rd_buf) return -1;
+
+    rd_buf[0] = PG_TYPE_ROW_DESC;
+    write_uint32_be(rd_buf + 1, rd_len);
+    rd_buf[5] = 0; rd_buf[6] = 1; /* 1 column */
+    size_t off = 7;
+    memcpy(rd_buf + off, col_name, clen); off += clen;
+    write_uint32_be(rd_buf + off, 0); off += 4; /* table OID */
+    rd_buf[off++] = 0; rd_buf[off++] = 0;       /* col attr */
+    write_uint32_be(rd_buf + off, 25); off += 4;/* type OID: 25 (TEXT) */
+    rd_buf[off++] = 0xFF; rd_buf[off++] = 0xFE; /* type size: -1 */
+    write_uint32_be(rd_buf + off, 0xFFFFFFFF); off += 4; /* type mod */
+    rd_buf[off++] = 0; rd_buf[off++] = 0;       /* format: 0 (text) */
+    ar_socket_send(fd, (const char*)rd_buf, 1 + rd_len);
+    free(rd_buf);
+
+    /* 2. DataRow ('D') */
+    size_t vlen = val ? strlen(val) : 0;
+    uint32_t dr_len = 4 + 2 + 4 + (uint32_t)vlen;
+    unsigned char *dr_buf = (unsigned char*)malloc(1 + dr_len);
+    if (!dr_buf) return -1;
+
+    dr_buf[0] = PG_TYPE_DATA_ROW;
+    write_uint32_be(dr_buf + 1, dr_len);
+    dr_buf[5] = 0; dr_buf[6] = 1; /* 1 col */
+    write_uint32_be(dr_buf + 7, (uint32_t)vlen);
+    if (vlen > 0) memcpy(dr_buf + 11, val, vlen);
+    ar_socket_send(fd, (const char*)dr_buf, 1 + dr_len);
+    free(dr_buf);
+
+    /* 3. CommandComplete ('C') */
+    ardb_pgwire_send_command_complete(fd, "SELECT 1");
+    return 0;
+}
+
+/* Client connection handler loop (DBeaver / App) */
 static void* pgwire_client_handler(void *arg) {
     int fd = (int)(intptr_t)arg;
     ArdbClientSession session;
@@ -158,7 +205,7 @@ static void* pgwire_client_handler(void *arg) {
 
     unsigned char hdr[5];
 
-    /* 1. StartupMessage ou SSLRequest */
+    /* 1. StartupMessage or SSLRequest */
     int r = ar_socket_recv(fd, (char*)hdr, 4);
     if (r < 4) {
         ar_socket_close(fd);
@@ -167,7 +214,7 @@ static void* pgwire_client_handler(void *arg) {
 
     uint32_t pkt_len = read_uint32_be(hdr);
 
-    /* TEST-2.1: Prevenção contra Buffer Overflow em pacotes gigantes */
+    /* Buffer Overflow protection on oversized packets */
     if (pkt_len > ARDB_PGWIRE_MAX_BUF || pkt_len < 4) {
         alri_print(RED "[ARDB-SEC]" RST " Buffer Overflow attempt blocked: pkt_len=%u -> Dropping connection\n", pkt_len);
         ar_socket_close(fd);
@@ -195,14 +242,14 @@ static void* pgwire_client_handler(void *arg) {
 
     uint32_t proto_ver = read_uint32_be(startup_payload);
 
-    /* Tratar SSLRequest */
+    /* Handle SSLRequest */
     if (proto_ver == PG_MSG_SSL_REQUEST) {
         free(startup_payload);
-        /* Responde 'N' (Não suporta SSL ou suporte nativo direto) */
+        /* Respond 'N' (Direct plain / TLS handled at gateway level) */
         char ssl_n = 'N';
         ar_socket_send(fd, &ssl_n, 1);
 
-        /* Agora lê a StartupMessage real */
+        /* Read real StartupMessage */
         r = ar_socket_recv(fd, (char*)hdr, 4);
         if (r < 4) { ar_socket_close(fd); return NULL; }
         pkt_len = read_uint32_be(hdr);
@@ -219,7 +266,7 @@ static void* pgwire_client_handler(void *arg) {
         proto_ver = read_uint32_be(startup_payload);
     }
 
-    /* Parser de Parâmetros da StartupMessage (user, database, etc.) */
+    /* Parse StartupMessage parameters (user, database, etc.) */
     const char *p = (const char*)(startup_payload + 4);
     const char *end = (const char*)(startup_payload + (pkt_len - 4));
 
@@ -238,10 +285,10 @@ static void* pgwire_client_handler(void *arg) {
     }
     free(startup_payload);
 
-    /* 2. Solicitar Autenticação (Cleartext Password / Token) */
+    /* 2. Request authentication (Cleartext Password / Ephemeral Token) */
     ardb_pgwire_send_auth_cleartext_req(fd);
 
-    /* 3. Ler PasswordMessage */
+    /* 3. Read PasswordMessage */
     r = ar_socket_recv(fd, (char*)hdr, 5);
     if (r < 5 || hdr[0] != PG_TYPE_PASSWORD) {
         ar_socket_close(fd);
@@ -264,12 +311,12 @@ static void* pgwire_client_handler(void *arg) {
         received += n;
     }
     pass_buf[received] = '\0';
-    /* Remover null-terminator ou whitespace no final se enviado pelo cliente */
+    /* Remove null-terminator or trailing whitespace */
     while (received > 0 && (pass_buf[received - 1] == '\0' || pass_buf[received - 1] == '\n' || pass_buf[received - 1] == '\r')) {
         pass_buf[--received] = '\0';
     }
 
-    /* Validar se é Token Efêmero ou Senha de Usuário */
+    /* Validate Ephemeral Token or User Password */
     char validated_user[64] = {0};
     char validated_tenant[64] = {0};
     char validated_role[32] = {0};
@@ -278,7 +325,6 @@ static void* pgwire_client_handler(void *arg) {
     if (ardb_auth_verify_token(pass_buf, validated_user, validated_tenant, validated_role) == 0) {
         auth_ok = 1;
     } else {
-        /* Tentar gerar token direto se for senha válida */
         char gen_token[128];
         if (ardb_auth_generate_token(session.user, pass_buf, NULL, 3600, gen_token, sizeof(gen_token)) == 0) {
             ardb_auth_verify_token(gen_token, validated_user, validated_tenant, validated_role);
@@ -298,7 +344,7 @@ static void* pgwire_client_handler(void *arg) {
     char session_role[32] = {0};
     strncpy(session_role, validated_role, sizeof(session_role) - 1);
 
-    /* 4. Enviar AuthenticationOk e Parâmetros da Sessão */
+    /* 4. Send AuthenticationOk and Session Parameters */
     ardb_pgwire_send_auth_ok(fd);
     ardb_pgwire_send_param_status(fd, "server_version", "15.4 (ALRI OS Sovereign Data Guardian)");
     ardb_pgwire_send_param_status(fd, "server_encoding", "UTF8");
@@ -313,7 +359,7 @@ static void* pgwire_client_handler(void *arg) {
     alri_print(GRN "[ARDB-AUTH]" RST " Client '%s' (tenant='%s', role='%s') connected via PG-Wire.\n",
                session.user, session.tenant_id, session_role);
 
-    /* 5. Loop Principal de Mensagens de Comando (Query, Parse, Sync, Terminate) */
+    /* 5. Main Command Loop (Query, Parse, Sync, Terminate) */
     while (g_pgwire_running) {
         r = ar_socket_recv(fd, (char*)hdr, 5);
         if (r < 5) break;
@@ -356,7 +402,7 @@ static void* pgwire_client_handler(void *arg) {
                                      msg_payload, 403, (uint64_t)ar_time_ms() * 1000 - start_us);
                 ardb_pgwire_send_ready_for_query(fd, session.tx_status);
             } else {
-                /* Encaminha para o PostgreSQL isolado via Backend Proxy */
+                /* Relay to isolated PostgreSQL via Backend Proxy */
                 ArdbBackendConn *bconn = ardb_backend_acquire();
                 if (bconn) {
                     int relay_res = ardb_backend_relay_query(bconn, rewritten, fd);
@@ -370,9 +416,15 @@ static void* pgwire_client_handler(void *arg) {
                         ardb_pgwire_send_ready_for_query(fd, session.tx_status);
                     }
                 } else {
-                    /* Modo Standalone Mock / Emulação para ambientes sem Postgres físico instalado */
-                    if (strstr(msg_payload, "current_schema") || strstr(msg_payload, "version()")) {
-                        ardb_pgwire_send_command_complete(fd, "SELECT 1");
+                    /* Standalone Mock mode for environments without physical PostgreSQL */
+                    if (strstr(msg_payload, "current_schema") || strstr(msg_payload, "current_user")) {
+                        ardb_pgwire_send_single_row(fd, "current_schema", "public");
+                    } else if (strstr(msg_payload, "version()")) {
+                        ardb_pgwire_send_single_row(fd, "version", "PostgreSQL 15.4 on x86_64-pc-linux-gnu, compiled by ALRIOS ARDB Sovereign Guardian");
+                    } else if (strstr(msg_payload, "search_path")) {
+                        ardb_pgwire_send_single_row(fd, "search_path", "public, \"$user\"");
+                    } else if (strstr(msg_payload, "SELECT") || strstr(msg_payload, "select")) {
+                        ardb_pgwire_send_single_row(fd, "result", "1");
                     } else {
                         ardb_pgwire_send_command_complete(fd, "OK");
                     }
@@ -432,8 +484,7 @@ static void* pgwire_listen_worker(void *arg) {
             continue;
         }
 
-        void *th = ar_thread_create(pgwire_client_handler, (void*)(intptr_t)client_fd);
-        if (th) ar_thread_detach(th);
+        ar_thread_create(pgwire_client_handler, (void*)(intptr_t)client_fd);
     }
 
     if (g_pgwire_listen_fd >= 0) {
@@ -445,30 +496,16 @@ static void* pgwire_listen_worker(void *arg) {
 
 int ardb_pgwire_server_start(int port) {
     if (g_pgwire_running) return 0;
-    if (port <= 0) port = ARDB_DEFAULT_PORT;
-
-    ardb_auth_init();
-    ardb_audit_init(NULL);
-
     g_pgwire_running = 1;
     g_pgwire_listen_thread = ar_thread_create(pgwire_listen_worker, (void*)(intptr_t)port);
-    return g_pgwire_listen_thread != NULL ? 0 : -1;
+    return 0;
 }
 
 void ardb_pgwire_server_stop(void) {
     if (!g_pgwire_running) return;
     g_pgwire_running = 0;
-
     if (g_pgwire_listen_fd >= 0) {
         ar_socket_close(g_pgwire_listen_fd);
         g_pgwire_listen_fd = -1;
     }
-
-    if (g_pgwire_listen_thread) {
-        ar_thread_join(g_pgwire_listen_thread);
-        g_pgwire_listen_thread = NULL;
-    }
-
-    ardb_auth_cleanup();
-    ardb_audit_cleanup();
 }

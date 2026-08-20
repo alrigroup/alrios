@@ -11,7 +11,17 @@ ALRIGROUP@APPMAKE
     "linux-x64": {"entry": "ardb"},
     "linux-arm64": {"entry": "ardb"}
   },
+  "build": {
+    "staging": "$ARCORE/.staging/$APP_NAME",
+    "steps": [
+      {
+        "name": "cc",
+        "cmd": "gcc -O2 -I. -I../../ALRIOS/core -I../../ALRIOS/arkernel/include -I../../ALRIOS/arkernel/os/include -o $STAGING/ardb ardb_entry.c ardb_config.c ardb_http.c ardb_pgwire.c ardb_backend.c ardb_auth.c ardb_firewall.c ardb_audit.c -L$ARCORE/lib -larkernel -lssl -lcrypto -lpthread"
+      }
+    ]
+  },
   "files": [
-    "ardb"
+    "ardb",
+    "ardb.cfg"
   ]
 }

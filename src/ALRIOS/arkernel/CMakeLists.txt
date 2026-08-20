@@ -15,8 +15,11 @@ target_include_directories(arkernel PUBLIC
 )
 find_package(OpenSSL REQUIRED)
 target_include_directories(arkernel PUBLIC ${OPENSSL_INCLUDE_DIR})
-if(WIN32)
-    target_link_libraries(arkernel PUBLIC ws2_32 OpenSSL::SSL OpenSSL::Crypto)
-else()
-    target_link_libraries(arkernel PUBLIC OpenSSL::SSL OpenSSL::Crypto)
-endif()
+set_target_properties(arkernel PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore/lib"
+    ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore/lib"
+    ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore/lib"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore/lib"
+    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore/lib"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore/lib"
+)
