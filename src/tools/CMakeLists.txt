@@ -18,6 +18,10 @@ add_executable(alrios
     alrios.c
 )
 target_link_libraries(alrios PRIVATE arkernel OpenSSL::SSL OpenSSL::Crypto Threads::Threads ${CMAKE_DL_LIBS})
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_options(alrios PRIVATE "-Wl,-rpath,$ORIGIN/lib")
+    target_link_options(armake PRIVATE "-Wl,-rpath,$ORIGIN/lib")
+endif()
 if(WIN32)
     set_target_properties(alrios PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"

@@ -84,6 +84,7 @@ python test_suite.py
 
 All technical documentation is centralized in **[`/docs`](docs/README.md)**:
 
+- 🏆 **[Complete Features Catalog (All 9 Core Subsystems)](docs/features.md)**
 - 📘 **[System Overview](docs/README.md)**
 - 📙 **[Developer Guide & IPC Specification](docs/DEVELOPER_GUIDE.md)**
 - 📕 **[Production Deployment & Operations Guide](docs/PRODUCTION.md)**
@@ -91,8 +92,8 @@ All technical documentation is centralized in **[`/docs`](docs/README.md)**:
 - 📒 **[ARKernel Technical Specification](docs/KERNEL.md)**
 - 📕 **[arcore Daemon Technical Specification](docs/CORE.md)**
 - 📓 **[alrios CLI Command Reference](docs/comands.md)**
-- 📑 **[High-Speed Optimizations Changelog](docs/CHANGELOG.md)**
-- 📱 **[Native Applications (ARWS, CDN, Home Web, Detroit Web, Literature)](docs/apps/arws.md)**
+- 📑 **[High-Speed Optimizations & Security Changelog](docs/CHANGELOG.md)**
+- 📱 **[Native Applications (ARWS, ARAUTH, ARDB, CDN, Home Web, Detroit Web)](docs/apps/arws.md)**
 
 ---
 

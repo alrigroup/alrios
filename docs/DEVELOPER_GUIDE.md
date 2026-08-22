@@ -181,7 +181,56 @@ The **ARWS (ALRI Web Services)** gateway sits in front of all services.
 
 ---
 
-## 6. MANDATORY Rules & Standards for Developers
+## 6. Authentication & Database Frameworks (`libarauth` & `ARDB`)
+
+Every application in ALRIOS can embed native identity management and connect to the sovereign data guardian.
+
+### 6.1 Embedding `libarauth` (Native Identity Framework)
+Link against `-larauth` and define your application's Declarative Blueprint:
+
+```c
+#include "arauth.h"
+
+// 1. Define App Blueprint
+arauth_blueprint_t blueprint = {
+    .app_name = "analytics_web",
+    .allow_login_with_username = 1,
+    .allow_login_with_email = 1,
+    .allow_login_with_phone = 1,
+    .allow_login_with_custom_id = 1,
+    .min_password_len = 6,
+    .require_totp_2fa = 0,
+    .session_ttl_seconds = 86400
+};
+
+arauth_context_t *auth = arauth_init(&blueprint);
+
+// 2. Register Dynamic Groups (Discord / FiveM style)
+arauth_group_create(auth, "analyst", "reports.view,reports.export");
+arauth_group_create(auth, "lead", "reports.*,team.manage");
+
+// 3. Check Cascading Permissions (Direct -> Group -> Wildcard)
+if (arauth_has_permission(auth, user_id, "reports.export")) {
+    // Authorized
+}
+
+// 4. Authenticate multi-identifier login
+arauth_session_t session;
+int ok = arauth_login(auth, identifier, password, NULL, client_ip, ua, &session);
+
+// 5. Zero-Waste Session Purge on Logout
+arauth_session_revoke(auth, session.session_token); // Instantly zeroed in RAM
+```
+
+### 6.2 ARDB App Table Isolation & Shared Groups
+When provisioning your application in ARDB:
+1. **Private Scope**: Tables prefixed with your app name (e.g. `analytics_metrics`) are private to your app.
+2. **Shared Groups**: Join shared App Groups (e.g., `alrios ardb group add-app loja analytics_web`) to gain access to shared data spaces (`loja_produtos,loja_pedidos`).
+3. **Firewall Protection**: Unauthorized cross-table access is blocked automatically by the SQL Firewall with error `42501`.
+
+---
+
+## 7. MANDATORY Rules & Standards for Developers
 
 When contributing to or developing for ALRIOS, you **MUST** strictly adhere to the following rules:
 

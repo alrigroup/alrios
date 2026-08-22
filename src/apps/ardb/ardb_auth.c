@@ -229,3 +229,164 @@ int ardb_auth_revoke_token(const char *token) {
     ar_mutex_unlock(g_auth_mutex);
     return -1;
 }
+
+static ArdbAppGroup g_groups[ARDB_MAX_GROUPS];
+static int g_group_count = 0;
+
+int ardb_auth_create_group(const char *group_name, const char *tables_csv) {
+    if (!group_name) return -1;
+    ardb_auth_init();
+
+    ar_mutex_lock(g_auth_mutex);
+    int slot = -1;
+    for (int i = 0; i < g_group_count; i++) {
+        if (strcmp(g_groups[i].name, group_name) == 0) {
+            slot = i;
+            break;
+        }
+    }
+
+    if (slot == -1) {
+        if (g_group_count >= ARDB_MAX_GROUPS) {
+            ar_mutex_unlock(g_auth_mutex);
+            return -1;
+        }
+        slot = g_group_count++;
+    }
+
+    ArdbAppGroup *g = &g_groups[slot];
+    memset(g, 0, sizeof(ArdbAppGroup));
+    strncpy(g->name, group_name, sizeof(g->name) - 1);
+
+    if (tables_csv) {
+        char buf[512];
+        strncpy(buf, tables_csv, sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = '\0';
+        char *token = strtok(buf, ",");
+        while (token && g->table_count < ARDB_MAX_GROUP_TABLES) {
+            while (*token == ' ') token++;
+            if (token[0] != '\0') {
+                strncpy(g->tables[g->table_count++], token, 63);
+            }
+            token = strtok(NULL, ",");
+        }
+    }
+
+    ar_mutex_unlock(g_auth_mutex);
+    return 0;
+}
+
+int ardb_auth_add_app_to_group(const char *group_name, const char *app_name) {
+    if (!group_name || !app_name) return -1;
+    ardb_auth_init();
+
+    ar_mutex_lock(g_auth_mutex);
+    for (int i = 0; i < g_group_count; i++) {
+        if (strcmp(g_groups[i].name, group_name) == 0) {
+            for (int a = 0; a < g_groups[i].app_count; a++) {
+                if (strcmp(g_groups[i].apps[a], app_name) == 0) {
+                    ar_mutex_unlock(g_auth_mutex);
+                    return 0; /* Already in group */
+                }
+            }
+            if (g_groups[i].app_count < ARDB_MAX_GROUP_APPS) {
+                strncpy(g_groups[i].apps[g_groups[i].app_count++], app_name, 63);
+            }
+            ar_mutex_unlock(g_auth_mutex);
+            return 0;
+        }
+    }
+
+    ar_mutex_unlock(g_auth_mutex);
+    return -1;
+}
+
+int ardb_auth_add_app(const char *app_name, const char *token_or_secret, const char *group_name, const char *tables_csv) {
+    if (!app_name || !token_or_secret) return -1;
+    ardb_auth_init();
+
+    /* Add as app user */
+    int res = ardb_auth_add_user(app_name, token_or_secret, app_name, "app");
+    if (res != 0) return res;
+
+    ar_mutex_lock(g_auth_mutex);
+    for (int i = 0; i < g_user_count; i++) {
+        if (strcmp(g_users[i].username, app_name) == 0) {
+            ArdbUser *u = &g_users[i];
+            if (tables_csv) {
+                char buf[512];
+                strncpy(buf, tables_csv, sizeof(buf) - 1);
+                buf[sizeof(buf) - 1] = '\0';
+                char *tok = strtok(buf, ",");
+                while (tok && u->allowed_table_count < 32) {
+                    while (*tok == ' ') tok++;
+                    if (tok[0] != '\0') {
+                        strncpy(u->allowed_tables[u->allowed_table_count++], tok, 63);
+                    }
+                    tok = strtok(NULL, ",");
+                }
+            }
+            if (group_name && group_name[0]) {
+                if (u->app_group_count < 8) {
+                    strncpy(u->app_groups[u->app_group_count++], group_name, 63);
+                }
+            }
+            break;
+        }
+    }
+    ar_mutex_unlock(g_auth_mutex);
+
+    if (group_name && group_name[0]) {
+        ardb_auth_add_app_to_group(group_name, app_name);
+    }
+    return 0;
+}
+
+int ardb_auth_is_table_allowed(const char *app_name, const char *role, const char *table_name) {
+    if (!table_name) return 0;
+    if (role && strcmp(role, "admin") == 0) return 1; /* Admin has full access */
+    if (!app_name || app_name[0] == '\0') return 0;
+
+    /* 1. App naturally owns tables prefixed with its app_name: e.g. "app1_users", "app1_logs" */
+    size_t app_len = strlen(app_name);
+    if (strncmp(table_name, app_name, app_len) == 0) {
+        if (table_name[app_len] == '_' || table_name[app_len] == '.' || table_name[app_len] == '\0') {
+            return 1;
+        }
+    }
+
+    ardb_auth_init();
+    ar_mutex_lock(g_auth_mutex);
+
+    /* 2. Check if table is explicitly allowed in user's profile */
+    for (int i = 0; i < g_user_count; i++) {
+        if (strcmp(g_users[i].username, app_name) == 0) {
+            for (int t = 0; t < g_users[i].allowed_table_count; t++) {
+                if (strcmp(g_users[i].allowed_tables[t], table_name) == 0 ||
+                    strcmp(g_users[i].allowed_tables[t], "*") == 0) {
+                    ar_mutex_unlock(g_auth_mutex);
+                    return 1;
+                }
+            }
+
+            /* 3. Check App Groups (Shared Data Spaces e.g. "loja") */
+            for (int ug = 0; ug < g_users[i].app_group_count; ug++) {
+                for (int gi = 0; gi < g_group_count; gi++) {
+                    if (strcmp(g_groups[gi].name, g_users[i].app_groups[ug]) == 0) {
+                        for (int gt = 0; gt < g_groups[gi].table_count; gt++) {
+                            if (strcmp(g_groups[gi].tables[gt], table_name) == 0 ||
+                                strcmp(g_groups[gi].tables[gt], "*") == 0) {
+                                ar_mutex_unlock(g_auth_mutex);
+                                return 1;
+                            }
+                        }
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    ar_mutex_unlock(g_auth_mutex);
+    return 0;
+}

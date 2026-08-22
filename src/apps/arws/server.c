@@ -121,7 +121,13 @@ static void url_decode(char *dst, const char *src) {
         if ((*src == '%') && ((a = src[1]) && (b = src[2])) && (isxdigit(a) && isxdigit(b))) {
             if (a >= 'a') a -= 32;
             if (b >= 'a') b -= 32;
-            *dst++ = ((a >= 'A' ? a - 'A' + 10 : a - '0') << 4) | (b >= 'A' ? b - 'A' + 10 : b - '0');
+            char val = ((a >= 'A' ? a - 'A' + 10 : a - '0') << 4) | (b >= 'A' ? b - 'A' + 10 : b - '0');
+            if (val == '\0') {
+                /* Replace null byte with unprintable character 0x01 to trigger Bad Request */
+                *dst++ = '\x01';
+            } else {
+                *dst++ = val;
+            }
             src += 3;
         } else if (*src == '+') {
             *dst++ = ' ';
@@ -283,7 +289,14 @@ void server_add_header(ClientConnection *conn, const char *header_line) {
 static int server_path_safe(const char *path) {
     if (!path || path[0] == '\0') return 0;
     if (strstr(path, "..")) return 0;
+    if (strstr(path, "%2e") || strstr(path, "%2E")) return 0;
+    if (strstr(path, "%2f") || strstr(path, "%2F")) return 0;
+    if (strstr(path, "%5c") || strstr(path, "%5C")) return 0;
     if (strchr(path, '\\')) return 0;
+    for (int i = 0; path[i] != '\0'; i++) {
+        unsigned char c = (unsigned char)path[i];
+        if (c < 0x20 || c == 0x7F) return 0; /* Control chars & null byte injection */
+    }
     return 1;
 }
 
@@ -549,31 +562,22 @@ static void handle_client(ClientConnection *conn) {
                     ar_mem_free(buffer);
                     buffer = new_buf;
                     buffer_size = required_size;
+                    body_start = strstr(buffer, "\r\n\r\n");
                 }
             }
         }
 
-        if (headers_parsed) {
+        if (headers_parsed && body_start) {
             int header_len = (int)((body_start + 4) - buffer);
             if (total_read - header_len >= content_length) break;
         }
     }
 
+    if (!body_start) body_start = strstr(buffer, "\r\n\r\n");
     if (!body_start) { ar_mem_free(buffer); return; }
 
     HttpRequest req;
     memset(&req, 0, sizeof(HttpRequest));
-    req.admin_role = 0;
-    conn->response_headers[0] = '\0';
-    conn->anon_id[0] = '\0';
-
-    server_add_header(conn, "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' https: data:; img-src 'self' https: http: data:; manifest-src https://cdn.alrigroup.com; frame-ancestors 'none'\r\n");
-    server_add_header(conn, "X-Content-Type-Options: nosniff\r\n");
-    server_add_header(conn, "X-Frame-Options: DENY\r\n");
-    server_add_header(conn, "Strict-Transport-Security: max-age=31536000; includeSubDomains\r\n");
-    server_add_header(conn, "Referrer-Policy: same-origin\r\n");
-    server_add_header(conn, "Permissions-Policy: geolocation=(), microphone=(), camera=(), usb=(), payment=(), accelerometer=(), gyroscope=()\r\n");
-
     *body_start = '\0';
     req.body = body_start + 4;
     req.body_length_in_buffer = (int)(total_read - (body_start + 4 - buffer));
@@ -588,12 +592,18 @@ static void handle_client(ClientConnection *conn) {
         headers_start += 2;
     }
 
-    char *saveptr;
+    char *saveptr = NULL;
     char *method = strtok_r(buffer, " ", &saveptr);
     char *full_path = strtok_r(NULL, " ", &saveptr);
 
     if (!method || !full_path) {
         server_send_response(conn, 400, "text/plain", "Bad Request");
+        ar_mem_free(buffer);
+        return;
+    }
+
+    if (strstr(full_path, "%00") || !server_path_safe(full_path)) {
+        server_send_response(conn, 400, "text/plain", "Bad Request (Null Byte / Malicious Path)");
         ar_mem_free(buffer);
         return;
     }
@@ -626,6 +636,12 @@ static void handle_client(ClientConnection *conn) {
             }
             pc++;
         }
+    }
+
+    if (!server_path_safe(full_path)) {
+        server_send_response(conn, 400, "text/plain", "Bad Request (Path Traversal / Malicious Characters)");
+        ar_mem_free(buffer);
+        return;
     }
 
     req.method = method;
@@ -954,7 +970,8 @@ int server_start(int port, int mode, RequestHandler handler) {
                 using_ssl = 0;
                 mode = 0;
                 port = 8080;
-                ar_sleep_ms(1000);
+                arws_config_set_port(8080);
+                ar_sleep_ms(200);
                 continue;
             }
             alri_print("Error binding to port %d (try: sudo ARWS_STAY_ROOT=1)\n", port);
@@ -969,6 +986,8 @@ int server_start(int port, int mode, RequestHandler handler) {
             http_server_sock = -1;
             return -1;
         }
+
+        http_server_sock = server_sock;
 
         if (using_ssl) {
             alri_print("HTTPS Server started on port %d!\n", port);
@@ -1001,7 +1020,12 @@ int server_start(int port, int mode, RequestHandler handler) {
 
         while (http_server_running) {
             int nfds = ar_poll_wait(ar_poll, events, MAX_POLL_EVENTS, 1000);
-            if (nfds < 0) break;
+            if (nfds < 0) {
+                if (errno == EINTR) continue;
+                alri_print(RED "[ARWS-SERVER]" RST " ar_poll_wait returned %d, errno=%d (%s)\n",
+                           nfds, errno, strerror(errno));
+                break;
+            }
             if (nfds == 0) continue;
 
             for (int i = 0; i < nfds; i++) {

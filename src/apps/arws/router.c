@@ -49,10 +49,20 @@ void add_route(const char *path, const char *method, const char *domain, Request
     route_hash[idx] = new_route;
 }
 
+static int is_loopback_domain(const char *h) {
+    if (!h || !h[0]) return 0;
+    if (strcasecmp(h, "localhost") == 0) return 1;
+    if (strcasecmp(h, "0.0.0.0") == 0) return 1;
+    if (strncmp(h, "127.", 4) == 0) return 1;
+    if (strcasecmp(h, "::1") == 0 || strcasecmp(h, "[::1]") == 0) return 1;
+    return 0;
+}
+
 static int domain_matches(const char *route_domain, const char *req_host) {
-    if (route_domain[0] == '\0') return 1;
+    if (route_domain[0] == '\0' || strcmp(route_domain, "*") == 0) return 1;
     if (req_host[0] == '\0') return 0;
     if (strcasecmp(route_domain, req_host) == 0) return 1;
+    if (is_loopback_domain(route_domain) && is_loopback_domain(req_host)) return 1;
     if (strncasecmp(req_host, "www.", 4) == 0 && strcasecmp(route_domain, req_host + 4) == 0) return 1;
     if (strncasecmp(route_domain, "www.", 4) == 0 && strcasecmp(route_domain + 4, req_host) == 0) return 1;
     return 0;

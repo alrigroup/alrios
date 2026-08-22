@@ -72,6 +72,15 @@ static int  named_client_count = 0;
 /* Per-fd query lock: prevents race when forwarding IPC_QUERY.
    Socket handles are arbitrary OS fds (large on Windows), so the
    lock array is grown to fit the fd instead of assuming small fds. */
+typedef struct {
+    int has_response;
+    int resp_type;
+    uint32_t resp_len;
+    char resp_buf[AR_IPC_BUF_SIZE];
+} QueryRespSlot;
+
+static QueryRespSlot *query_resp_slots = NULL;
+static int query_resp_slots_max = 0;
 static int *query_locks = NULL;
 static int query_locks_max = 0;
 static void *query_mutex = NULL;
@@ -83,7 +92,7 @@ static void *dispatch_mutex = NULL;
 static void *dispatch_cond = NULL;
 
 static int query_locks_ensure(int fd) {
-    if (fd >= 0 && fd < query_locks_max) return 0;
+    if (fd >= 0 && fd < query_locks_max && fd < query_resp_slots_max) return 0;
     int new_max = (fd + 256) & ~255;
     if (new_max < 64) new_max = 64;
     int *nl = (int *)realloc(query_locks, (size_t)new_max * sizeof(int));
@@ -92,6 +101,13 @@ static int query_locks_ensure(int fd) {
         memset(nl + query_locks_max, 0, (size_t)(new_max - query_locks_max) * sizeof(int));
     query_locks = nl;
     query_locks_max = new_max;
+
+    QueryRespSlot *ns = (QueryRespSlot *)realloc(query_resp_slots, (size_t)new_max * sizeof(QueryRespSlot));
+    if (!ns) return -1;
+    if (new_max > query_resp_slots_max)
+        memset(ns + query_resp_slots_max, 0, (size_t)(new_max - query_resp_slots_max) * sizeof(QueryRespSlot));
+    query_resp_slots = ns;
+    query_resp_slots_max = new_max;
     return 0;
 }
 
@@ -104,6 +120,9 @@ static void query_lock_fd(int fd) {
     while (gateway_running) {
         if (query_locks_ensure(fd) == 0 && query_locks[fd] == 0) {
             query_locks[fd] = 1;
+            query_resp_slots[fd].has_response = 0;
+            query_resp_slots[fd].resp_type = 0;
+            query_resp_slots[fd].resp_len = 0;
             ar_mutex_unlock(query_mutex);
             return;
         }
@@ -117,6 +136,9 @@ static void query_unlock_fd(int fd) {
     if (!query_mutex) return;
     ar_mutex_lock(query_mutex);
     query_locks[fd] = 0;
+    query_resp_slots[fd].has_response = 0;
+    query_resp_slots[fd].resp_type = 0;
+    query_resp_slots[fd].resp_len = 0;
     if (query_cond) ar_cond_signal(query_cond);
     ar_mutex_unlock(query_mutex);
 }
@@ -178,25 +200,6 @@ static void remove_client_fd(int fd) {
     ar_mutex_unlock(admin_mutex);
 }
 
-static void named_add(int fd, const char *name) {
-    ar_mutex_lock(admin_mutex);
-    for (int i = 0; i < named_client_count; i++) {
-        if (named_client_fds[i] == fd) {
-            strncpy(named_client_names[i], name, sizeof(named_client_names[0]) - 1);
-            named_client_names[i][sizeof(named_client_names[0]) - 1] = '\0';
-            ar_mutex_unlock(admin_mutex);
-            return;
-        }
-    }
-    if (named_client_count < AR_IPC_MAX_CLIENTS) {
-        named_client_fds[named_client_count] = fd;
-        strncpy(named_client_names[named_client_count], name, sizeof(named_client_names[0]) - 1);
-        named_client_names[named_client_count][sizeof(named_client_names[0]) - 1] = '\0';
-        named_client_count++;
-    }
-    ar_mutex_unlock(admin_mutex);
-}
-
 static int match_app_alias(const char *registered, const char *target) {
     if (strcmp(registered, target) == 0) return 1;
     if ((strcmp(registered, "ardb") == 0 || strcmp(registered, "db") == 0) &&
@@ -210,6 +213,26 @@ static int match_app_alias(const char *registered, const char *target) {
     if ((strcmp(registered, "detroit.web") == 0 || strcmp(registered, "detroit-web") == 0) &&
         (strcmp(target, "detroit.web") == 0 || strcmp(target, "detroit-web") == 0)) return 1;
     return 0;
+}
+
+static void named_add(int fd, const char *name) {
+    ar_mutex_lock(admin_mutex);
+    for (int i = 0; i < named_client_count; i++) {
+        if (named_client_fds[i] == fd || match_app_alias(named_client_names[i], name)) {
+            named_client_fds[i] = fd;
+            strncpy(named_client_names[i], name, sizeof(named_client_names[0]) - 1);
+            named_client_names[i][sizeof(named_client_names[0]) - 1] = '\0';
+            ar_mutex_unlock(admin_mutex);
+            return;
+        }
+    }
+    if (named_client_count < AR_IPC_MAX_CLIENTS) {
+        named_client_fds[named_client_count] = fd;
+        strncpy(named_client_names[named_client_count], name, sizeof(named_client_names[0]) - 1);
+        named_client_names[named_client_count][sizeof(named_client_names[0]) - 1] = '\0';
+        named_client_count++;
+    }
+    ar_mutex_unlock(admin_mutex);
 }
 
 static int named_find(const char *name) {
@@ -245,7 +268,7 @@ static int peek_is_ipc_frame(int fd) {
     FD_ZERO(&rfds);
     FD_SET(fd, &rfds);
     tv.tv_sec = 0;
-    tv.tv_usec = 100000;
+    tv.tv_usec = 0;
 
     int ret = select(fd + 1, &rfds, NULL, NULL, &tv);
     if (ret <= 0) return 0;
@@ -257,6 +280,7 @@ static int peek_is_ipc_frame(int fd) {
 #else
     r = recv(fd, peek, 5, MSG_PEEK);
 #endif
+    if (r <= 0) return -1;
     if (r < 5) return 0;
 
     uint32_t frame_len = ((uint32_t)peek[0] << 24) |
@@ -265,7 +289,7 @@ static int peek_is_ipc_frame(int fd) {
                          ((uint32_t)peek[3]);
     int type = peek[4];
 
-    return (frame_len <= AR_IPC_BUF_SIZE && type >= 1 && type <= 12);
+    return (frame_len <= AR_IPC_BUF_SIZE && type >= 1 && type <= 25);
 }
 
 static void handle_arws_query(int fd, const char *q, int len) {
@@ -276,11 +300,12 @@ static void handle_arws_query(int fd, const char *q, int len) {
         i++;
     }
 
-    char resp[4096];
+    char *resp = (char *)malloc(AR_IPC_BUF_SIZE);
+    if (!resp) return;
     int rlen = 0;
 
     if (strcmp(cmd, "help") == 0 || strcmp(cmd, "--help") == 0 || strcmp(cmd, "-h") == 0 || cmd[0] == '\0') {
-        rlen = snprintf(resp, sizeof(resp),
+        rlen = snprintf(resp, AR_IPC_BUF_SIZE,
             "ARWS Gateway & Layer 7 Load Balancer v3.0.0 (Self-Registered)\n\n"
             "Supported Commands:\n"
             "  status                                      - View runtime status, active mode and bind port\n"
@@ -296,10 +321,10 @@ static void handle_arws_query(int fd, const char *q, int len) {
         char sub[32] = {0};
         if (sscanf(q + i, "%31s", sub) == 1 && strcmp(sub, "reload") == 0) {
             arws_config_reload_from_disk();
-            rlen = snprintf(resp, sizeof(resp), "arws config reloaded (path=%s)",
+            rlen = snprintf(resp, AR_IPC_BUF_SIZE, "arws config reloaded (path=%s)",
                             arws_config_get_path());
         } else {
-            rlen = snprintf(resp, sizeof(resp), "usage: cfg reload");
+            rlen = snprintf(resp, AR_IPC_BUF_SIZE, "usage: cfg reload");
         }
     } else if (strcmp(cmd, "maintenance") == 0 ||
                strcmp(cmd, "production") == 0 ||
@@ -310,19 +335,19 @@ static void handle_arws_query(int fd, const char *q, int len) {
         if (n >= 1 && host[0]) {
             if (!path[0]) strncpy(path, "*", sizeof(path) - 1);
             if (arws_config_add_override(host, path, cmd) == 0) {
-                rlen = snprintf(resp, sizeof(resp), "override %s %s -> %s", host, path, cmd);
+                rlen = snprintf(resp, AR_IPC_BUF_SIZE, "override %s %s -> %s", host, path, cmd);
             } else {
-                rlen = snprintf(resp, sizeof(resp), "failed to add override");
+                rlen = snprintf(resp, AR_IPC_BUF_SIZE, "failed to add override");
             }
         } else {
             if (arws_config_set_global(cmd) == 0) {
-                rlen = snprintf(resp, sizeof(resp), "global mode -> %s", cmd);
+                rlen = snprintf(resp, AR_IPC_BUF_SIZE, "global mode -> %s", cmd);
             } else {
-                rlen = snprintf(resp, sizeof(resp), "failed to set global mode");
+                rlen = snprintf(resp, AR_IPC_BUF_SIZE, "failed to set global mode");
             }
         }
     } else if (strcmp(cmd, "status") == 0) {
-        rlen = snprintf(resp, sizeof(resp),
+        rlen = snprintf(resp, AR_IPC_BUF_SIZE,
             "arws RUNNING mode=%s port=%d bind=%s global_mode=%s",
             arws_config_get_mode_name(), arws_config_get_port(),
             arws_config_get_bind_address(), arws_config_get_global_mode());
@@ -339,9 +364,9 @@ static void handle_arws_query(int fd, const char *q, int len) {
             ArwsUpstreamPool pools[ARWS_MAX_POOLS];
             int pcount = arws_upstream_get_all_pools(pools, ARWS_MAX_POOLS);
             if (pcount == 0) {
-                rlen = snprintf(resp, sizeof(resp), "No upstream pools registered.\n");
+                rlen = snprintf(resp, AR_IPC_BUF_SIZE, "No upstream pools registered.\n");
             } else {
-                rlen = snprintf(resp, sizeof(resp), "UPSTREAM POOLS (%d):\n", pcount);
+                rlen = snprintf(resp, AR_IPC_BUF_SIZE, "UPSTREAM POOLS (%d):\n", pcount);
                 for (int p = 0; p < pcount; p++) {
                     ArwsUpstreamPool *up = &pools[p];
                     const char *algo_str = (up->algo == ARWS_LB_ROUND_ROBIN) ? "round_robin" :
@@ -369,13 +394,13 @@ static void handle_arws_query(int fd, const char *q, int len) {
             int port = 0, weight = 1, backup = 0;
             if (sscanf(args, "%63s %127s %d %d %d", pool_name, host, &port, &weight, &backup) >= 3) {
                 if (arws_upstream_add_node(pool_name, host, port, weight, backup) == 0) {
-                    rlen = snprintf(resp, sizeof(resp), "Node %s:%d added to pool '@%s' (weight=%d, backup=%d)",
+                    rlen = snprintf(resp, AR_IPC_BUF_SIZE, "Node %s:%d added to pool '@%s' (weight=%d, backup=%d)",
                                     host, port, pool_name, weight, backup);
                 } else {
-                    rlen = snprintf(resp, sizeof(resp), "Failed to add node to pool '@%s'", pool_name);
+                    rlen = snprintf(resp, AR_IPC_BUF_SIZE, "Failed to add node to pool '@%s'", pool_name);
                 }
             } else {
-                rlen = snprintf(resp, sizeof(resp), "usage: upstream add <pool> <host> <port> [weight=1] [backup=0]");
+                rlen = snprintf(resp, AR_IPC_BUF_SIZE, "usage: upstream add <pool> <host> <port> [weight=1] [backup=0]");
             }
         } else if (strcmp(subcmd, "drain") == 0) {
             char pool_name[64] = {0};
@@ -383,55 +408,74 @@ static void handle_arws_query(int fd, const char *q, int len) {
             int port = 0, drain = 1;
             if (sscanf(args, "%63s %127s %d %d", pool_name, host, &port, &drain) >= 3) {
                 if (arws_upstream_set_node_drain(pool_name, host, port, drain) == 0) {
-                    rlen = snprintf(resp, sizeof(resp), "Node %s:%d drain=%d in pool '@%s'",
+                    rlen = snprintf(resp, AR_IPC_BUF_SIZE, "Node %s:%d drain=%d in pool '@%s'",
                                     host, port, drain, pool_name);
                 } else {
-                    rlen = snprintf(resp, sizeof(resp), "Failed to set drain for %s:%d in pool '@%s'",
+                    rlen = snprintf(resp, AR_IPC_BUF_SIZE, "Failed to set drain for %s:%d in pool '@%s'",
                                     host, port, pool_name);
                 }
             } else {
-                rlen = snprintf(resp, sizeof(resp), "usage: upstream drain <pool> <host> <port> [drain=1|0]");
+                rlen = snprintf(resp, AR_IPC_BUF_SIZE, "usage: upstream drain <pool> <host> <port> [drain=1|0]");
             }
         } else {
-            rlen = snprintf(resp, sizeof(resp), "usage: upstream list | add | drain");
+            rlen = snprintf(resp, AR_IPC_BUF_SIZE, "usage: upstream list | add | drain");
         }
     } else if (strcmp(cmd, "ping") == 0) {
-        rlen = snprintf(resp, sizeof(resp), "pong");
+        rlen = snprintf(resp, AR_IPC_BUF_SIZE, "pong");
     } else {
-        rlen = snprintf(resp, sizeof(resp), "unknown arws command: %s", cmd);
+        rlen = snprintf(resp, AR_IPC_BUF_SIZE, "unknown arws command: %s", cmd);
     }
     if (rlen < 0) rlen = 0;
-    if (rlen >= (int)sizeof(resp)) rlen = (int)sizeof(resp) - 1;
+    if (rlen >= AR_IPC_BUF_SIZE) rlen = AR_IPC_BUF_SIZE - 1;
+    resp[rlen] = '\0';
 
-    ar_ipc_send_frame(fd, IPC_QUERY_RESP, resp, rlen + 1);
+    ar_ipc_send_frame(fd, IPC_QUERY_RESP, resp, (uint32_t)rlen);
+    free(resp);
 }
 
 static void *client_handler_loop(void *arg) {
     int client_fd = (int)(intptr_t)arg;
-    unsigned char buf[AR_IPC_BUF_SIZE];
+    unsigned char *buf = (unsigned char *)malloc(AR_IPC_BUF_SIZE);
+    if (!buf) { ar_socket_close(client_fd); return NULL; }
 
     alri_print(CYN "[ARWS]" RST " client_handler_loop started for fd=%d\n", client_fd);
 
     int idle_rounds = 0;
 
     while (gateway_running) {
-        if (is_query_locked(client_fd) || !peek_is_ipc_frame(client_fd)) {
+        int peek_res = peek_is_ipc_frame(client_fd);
+        if (peek_res < 0) {
+            break; /* Peer disconnected */
+        }
+        if (peek_res == 0) {
             idle_rounds++;
-            /* Para canais de controle persistentes, não fecha por ociosidade (ar_sleep_ms) */
-            ar_sleep_ms(20);
+            ar_sleep_ms(10);
             continue;
         }
         idle_rounds = 0;
 
         int type;
-        uint32_t len = sizeof(buf);
+        uint32_t len = AR_IPC_BUF_SIZE;
         if (ar_ipc_recv_frame(client_fd, &type, buf, &len) < 0) {
             break;
         }
-        if (len < sizeof(buf)) buf[len] = '\0';
-        else buf[sizeof(buf) - 1] = '\0';
+        if (len < AR_IPC_BUF_SIZE) buf[len] = '\0';
+        else buf[AR_IPC_BUF_SIZE - 1] = '\0';
 
         switch (type) {
+            case IPC_QUERY_RESP:
+            case IPC_RESPONSE: {
+                if (query_locks_ensure(client_fd) == 0) {
+                    ar_mutex_lock(query_mutex);
+                    query_resp_slots[client_fd].has_response = 1;
+                    query_resp_slots[client_fd].resp_type = type;
+                    query_resp_slots[client_fd].resp_len = (len < AR_IPC_BUF_SIZE) ? len : AR_IPC_BUF_SIZE - 1;
+                    memcpy(query_resp_slots[client_fd].resp_buf, buf, query_resp_slots[client_fd].resp_len);
+                    query_resp_slots[client_fd].resp_buf[query_resp_slots[client_fd].resp_len] = '\0';
+                    ar_mutex_unlock(query_mutex);
+                }
+                break;
+            }
             case IPC_REGISTER: {
                 char name[64] = {0};
                 char prefix[256] = {0};
@@ -503,69 +547,81 @@ static void *client_handler_loop(void *arg) {
                 if (proxy_url[0] != '\0') {
                     int is_stream = (strncmp(mode, "stream", 6) == 0) ||
                                     (strcmp(type_str, "stream") == 0);
-                    int is_local = 0;
-                    if (host[0]) {
-                        size_t hlen = strlen(host);
-                        if (strcasecmp(host, "localhost") == 0 || strcmp(host, "127.0.0.1") == 0 ||
-                            (hlen > 10 && strcasecmp(host + hlen - 10, ".localhost") == 0)) {
-                            is_local = 1;
-                        }
-                    }
-                    const char *route_mode = "*";
-                    if (is_local) {
-                        route_mode = MODE_TEST;
-                    } else if (!is_stream && mode[0] && strcmp(mode, "stream") != 0) {
-                        route_mode = mode;
-                    }
-                    if (is_stream) {
-                        arws_add_stream_route(prefix, method, host,
-                                              route_mode, proxy_url);
-                        if (host[0] && prefix[0]) {
-                            char cfg_path[256];
-                            const char *p = prefix;
-                            while (*p == '/') p++;
-                            if (strcmp(p, "*") == 0) {
-                                snprintf(cfg_path, sizeof(cfg_path), "*");
-                            } else if (!p[0]) {
-                                snprintf(cfg_path, sizeof(cfg_path), "/");
+
+                    char hosts_buf[256];
+                    strncpy(hosts_buf, host[0] ? host : "*", sizeof(hosts_buf) - 1);
+                    hosts_buf[sizeof(hosts_buf) - 1] = '\0';
+                    char *saveptr = NULL;
+                    char *h_tok = strtok_r(hosts_buf, ",", &saveptr);
+
+                    while (h_tok) {
+                        while (*h_tok == ' ' || *h_tok == '\t') h_tok++;
+                        char *end = h_tok + strlen(h_tok) - 1;
+                        while (end > h_tok && (*end == ' ' || *end == '\t')) *end-- = '\0';
+
+                        if (h_tok[0]) {
+                            int is_local = 0;
+                            size_t hlen = strlen(h_tok);
+                            if (strcasecmp(h_tok, "localhost") == 0 || strcmp(h_tok, "127.0.0.1") == 0 ||
+                                (hlen > 10 && strcasecmp(h_tok + hlen - 10, ".localhost") == 0)) {
+                                is_local = 1;
+                            }
+                            const char *route_mode = "*";
+                            if (is_local) {
+                                route_mode = MODE_TEST;
+                            } else if (!is_stream && mode[0] && strcmp(mode, "stream") != 0) {
+                                route_mode = mode;
+                            }
+
+                            if (is_stream) {
+                                arws_add_stream_route(prefix, method, h_tok, route_mode, proxy_url);
                             } else {
-                                snprintf(cfg_path, sizeof(cfg_path), "%s", p);
+                                arws_add_proxy_route(prefix, method, h_tok, route_mode, proxy_url);
                             }
-                            arws_config_add_stream_route(host, cfg_path, proxy_url);
-                            if (!arws_config_has_override(host, cfg_path)) {
-                                const char *save_mode =
-                                    (mode[0] && strcmp(mode, "stream") != 0)
-                                        ? mode : arws_config_get_global_mode();
-                                arws_config_add_override(host, cfg_path, save_mode);
-                            }
-                        }
-                    } else {
-                        arws_add_proxy_route(prefix, method, host,
-                                             route_mode, proxy_url);
-                        if (host[0] && prefix[0]) {
-                            char cfg_path[256];
-                            const char *p = prefix;
-                            while (*p == '/') p++;
-                            if (strcmp(p, "*") == 0) {
-                                snprintf(cfg_path, sizeof(cfg_path), "*");
-                            } else if (!p[0]) {
-                                snprintf(cfg_path, sizeof(cfg_path), "/");
-                            } else {
-                                snprintf(cfg_path, sizeof(cfg_path), "%s", p);
-                            }
-                            arws_config_add_proxy_route(host, cfg_path, proxy_url);
-                            if (!arws_config_has_override(host, cfg_path)) {
-                                const char *save_mode = (route_mode[0] && strcmp(route_mode, "*") != 0) ? route_mode : arws_config_get_global_mode();
-                                arws_config_add_override(host, cfg_path, save_mode);
+
+                            if (prefix[0]) {
+                                char cfg_path[256];
+                                const char *p = prefix;
+                                while (*p == '/') p++;
+                                if (strcmp(p, "*") == 0) {
+                                    snprintf(cfg_path, sizeof(cfg_path), "*");
+                                } else if (!p[0]) {
+                                    snprintf(cfg_path, sizeof(cfg_path), "/");
+                                } else {
+                                    snprintf(cfg_path, sizeof(cfg_path), "%s", p);
+                                }
+                                if (is_stream) {
+                                    arws_config_add_stream_route(h_tok, cfg_path, proxy_url);
+                                } else {
+                                    arws_config_add_proxy_route(h_tok, cfg_path, proxy_url);
+                                }
+                                if (!arws_config_has_override(h_tok, cfg_path)) {
+                                    const char *save_mode = (route_mode[0] && strcmp(route_mode, "*") != 0) ? route_mode : arws_config_get_global_mode();
+                                    arws_config_add_override(h_tok, cfg_path, save_mode);
+                                }
                             }
                         }
+                        h_tok = strtok_r(NULL, ",", &saveptr);
                     }
                     char ack[64] = "ACK PROXY";
                     ar_ipc_send_frame(client_fd, IPC_ACK, ack, (uint32_t)strlen(ack) + 1);
                 } else {
                     int backend_id = arws_register_backend(name, client_fd);
                     if (backend_id > 0) {
-                        arws_add_route(prefix, method, host, mode, backend_id);
+                        char hosts_buf[256];
+                        strncpy(hosts_buf, host[0] ? host : "*", sizeof(hosts_buf) - 1);
+                        hosts_buf[sizeof(hosts_buf) - 1] = '\0';
+                        char *saveptr = NULL;
+                        char *h_tok = strtok_r(hosts_buf, ",", &saveptr);
+                        while (h_tok) {
+                            while (*h_tok == ' ' || *h_tok == '\t') h_tok++;
+                            char *end = h_tok + strlen(h_tok) - 1;
+                            while (end > h_tok && (*end == ' ' || *end == '\t')) *end-- = '\0';
+                            if (h_tok[0]) {
+                                arws_add_route(prefix, method, h_tok, mode, backend_id);
+                            }
+                            h_tok = strtok_r(NULL, ",", &saveptr);
+                        }
 
                         char ack[64];
                         int ack_len = snprintf(ack, sizeof(ack), "ACK %d", backend_id);
@@ -701,32 +757,27 @@ static void *client_handler_loop(void *arg) {
                 int sent_ok = (ar_ipc_send_frame(target_fd, IPC_QUERY, query_data, query_len) >= 0);
 
                 unsigned char resp_buf[AR_IPC_BUF_SIZE];
-                uint32_t resp_len = sizeof(resp_buf);
+                uint32_t resp_len = 0;
                 int resp_type = 0;
 
                 if (sent_ok) {
-                    /* The app's control channel carries heartbeats on the same
-                       connection, so a heartbeat can arrive right after the
-                       query and get misread as the response. Keep reading and
-                       discarding non-response frames until IPC_QUERY_RESP or a
-                       ~3s deadline. */
+                    ar_mutex_lock(query_mutex);
                     uint64_t deadline = ar_time_ms() + 3000;
-                    while (ar_time_ms() < deadline) {
-                        if (peek_is_ipc_frame(target_fd)) {
-                            resp_len = sizeof(resp_buf);
-                            if (ar_ipc_recv_frame(target_fd, &resp_type, resp_buf, &resp_len) < 0) {
-                                resp_type = 0;
-                                break;
-                            }
-                            if (resp_type == IPC_QUERY_RESP) break;
-                        }
-                        ar_sleep_ms(10);
+                    while (gateway_running && ar_time_ms() < deadline && !query_resp_slots[target_fd].has_response) {
+                        ar_mutex_unlock(query_mutex);
+                        ar_sleep_ms(5);
+                        ar_mutex_lock(query_mutex);
                     }
-                    if (resp_type != IPC_QUERY_RESP) resp_type = 0;
+                    if (query_resp_slots[target_fd].has_response) {
+                        resp_type = query_resp_slots[target_fd].resp_type;
+                        resp_len = query_resp_slots[target_fd].resp_len;
+                        memcpy(resp_buf, query_resp_slots[target_fd].resp_buf, resp_len);
+                    }
+                    ar_mutex_unlock(query_mutex);
                 }
                 query_unlock_fd(target_fd);
 
-                if (resp_type == IPC_QUERY_RESP) {
+                if (resp_type == IPC_QUERY_RESP || resp_type == IPC_RESPONSE) {
                     ar_ipc_send_frame(client_fd, IPC_QUERY_RESP, resp_buf, resp_len);
                 } else {
                     ar_ipc_send_frame(client_fd, IPC_ERROR, "target error", 13);
@@ -757,6 +808,7 @@ static void *client_handler_loop(void *arg) {
     }
     ar_mutex_unlock(admin_mutex);
 
+    free(buf);
     return NULL;
 }
 
@@ -765,8 +817,10 @@ static void *accept_loop(void *arg) {
     while (gateway_running) {
         int client_fd = ar_socket_accept(admin_server_fd);
         if (client_fd < 0) {
-            if (gateway_running)
-                alri_print(RED "[ARWS]" RST " Accept failed\n");
+            if (gateway_running) {
+                ar_sleep_ms(10);
+                continue;
+            }
             break;
         }
 

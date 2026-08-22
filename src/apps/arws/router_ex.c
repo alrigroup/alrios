@@ -284,14 +284,38 @@ int arws_remove_routes_by_backend(int backend_id) {
     return removed;
 }
 
+static int is_loopback_host(const char *host) {
+    if (!host || host[0] == '\0') return 0;
+    if (strcasecmp(host, "localhost") == 0) return 1;
+    if (strcasecmp(host, "0.0.0.0") == 0) return 1;
+    if (strcasecmp(host, "::1") == 0 || strcasecmp(host, "[::1]") == 0) return 1;
+    if (strncmp(host, "127.", 4) == 0) return 1;
+    return 0;
+}
+
 static int host_matches(const char *route_host, const char *req_host) {
     if (!req_host || req_host[0] == '\0') {
         return (route_host[0] == '\0' || strcmp(route_host, "*") == 0);
     }
     if (route_host[0] == '\0' || strcmp(route_host, "*") == 0) return 1;
-    if (strcmp(route_host, req_host) == 0) return 1;
+    if (strcasecmp(route_host, req_host) == 0) return 1;
+    if (is_loopback_host(route_host) && is_loopback_host(req_host)) return 1;
+
+    /* Subdomain loopback match: e.g. detroit.localhost matches detroit.127.0.0.1 or detroit.127.0.0.0 */
+    const char *r_dot = strchr(route_host, '.');
+    const char *q_dot = strchr(req_host, '.');
+    if (r_dot && q_dot) {
+        int r_prefix_len = (int)(r_dot - route_host);
+        int q_prefix_len = (int)(q_dot - req_host);
+        if (r_prefix_len == q_prefix_len && strncasecmp(route_host, req_host, r_prefix_len) == 0) {
+            if (is_loopback_host(r_dot + 1) && is_loopback_host(q_dot + 1)) {
+                return 1;
+            }
+        }
+    }
+
     if (strncasecmp(req_host, "www.", 4) == 0 &&
-        strcmp(route_host, req_host + 4) == 0) return 1;
+        strcasecmp(route_host, req_host + 4) == 0) return 1;
     return 0;
 }
 

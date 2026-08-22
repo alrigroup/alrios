@@ -67,7 +67,7 @@ static int send_and_print(int fd, int type, const char *payload) {
     uint32_t plen = payload ? (uint32_t)strlen(payload) : 0;
     if (ar_ipc_send_frame(fd, type, payload, plen) < 0) return -1;
 
-    ar_socket_set_recv_timeout(fd, 3000);
+    ar_socket_set_recv_timeout(fd, 10000);
 
     unsigned char buf[AR_IPC_BUF_SIZE];
     int rtype;
@@ -269,24 +269,25 @@ static int cmd_update(const char *which) {
 #endif
     if (sep) *sep = '\0';
 
-    char cmd[1024];
+    char cmd[2048];
     if (strcmp(which, "all") == 0) {
 #ifdef _WIN32
-        snprintf(cmd, sizeof(cmd),
-                 "cmake -B build -S . && cmake --build build --config Release "
-                 "&& for /d %%d in (src\\apps\\*.web) do @if exist \"%%d\\web\\node_modules\" rmdir /s /q \"%%d\\web\\node_modules\"");
+        snprintf(cmd, sizeof(cmd), "build.bat");
 #else
-        snprintf(cmd, sizeof(cmd),
-                 "cmake -B build -S . && cmake --build build --config Release "
-                 "&& rm -rf src/apps/*/web/node_modules");
+        snprintf(cmd, sizeof(cmd), "bash build_linux.sh");
 #endif
     } else {
-        snprintf(cmd, sizeof(cmd), "cmake --build build --config Release --target %s", which);
+        snprintf(cmd, sizeof(cmd), "cmake --build build-linux --config Release --target %s", which);
     }
 
     printf("update %s: %s\n  (dir: %s)\n", which, cmd, root);
     if (chdir(root) != 0) { printf("chdir failed: %s\n", root); return 1; }
-    return system(cmd);
+    int res = system(cmd);
+    if (res == 0) {
+        printf("\n[ALRIOS] Update successful! Triggering hot power reload...\n");
+        run_ctl(IPC_CTL_POWER_RELOAD, NULL);
+    }
+    return res;
 }
 
 static void abs_path(const char *in, char *out, int size) {
@@ -330,100 +331,9 @@ static int cmd_build(int argc, char *argv[]) {
     }
     if (!src) { printf("build: requires -p <SRC>\n"); return 1; }
 
-    char base[1024], root[1024];
-    get_base_dir(base, sizeof(base));
-    strncpy(root, base, sizeof(root) - 1);
-    root[sizeof(root) - 1] = '\0';
-    char *sep = strrchr(root, '\\');
-#ifndef _WIN32
-    sep = strrchr(root, '/');
-#endif
-    if (sep) *sep = '\0';
-
-    char abs_src[1024];
-    abs_path(src, abs_src, sizeof(abs_src));
-    while (strlen(abs_src) > 1 && (abs_src[strlen(abs_src) - 1] == '/' || abs_src[strlen(abs_src) - 1] == '\\'))
-        abs_src[strlen(abs_src) - 1] = '\0';
-
-    char dirname[256];
-    {
-        const char *p = strrchr(abs_src, '/');
-#ifdef _WIN32
-        const char *bs = strrchr(abs_src, '\\');
-        if (bs && (!p || bs > p)) p = bs;
-#endif
-        p = p ? p + 1 : abs_src;
-        strncpy(dirname, p, sizeof(dirname) - 1);
-        dirname[sizeof(dirname) - 1] = '\0';
-    }
-
-    char apps_root[1024];
-#ifdef _WIN32
-    snprintf(apps_root, sizeof(apps_root), "%s\\src\\apps\\%s", root, dirname);
-#else
-    snprintf(apps_root, sizeof(apps_root), "%s/src/apps/%s", root, dirname);
-#endif
-
     int apps_out = (!out || strcmp(out, "apps") == 0 || strcmp(out, "/apps") == 0 || strcmp(out, "\\apps") == 0);
 
-    if (path_eq(apps_root, abs_src)) {
-        char target[300];
-        size_t k;
-        for (k = 0; dirname[k] && k < sizeof(target) - 6; k++)
-            target[k] = (dirname[k] == '.') ? '_' : dirname[k];
-        target[k] = '\0';
-        strcat(target, "_pack");
-
-        char sep = '/';
-#ifdef _WIN32
-        sep = '\\';
-#endif
-        static const char *cands[] = { "build", "build-linux", "build-mingw" };
-        const char *builddir = "build";
-        char ck[1100];
-        for (int ci = 0; ci < 3; ci++) {
-            snprintf(ck, sizeof(ck), "%s%c%s%cCMakeCache.txt", root, sep, cands[ci], sep);
-            if (fexists(ck)) { builddir = cands[ci]; break; }
-        }
-
-        char cmd[2048];
-#ifdef _WIN32
-        snprintf(cmd, sizeof(cmd), "cmake -B %s -S . && cmake --build %s --config Release --target %s", builddir, builddir, target);
-#else
-        snprintf(cmd, sizeof(cmd), "cmake -B %s -S . && cmake --build %s --target %s", builddir, builddir, target);
-#endif
-        printf("build: %s\n  (dir: %s)\n", cmd, root);
-        if (chdir(root) != 0) { printf("build: chdir failed: %s\n", root); return 1; }
-        if (system(cmd) != 0) return 1;
-
-        char arapp[1024];
-#ifdef _WIN32
-        snprintf(arapp, sizeof(arapp), "%s\\arcore\\apps\\%s.arapp", root, dirname);
-#else
-        snprintf(arapp, sizeof(arapp), "%s/arcore/apps/%s.arapp", root, dirname);
-#endif
-
-        if (!apps_out) {
-            char cmd2[2048];
-#ifdef _WIN32
-            snprintf(cmd2, sizeof(cmd2),
-                     "if not exist \"%s\" mkdir \"%s\" && copy /Y \"%s\" \"%s\\%s.arapp\"",
-                     out, out, arapp, out, dirname);
-#else
-            snprintf(cmd2, sizeof(cmd2),
-                     "mkdir -p \"%s\" && cp \"%s\" \"%s/%s.arapp\"",
-                     out, arapp, out, dirname);
-#endif
-            if (system(cmd2) != 0) return 1;
-            printf("build: ok -> %s/%s.arapp\n", out, dirname);
-        } else {
-            printf("build: ok -> %s\n", arapp);
-        }
-        printf("tip: run 'alrios refresh' to update application list\n");
-        return 0;
-    }
-
-    /* Fallback: armake buildapp */
+    /* Delegate app building directly to armake buildapp */
     char exe[1024];
     get_base_dir(exe, sizeof(exe));
 #ifdef _WIN32

@@ -10,6 +10,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore")
 
 add_subdirectory(src/ALRIOS/arkernel)
+add_subdirectory(src/ALRIOS/arauth)
 add_subdirectory(src/ALRIOS/core)
 add_subdirectory(src/tools)
 if(NOT WIN32)

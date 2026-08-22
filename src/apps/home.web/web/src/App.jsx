@@ -6,20 +6,94 @@
  * and at: https://github.com/alrigroup/licenses/tree/main
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import translations from './i18n.js'
 
 export default function App() {
   const [lang, setLang] = useState(() => localStorage.getItem('alri_lang') || 'en')
+  const [authSession, setAuthSession] = useState({
+    checked: false,
+    authenticated: false,
+    user: '',
+    tenant: '',
+    role: '',
+    sessionToken: ''
+  })
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [loginModalOpen, setLoginModalOpen] = useState(false)
+  const [usernameInput, setUsernameInput] = useState('')
+  const [passwordInput, setPasswordInput] = useState('')
+  const [totpInput, setTotpInput] = useState('')
+  const [authError, setAuthError] = useState('')
+  const [authSuccess, setAuthSuccess] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const sessionMenuRef = useRef(null)
+  const [showTotp, setShowTotp] = useState(false)
+  const getAuthBaseUrl = () => {
+    // If running directly on ARWN frontend port 3001 without reverse proxy, route to arapiauth port 9650
+    if (typeof window !== 'undefined' && (window.location.port === '3001' || window.location.port === '5173')) {
+      return `http://${window.location.hostname}:9650`
+    }
+    return ''
+  }
+
+  // Verify active session against ARAUTH backend (/arapi/auth/me)
+  const verifySession = async () => {
+    try {
+      const storedToken = localStorage.getItem('ar_session_token') || ''
+      const headers = { 'Accept': 'application/json' }
+      if (storedToken) {
+        headers['Authorization'] = `Bearer ${storedToken}`
+      }
+      const baseUrl = getAuthBaseUrl()
+      const res = await fetch(`${baseUrl}/arapi/auth/me`, {
+        method: 'GET',
+        headers,
+        credentials: 'include'
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data && data.authenticated && data.user) {
+          setAuthSession({
+            checked: true,
+            authenticated: true,
+            user: data.user,
+            tenant: data.tenant || 'holding_alri',
+            role: data.role || 'user',
+            sessionToken: storedToken
+          })
+          return
+        }
+      }
+    } catch (err) {
+      console.warn('[ARAUTH] Session verification offline or pending gateway:', err)
+    }
+    setAuthSession({
+      checked: true,
+      authenticated: false,
+      user: '',
+      tenant: '',
+      role: '',
+      sessionToken: ''
+    })
+  }
 
   useEffect(() => {
-    const t = translations[lang]
-    document.querySelectorAll('[data-i18n]').forEach((el) => {
-      const key = el.getAttribute('data-i18n')
-      if (t && t[key]) el.innerHTML = t[key]
-    })
-    const langText = document.getElementById('langText')
-    if (langText) langText.textContent = t.lang_btn
+    verifySession()
+  }, [])
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (sessionMenuRef.current && !sessionMenuRef.current.contains(e.target)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  useEffect(() => {
     document.documentElement.lang = lang === 'en' ? 'en' : 'pt-BR'
   }, [lang])
 
@@ -42,7 +116,10 @@ export default function App() {
       },
       { threshold: 0.1, rootMargin: '0px 0px -50px 0px' }
     )
-    fadeElements.forEach((el) => observer.observe(el))
+    fadeElements.forEach((el) => {
+      el.classList.add('visible')
+      observer.observe(el)
+    })
     return () => observer.disconnect()
   }, [])
 
@@ -85,21 +162,323 @@ export default function App() {
     setLang(next)
   }
 
+  // Handle Login submission
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault()
+    setAuthError('')
+    setAuthSuccess('')
+    if (!usernameInput.trim() || !passwordInput.trim()) {
+      setAuthError(lang === 'en' ? 'Please fill in both username and password.' : 'Por favor, preencha o usuário e a senha.')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const payload = {
+        username: usernameInput.trim(),
+        password: passwordInput,
+        totp_code: totpInput.trim() || undefined
+      }
+
+      const baseUrl = getAuthBaseUrl()
+      const res = await fetch(`${baseUrl}/arapi/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        credentials: 'include'
+      })
+
+      const data = await res.json()
+      if (res.ok && data.status === 'success') {
+        if (data.session_token) {
+          localStorage.setItem('ar_session_token', data.session_token)
+        }
+        if (data.refresh_token) {
+          localStorage.setItem('ar_refresh_token', data.refresh_token)
+        }
+        setAuthSession({
+          checked: true,
+          authenticated: true,
+          user: data.user || usernameInput.trim(),
+          tenant: data.tenant || 'holding_alri',
+          role: data.role || 'user',
+          sessionToken: data.session_token || ''
+        })
+        setAuthSuccess(t.modal_redirecting || 'Authenticating sovereignly...')
+        setTimeout(() => {
+          setLoginModalOpen(false)
+          setUsernameInput('')
+          setPasswordInput('')
+          setTotpInput('')
+          setAuthSuccess('')
+          window.location.href = '/restrict-area'
+        }, 800)
+      } else {
+        if (data.status === 'need_2fa') {
+          setShowTotp(true);
+          setAuthError(lang === 'en' ? 'Two‑factor authentication required.' : 'Autenticação de dois fatores necessária.');
+        } else {
+          setAuthError(data.error || (lang === 'en' ? 'Invalid credentials or access rejected.' : 'Credenciais inválidas ou acesso recusado.'));
+        }
+      }
+    } catch (err) {
+      setAuthError(lang === 'en' ? 'Connection error with ARAUTH Gateway.' : 'Erro de conexão com o ARAUTH Gateway.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // Handle Logout
+  const handleLogout = async () => {
+    try {
+      const storedToken = localStorage.getItem('ar_session_token') || ''
+      const baseUrl = getAuthBaseUrl()
+      await fetch(`${baseUrl}/arapi/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${storedToken}`
+        },
+        credentials: 'include'
+      })
+    } catch (err) {
+      console.warn('[ARAUTH] Logout call completed with local fallback')
+    }
+    localStorage.removeItem('ar_session_token')
+    localStorage.removeItem('ar_refresh_token')
+    setAuthSession({
+      checked: true,
+      authenticated: false,
+      user: '',
+      tenant: '',
+      role: '',
+      sessionToken: ''
+    })
+    setDropdownOpen(false)
+  }
+
+  const t = translations[lang] || translations.pt || translations.en
+
   return (
     <>
       <nav className="navbar">
         <div className="logo">ALRI<span>GROUP</span></div>
         <div className="nav-links">
-          <a href="#about" data-i18n="nav_about">Holding</a>
-          <a href="#portfolio" data-i18n="nav_portfolio">Marcas</a>
-          <a href="#elite" data-i18n="nav_elite">Tecnologia</a>
+          <a href="#about" data-i18n="nav_about">{t.nav_about}</a>
+          <a href="#portfolio" data-i18n="nav_portfolio">{t.nav_portfolio}</a>
+          <a href="#elite" data-i18n="nav_elite">{t.nav_elite}</a>
         </div>
-        <div className="lang-switcher">
-          <button onClick={toggleLanguage} id="langBtn" className="mono">
-            <i className="fas fa-globe"></i> <span id="langText">PT-BR</span>
-          </button>
+        <div className="nav-actions">
+          {/* User Session Menu & Avatar */}
+          <div className="user-session-wrapper" ref={sessionMenuRef}>
+            <button
+              className={`user-avatar-btn ${authSession.authenticated ? 'is-authenticated' : ''}`}
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              title={authSession.authenticated ? `Sessão: ${authSession.user}` : 'Identidade & Acesso'}
+              aria-label="User Session"
+            >
+              {authSession.authenticated ? (
+                <img
+                  src={`https://ui-avatars.com/api/?name=${encodeURIComponent(authSession.user)}&background=0088ff&color=ffffff&bold=true`}
+                  alt={authSession.user}
+                  className="avatar-img"
+                />
+              ) : (
+                <i className="fas fa-user-shield avatar-icon-anon"></i>
+              )}
+              <span className={`session-status-dot ${authSession.authenticated ? 'active' : 'idle'}`}></span>
+            </button>
+
+            {/* Dropdown Popover */}
+            {dropdownOpen && (
+              <div className="user-dropdown">
+                <div className="user-dropdown-header">
+                  <div className="dropdown-avatar-large">
+                    {authSession.authenticated ? (
+                      <img
+                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(authSession.user)}&background=0088ff&color=ffffff&bold=true`}
+                        alt={authSession.user}
+                        className="avatar-img"
+                      />
+                    ) : (
+                      <i className="fas fa-user-secret"></i>
+                    )}
+                  </div>
+                  <div className="dropdown-user-info">
+                    <h5>{authSession.authenticated ? authSession.user : t.auth_anonymous}</h5>
+                    <span>
+                      {authSession.authenticated
+                        ? (authSession.role === 'admin'
+                            ? t.auth_role_admin
+                            : authSession.role === 'operator'
+                              ? t.auth_role_operator
+                              : t.auth_role_user)
+                        : (t.auth_anonymous_sub || 'Faça login para continuar')}
+                    </span>
+                    {authSession.authenticated && (
+                      <span className="dropdown-tenant">Tenant: {authSession.tenant}</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="dropdown-shield-badge">
+                  <i className="fas fa-shield-halved"></i>
+                  <span>{t.auth_status_online}</span>
+                </div>
+
+                {authSession.authenticated ? (
+                  <>
+                    <button
+                      className="dropdown-btn dropdown-btn-private"
+                      onClick={() => {
+                        setDropdownOpen(false)
+                        window.location.href = '/restrict-area'
+                      }}
+                    >
+                      <i className="fas fa-key"></i>
+                      <span>{t.auth_private_area}</span>
+                    </button>
+                    <button className="dropdown-btn dropdown-btn-logout" onClick={handleLogout}>
+                      <i className="fas fa-arrow-right-from-bracket"></i>
+                      <span>{t.auth_logout}</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="dropdown-btn dropdown-btn-primary"
+                    onClick={() => {
+                      setDropdownOpen(false)
+                      setShowTotp(false)
+                      setLoginModalOpen(true)
+                    }}
+                  >
+                    <i className="fas fa-fingerprint"></i>
+                    <span>{t.auth_login}</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Language Switcher */}
+          <div className="lang-switcher">
+            <button onClick={toggleLanguage} id="langBtn" className="mono">
+              <i className="fas fa-globe"></i> <span id="langText">{t.lang_btn}</span>
+            </button>
+          </div>
         </div>
       </nav>
+
+      {/* Sovereign Login Modal */}
+      {loginModalOpen && (
+        <div className="auth-modal-overlay" onClick={() => setLoginModalOpen(false)}>
+          <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="auth-modal-close"
+              onClick={() => setLoginModalOpen(false)}
+              aria-label="Close modal"
+            >
+              <i className="fas fa-times"></i>
+            </button>
+
+            <div className="auth-modal-header">
+              <div className="auth-modal-icon">
+                <i className="fas fa-shield-halved"></i>
+              </div>
+              <h3>{t.modal_title || 'Login na Área Restrita'}</h3>
+            </div>
+
+            {authError && (
+              <div className="auth-error-banner">
+                <i className="fas fa-triangle-exclamation"></i>
+                <span>{authError}</span>
+              </div>
+            )}
+
+            {authSuccess && (
+              <div className="auth-success-banner">
+                <i className="fas fa-circle-check"></i>
+                <span>{authSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleLoginSubmit}>
+              <div className="auth-form-group">
+                <label>{t.modal_user_label || 'Usuário'}</label>
+                <div className="auth-input-wrapper">
+                  <input
+                    type="text"
+                    className="auth-input mono"
+                    placeholder={t.modal_user_placeholder || 'alex / alri_admin'}
+                    value={usernameInput}
+                    onChange={(e) => setUsernameInput(e.target.value)}
+                    required
+                    autoFocus
+                    autoComplete="username"
+                  />
+                  <i className="fas fa-user"></i>
+                </div>
+              </div>
+
+              <div className="auth-form-group">
+                <label>{t.modal_pass_label || 'Senha'}</label>
+                <div className="auth-input-wrapper">
+                  <input
+                    type="password"
+                    className="auth-input mono"
+                    placeholder={t.modal_pass_placeholder || '••••••••••••'}
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                  />
+                  <i className="fas fa-lock"></i>
+                </div>
+              </div>
+
+              {showTotp && (
+                <div className="auth-form-group">
+                  <label>{t.modal_totp_label || 'Código 2FA'}</label>
+                  <div className="auth-input-wrapper">
+                    <input
+                      type="text"
+                      className="auth-input mono"
+                      placeholder="6-digit code (e.g. 123456)"
+                      maxLength={6}
+                      value={totpInput}
+                      onChange={(e) => setTotpInput(e.target.value)}
+                      autoComplete="one-time-code"
+                    />
+                    <i className="fas fa-shield-keyhole"></i>
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="auth-submit-btn"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <i className="fas fa-spinner fa-spin"></i>
+                    <span>{t.modal_btn_authenticating || 'Autenticando...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-fingerprint"></i>
+                    <span>{t.modal_btn_submit || 'Autenticar'}</span>
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="auth-modal-footer">
+              <i className="fas fa-lock"></i> {t.modal_footer || 'Login protegido por ARAUTH'}
+            </div>
+          </div>
+        </div>
+      )}
 
       <main>
         <section id="hero">
@@ -108,34 +487,34 @@ export default function App() {
           <div className="hero-content fade-in">
             <img src="https://cdn.alrigroup.com/ALRI-SF-W.png" width="220" alt="ALRI Group Logo"
               style={{ marginBottom: '2rem', filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.1))' }} />
-            <h1 data-i18n="hero_h1">O ecossistema que conecta<br /><span className="text-gradient">tecnologia, inovação e novos mercados</span></h1>
-            <p data-i18n="hero_sub">Nosso DNA é tech. Nossos horizontes são ilimitados. <strong>ALRI Group</strong> &mdash; uma holding multidisciplinar que constrói o futuro em camadas.</p>
+            <h1 data-i18n="hero_h1" dangerouslySetInnerHTML={{ __html: t.hero_h1 }} />
+            <p data-i18n="hero_sub" dangerouslySetInnerHTML={{ __html: t.hero_sub }} />
             <div className="hero-ctas">
-              <a href="#portfolio" className="cta-button" data-i18n="hero_cta1">Conhe&ccedil;a Nossas Marcas</a>
-              <a href="#about" className="cta-button cta-outline" data-i18n="hero_cta2">Explore o Ecossistema</a>
+              <a href="#portfolio" className="cta-button" data-i18n="hero_cta1">{t.hero_cta1}</a>
+              <a href="#about" className="cta-button cta-outline" data-i18n="hero_cta2">{t.hero_cta2}</a>
             </div>
           </div>
         </section>
 
         <section id="about" className="fade-in">
-          <h2 data-i18n="about_h2">Quem Somos</h2>
+          <h2 data-i18n="about_h2">{t.about_h2}</h2>
           <div className="showcase">
             <div className="showcase-text about-text">
-              <p data-i18n="about_p1">O <strong>ALRI Group</strong> nasceu em <strong>2020</strong> da mente de <strong>Alexsander</strong> &mdash; um engenheiro de sistemas com talento para enxergar além do código. O que começou como laboratório de pesquisa em modificações profundas de kernel e segurança ofensiva se transformou em algo maior. Muito maior.</p>
-              <p data-i18n="about_p2">Hoje, o ALRI Group é uma <strong>Holding Company</strong> multidisciplinar. Mantemos nossa alma tecnológica viva atrav&eacute;s da <strong>ARD &mdash; ALRI Development</strong> (engenharia de sistemas, sistemas operacionais customizados como o <strong>AROS</strong> e scripts de alto desempenho como o <strong>ARFS</strong>), enquanto rompemos fronteiras com a <strong>RIPB CLOTHES</strong> &mdash; nossa marca global de vestu&aacute;rio premium. E isso é apenas o come&ccedil;o.</p>
-              <p data-i18n="about_p3" className="about-highlight">De um sonho tech em 2020 a uma estrutura sólida de gestão de negócios. O grupo cresce, as marcas se multiplicam, o DNA permanece.</p>
+              <p data-i18n="about_p1" dangerouslySetInnerHTML={{ __html: t.about_p1 }} />
+              <p data-i18n="about_p2" dangerouslySetInnerHTML={{ __html: t.about_p2 }} />
+              <p data-i18n="about_p3" className="about-highlight" dangerouslySetInnerHTML={{ __html: t.about_p3 }} />
             </div>
           </div>
         </section>
 
         <section id="portfolio" className="fade-in">
-          <h2 data-i18n="portfolio_h2">Nosso Portfólio</h2>
-          <p data-i18n="portfolio_sub" className="section-sub">Cada marca do grupo representa um pilar estrat&eacute;gico. Juntas, formam um ecossistema completo.</p>
+          <h2 data-i18n="portfolio_h2">{t.portfolio_h2}</h2>
+          <p data-i18n="portfolio_sub" className="section-sub">{t.portfolio_sub}</p>
 
           <div className="portfolio-block">
             <div className="block-header">
               <i className="fas fa-microchip block-icon"></i>
-              <h3 data-i18n="portfolio_tech_title">Divisão Tech <span className="badge-pilar">O Pilar</span></h3>
+              <h3 data-i18n="portfolio_tech_title" dangerouslySetInnerHTML={{ __html: t.portfolio_tech_title }} />
             </div>
             <div className="brand-grid">
               <div className="brand-card stagger-item">
@@ -143,24 +522,24 @@ export default function App() {
                   <i className="fas fa-cubes"></i>
                   <h4>ARD</h4>
                 </div>
-                <p className="brand-sub" data-i18n="portfolio_ard_sub">ALRI Development &mdash; Engenharia de Sistemas</p>
-                <p data-i18n="portfolio_ard_p">Engenharia reversa, modificações profundas de kernel e infraestrutura de alto desempenho. A ARD é o motor que move o grupo.</p>
+                <p className="brand-sub" data-i18n="portfolio_ard_sub" dangerouslySetInnerHTML={{ __html: t.portfolio_ard_sub }} />
+                <p data-i18n="portfolio_ard_p">{t.portfolio_ard_p}</p>
               </div>
               <div className="brand-card stagger-item">
                 <div className="brand-card-header">
                   <i className="fas fa-terminal"></i>
                   <h4>AROS</h4>
                 </div>
-                <p className="brand-sub" data-i18n="portfolio_aros_sub">ALRI Operating System</p>
-                <p data-i18n="portfolio_aros_p">Sistemas operacionais customizados &mdash; Windows, Android e Linux modificados para m&aacute;xima performance, seguran&ccedil;a e controle absoluto.</p>
+                <p className="brand-sub" data-i18n="portfolio_aros_sub" dangerouslySetInnerHTML={{ __html: t.portfolio_aros_sub }} />
+                <p data-i18n="portfolio_aros_p">{t.portfolio_aros_p}</p>
               </div>
               <div className="brand-card stagger-item">
                 <div className="brand-card-header">
                   <i className="fas fa-code"></i>
                   <h4>ARFS</h4>
                 </div>
-                <p className="brand-sub" data-i18n="portfolio_arfs_sub">FiveM Scripts &amp; Protocolos</p>
-                <p data-i18n="portfolio_arfs_p">Scripts de elite para FiveM &mdash; incluindo o ecossistema Apex RP e o sistema anticheat ALRI Protect. Performance, estabilidade e inova&ccedil;&atilde;o.</p>
+                <p className="brand-sub" data-i18n="portfolio_arfs_sub" dangerouslySetInnerHTML={{ __html: t.portfolio_arfs_sub }} />
+                <p data-i18n="portfolio_arfs_p">{t.portfolio_arfs_p}</p>
               </div>
             </div>
           </div>
@@ -168,7 +547,7 @@ export default function App() {
           <div className="portfolio-block">
             <div className="block-header">
               <i className="fas fa-vest block-icon"></i>
-              <h3 data-i18n="portfolio_life_title">Divisão Lifestyle &amp; Retail <span className="badge-expansao">A Expansão</span></h3>
+              <h3 data-i18n="portfolio_life_title" dangerouslySetInnerHTML={{ __html: t.portfolio_life_title }} />
             </div>
             <div className="brand-grid">
               <div className="brand-card stagger-item brand-card-wide">
@@ -176,8 +555,8 @@ export default function App() {
                   <i className="fas fa-shirt"></i>
                   <h4>RIPB CLOTHES</h4>
                 </div>
-                <p className="brand-sub" data-i18n="portfolio_ripb_sub">Moda Premium com Visão Global</p>
-                <p data-i18n="portfolio_ripb_p">Design contemporâneo, qualidade premium e logística internacional. RIPB CLOTHES nasceu da mesma cultura de excelência que define o ALRI Group &mdash; agora traduzida para o mundo da moda.</p>
+                <p className="brand-sub" data-i18n="portfolio_ripb_sub">{t.portfolio_ripb_sub}</p>
+                <p data-i18n="portfolio_ripb_p">{t.portfolio_ripb_p}</p>
                 <a href="https://ripb.alrigroup.com" target="_blank" rel="noreferrer" className="brand-link">ripb.alrigroup.com <i className="fas fa-external-link-alt"></i></a>
               </div>
             </div>
@@ -186,15 +565,15 @@ export default function App() {
           <div className="future-vision fade-in">
             <div className="future-content">
               <i className="fas fa-rocket future-icon"></i>
-              <h3 data-i18n="portfolio_future_title">Novos Horizontes</h3>
-              <p data-i18n="portfolio_future_p">O ALRI Group est&aacute; em constante incubação. Novas marcas, novos setores, novos mercados. O que come&ccedil;a como linha de c&oacute;digo pode se tornar uma indústria inteira. <strong>Fique de olho.</strong></p>
+              <h3 data-i18n="portfolio_future_title">{t.portfolio_future_title}</h3>
+              <p data-i18n="portfolio_future_p" dangerouslySetInnerHTML={{ __html: t.portfolio_future_p }} />
             </div>
           </div>
         </section>
 
         <section id="elite" className="fade-in">
-          <h2 data-i18n="elite_h2">Projetos de Elite &amp; Tecnologia</h2>
-          <p data-i18n="elite_sub" className="section-sub">A engenharia que sustenta cada marca do grupo. Certifica&ccedil;&otilde;es, licen&ccedil;as e produtos que definem nosso padrão.</p>
+          <h2 data-i18n="elite_h2" dangerouslySetInnerHTML={{ __html: t.elite_h2 }} />
+          <p data-i18n="elite_sub" className="section-sub">{t.elite_sub}</p>
 
           <div className="project-showcase">
             <div className="project-card">
@@ -207,7 +586,7 @@ export default function App() {
                   <span className="badge">Engineered by AROS</span>
                 </div>
               </div>
-              <p data-i18n="wmaros_p">O <strong>Windows Mod ALRI Operating System</strong> é nossa flagship de performance. Um ambiente Windows Professional reconstruído e otimizado para entregar o m&aacute;ximo de FPS e a menor latência possivel para power users e gamers de alto nível.</p>
+              <p data-i18n="wmaros_p" dangerouslySetInnerHTML={{ __html: t.wmaros_p }} />
               <div className="project-footer">
                 <span className="status-tag"><i className="fas fa-bolt"></i> Ultra Performance</span>
                 <span className="license-tag">ARGLFU License</span>
@@ -224,9 +603,9 @@ export default function App() {
                   <span className="badge">Engineered by ARD</span>
                 </div>
               </div>
-              <p data-i18n="arbemf_p">A espinha dorsal de nossas opera&ccedil;&otilde;es web. Um micro-framework em C nativo, focado em E2EE (End-to-End Encryption) e hot-reloading granular para sistemas que não podem parar. Puro desempenho em nível de kernel.</p>
+              <p data-i18n="arbemf_p" dangerouslySetInnerHTML={{ __html: t.arbemf_p }} />
               <div className="project-footer">
-                <span className="status-tag"><i className="fas fa-lock"></i> Alta Seguran&ccedil;a</span>
+                <span className="status-tag"><i className="fas fa-lock"></i> Alta Segurança</span>
                 <span className="license-tag">ARGLR License</span>
               </div>
             </div>
@@ -234,42 +613,40 @@ export default function App() {
         </section>
 
         <section id="licensing" className="fade-in">
-          <h2 data-i18n="lic_h2">Sistema de Licenciamento ARGL</h2>
+          <h2 data-i18n="lic_h2">{t.lic_h2}</h2>
           <div className="showcase license-showcase">
-            <p data-i18n="lic_p">Nossas licen&ccedil;as (ALRI Group Licenses) garantem o equilíbrio entre inova&ccedil;&atilde;o aberta e seguran&ccedil;a institucional. Cada produto do ecossistema opera sob uma destas licen&ccedil;as.</p>
+            <p data-i18n="lic_p">{t.lic_p}</p>
             <div className="license-grid">
               <div className="license-item">
                 <span className="lic-tag permissive">ARGLP</span>
                 <h4>Permissive</h4>
-                <p data-i18n="lic_arglp">Uso e modifica&ccedil;&atilde;o livres para fins não comerciais (Open Source).</p>
+                <p data-i18n="lic_arglp">{t.lic_arglp}</p>
               </div>
               <div className="license-item">
                 <span className="lic-tag freeuse">ARGLFU</span>
                 <h4>Free Use</h4>
-                <p data-i18n="lic_arglfu">Livre para uso e distribui&ccedil;&atilde;o, mas proibido de sofrer modifica&ccedil;&otilde;es.</p>
+                <p data-i18n="lic_arglfu">{t.lic_arglfu}</p>
               </div>
               <div className="license-item">
                 <span className="lic-tag reserved">ARGLR</span>
                 <h4>Reserved</h4>
-                <p data-i18n="lic_arglr">Uso restrito a parceiros e clientes. C&oacute;digo blindado com garantia.</p>
+                <p data-i18n="lic_arglr">{t.lic_arglr}</p>
               </div>
             </div>
           </div>
         </section>
 
         <section id="founder" className="fade-in">
-          <h2 data-i18n="founder_h2">Missão &amp; Fundador</h2>
+          <h2 data-i18n="founder_h2" dangerouslySetInnerHTML={{ __html: t.founder_h2 }} />
           <div className="showcase">
             <div className="showcase-text">
-              <p data-i18n="founder_p1">Nosso prop&oacute;sito é fornecer solu&ccedil;&otilde;es inovadoras nas &aacute;reas mais exigentes &mdash; da engenharia de sistemas ao mercado de moda global. Resolvemos problemas complexos atrav&eacute;s de nossas unidades de neg&oacute;cio:</p>
+              <p data-i18n="founder_p1" dangerouslySetInnerHTML={{ __html: t.founder_p1 }} />
               <ul className="tech-list mono">
-                <li>&gt; <i className="fas fa-shield-halved"></i> <span data-i18n="founder_li1">Engenharia de sistemas e seguran&ccedil;a &mdash; o alicerce.</span></li>
-                <li>&gt; <i className="fas fa-cube"></i> <span data-i18n="founder_li2">Desenvolvimento de software e infraestrutura &mdash; a execu&ccedil;&atilde;o.</span></li>
-                <li>&gt; <i className="fas fa-vest"></i> <span data-i18n="founder_li3">Inova&ccedil;&atilde;o em lifestyle e retail &mdash; a expansão.</span></li>
+                <li>&gt; <i className="fas fa-shield-halved"></i> <span data-i18n="founder_li1">{t.founder_li1}</span></li>
+                <li>&gt; <i className="fas fa-cube"></i> <span data-i18n="founder_li2">{t.founder_li2}</span></li>
+                <li>&gt; <i className="fas fa-vest"></i> <span data-i18n="founder_li3">{t.founder_li3}</span></li>
               </ul>
-              <p data-i18n="founder_p2" style={{ marginTop: '2rem', borderTop: '1px solid var(--border)', paddingTop: '2rem' }}>
-                <strong>Fundador:</strong> O ALRI Group foi fundado e é liderado por <strong>Alexsander (@alexsanderalri)</strong>. O nome "ALRI" é um acrônimo de seus sobrenomes &mdash; <strong>Al</strong>meida + <strong>Ri</strong>beiro. Com uma carreira consolidada em seguran&ccedil;a ofensiva, engenharia reversa e modifica&ccedil;&otilde;es profundas de sistema, sua visão segue como o pilar de cada projeto e de cada marca que o grupo abriga.
-              </p>
+              <p data-i18n="founder_p2" style={{ marginTop: '2rem', borderTop: '1px solid var(--border)', paddingTop: '2rem' }} dangerouslySetInnerHTML={{ __html: t.founder_p2 }} />
             </div>
           </div>
         </section>
@@ -287,8 +664,8 @@ export default function App() {
             <i className="fab fa-github"></i>
           </a>
         </div>
-        <p className="footer-quote" data-i18n="footer_quote">"Construindo o futuro, uma camada de cada vez."</p>
-        <p className="footer-copy">&copy; 2020-2026 ALRI Group. All rights reserved. <span id="easter-egg" title="Restricted Area" onClick={() => { window.location.href = '/manager/login' }}><i className="fas fa-lock"></i></span></p>
+        <p className="footer-quote" data-i18n="footer_quote">{t.footer_quote}</p>
+        <p className="footer-copy">&copy; 2020-2026 ALRI Group. All rights reserved. <span id="easter-egg" title="Restricted Area" onClick={() => { window.location.href = '/restrict-area' }}><i className="fas fa-lock"></i></span></p>
       </footer>
     </>
   )

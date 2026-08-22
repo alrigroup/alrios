@@ -169,6 +169,7 @@ static void handle_signal(int sig) {
 }
 
 static void cleanup_and_exit(void) {
+    loader_stop_all();
     ar_process_group_destroy(loader_get_proc_group());
     loader_cleanup_temp();
 }
@@ -255,6 +256,7 @@ int main(void) {
 
     alri_printf("\n  " DIM "◇" RST " Shutting down...\n");
     ctl_stop();
+    loader_stop_all();
     ar_shutdown();
 
     return 0;

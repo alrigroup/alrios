@@ -178,11 +178,34 @@ static int path_matches_pattern(const char *path, const char *pattern) {
     return strcmp(path, pattern) == 0;
 }
 
+static int is_loopback_addr(const char *h) {
+    if (!h || !h[0]) return 0;
+    if (strcasecmp(h, "localhost") == 0) return 1;
+    if (strcasecmp(h, "0.0.0.0") == 0) return 1;
+    if (strncmp(h, "127.", 4) == 0) return 1;
+    if (strcasecmp(h, "::1") == 0 || strcasecmp(h, "[::1]") == 0) return 1;
+    return 0;
+}
+
 static int host_matches(const char *pattern, const char *host) {
     if (!pattern || !host) return 0;
     if (pattern[0] == '\0' || strcmp(pattern, "*") == 0) return 1;
-    if (strcmp(pattern, host) == 0) return 1;
-    if (strncasecmp(host, "www.", 4) == 0 && strcmp(pattern, host + 4) == 0) return 1;
+    if (strcasecmp(pattern, host) == 0) return 1;
+    if (is_loopback_addr(pattern) && is_loopback_addr(host)) return 1;
+
+    const char *p_dot = strchr(pattern, '.');
+    const char *h_dot = strchr(host, '.');
+    if (p_dot && h_dot) {
+        int p_len = (int)(p_dot - pattern);
+        int h_len = (int)(h_dot - host);
+        if (p_len == h_len && strncasecmp(pattern, host, p_len) == 0) {
+            if (is_loopback_addr(p_dot + 1) && is_loopback_addr(h_dot + 1)) {
+                return 1;
+            }
+        }
+    }
+
+    if (strncasecmp(host, "www.", 4) == 0 && strcasecmp(pattern, host + 4) == 0) return 1;
     return 0;
 }
 
@@ -616,6 +639,10 @@ int arws_config_get_port(void) {
     if (arws_config_get_mode() == ARWS_MODE_PRODUCTION)
         return 443;
     return 80;
+}
+
+void arws_config_set_port(int p) {
+    config_port = p;
 }
 
 int arws_config_get_operation_mode(void) {

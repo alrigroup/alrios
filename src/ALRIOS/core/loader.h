@@ -21,6 +21,7 @@ void *loader_get_proc_group(void);
 
 int  loader_start_app(const char *name);
 int  loader_stop_app(const char *name);
+void loader_stop_all(void);
 int  loader_restart_app(const char *name);
 int  loader_list_apps(char *out, int size);
 int  loader_status_app(const char *name, char *out, int size);

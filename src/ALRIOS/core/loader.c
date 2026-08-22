@@ -155,7 +155,10 @@ static void rm_rf(const char *path) {
 #endif
 }
 
+static int g_force_extract = 0;
+
 static int is_cache_fresh(const char *arapp_path, const char *cache_dir) {
+    if (g_force_extract) return 0;
 #ifdef _WIN32
     WIN32_FILE_ATTRIBUTE_DATA arapp_info, cache_info;
     if (!GetFileAttributesExA(arapp_path, GetFileExInfoStandard, &arapp_info)) return 0;
@@ -166,13 +169,13 @@ static int is_cache_fresh(const char *arapp_path, const char *cache_dir) {
     arapp_time.HighPart = arapp_info.ftLastWriteTime.dwHighDateTime;
     cache_time.LowPart = cache_info.ftLastWriteTime.dwLowDateTime;
     cache_time.HighPart = cache_info.ftLastWriteTime.dwHighDateTime;
-    return cache_time.QuadPart >= arapp_time.QuadPart;
+    return cache_time.QuadPart > arapp_time.QuadPart;
 #else
     struct stat arapp_stat, cache_stat;
     if (stat(arapp_path, &arapp_stat) != 0) return 0;
     if (stat(cache_dir, &cache_stat) != 0) return 0;
     if (!S_ISDIR(cache_stat.st_mode)) return 0;
-    return cache_stat.st_mtime >= arapp_stat.st_mtime;
+    return cache_stat.st_mtime > arapp_stat.st_mtime;
 #endif
 }
 
@@ -1113,7 +1116,7 @@ void loader_reap_apps(void) {
     app_unlock();
 }
 
-int loader_power_reload(void) {
+void loader_stop_all(void) {
     app_lock();
     for (int i = 0; i < app_count; i++) {
         char n[AR_APP_NAME_MAX];
@@ -1123,25 +1126,29 @@ int loader_power_reload(void) {
             app_unlock();
             ar_svc_stop(n);
             app_lock();
-        } else if (apps[i].state == APP_RUNNING) {
+        } else if (apps[i].state == APP_RUNNING || apps[i].pid > 0) {
             app_unlock();
             loader_stop_app(n);
             app_lock();
         }
     }
     app_unlock();
+}
 
-    char apps_dir[1024], run_dir[1024];
+int loader_power_reload(void) {
+    loader_stop_all();
+
+    char apps_dir[1024];
     loader_get_apps_dir(apps_dir, sizeof(apps_dir));
-    loader_get_run_dir(run_dir, sizeof(run_dir));
 
-    alri_printf("  " BLD "Reload" RST " " DIM "re-extracting apps..." RST "\n");
-    loader_scan_phase(run_dir, 0);
+    alri_printf("  " BLD "Reload" RST " " DIM "force re-extracting and reloading user apps..." RST "\n");
+    g_force_extract = 1;
     loader_scan_phase(apps_dir, 1);
 
     ar_svc_start_all();
 
     loader_scan_phase(apps_dir, 2);
+    g_force_extract = 0;
     return 0;
 }
 

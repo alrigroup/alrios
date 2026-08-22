@@ -29,7 +29,7 @@ ALRIGROUP@APPMAKE
       },
       {
         "name": "arweb",
-        "cmd": "$ARWN_BUILD build $APP_DIR --out $STAGING/build"
+        "cmd": "$ARWN_BUILD build . --out $STAGING/build"
       }
     ],
     "cleanup": [

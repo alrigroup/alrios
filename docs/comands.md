@@ -84,9 +84,34 @@ Command-line reference for `alrios` management tool.
 # Create a new tenant user with RBAC role
 ./alrios ardb user add <username> <password> <tenant_id> [role]
 
+# Provision app credentials, group binding, and isolated table scopes
+./alrios ardb app add <app_name> <token_or_hash> [group_name|-] [allowed_tables_csv]
+
+# Create shared App Group (shared data spaces) with allowed tables
+./alrios ardb group create <group_name> <shared_tables_csv>
+
+# Associate an application with an App Group
+./alrios ardb group add-app <group_name> <app_name>
+
 # Validate cryptographic integrity of the SHA-256 blockchain audit log
 ./alrios ardb audit verify
 
 # Stream audit logs in real-time
 ./alrios ardb audit tail
 ```
+
+---
+
+## 🔐 ARAUTH Sovereign Authentication & Vault Commands
+
+```bash
+# Query ARAUTH daemon status & active session metrics
+./alrios auth status
+
+# Verify cryptographic credentials and inspect user permissions
+./alrios auth verify <username> <password>
+
+# Invalidate/revoke active session token with Zero-Waste RAM purge
+./alrios auth revoke <session_token>
+```
+

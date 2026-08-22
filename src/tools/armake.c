@@ -1420,18 +1420,29 @@ static int cmd_buildapp(int argc, char **argv) {
     }
 
     char final_out[1024];
+    char app_bin_name[256];
+    if (m.bin[0]) {
+        strncpy(app_bin_name, m.bin, sizeof(app_bin_name) - 1);
+        app_bin_name[sizeof(app_bin_name) - 1] = '\0';
+        char *dot = strrchr(app_bin_name, '.');
+        if (dot && strcmp(dot, ".arapp") == 0) *dot = '\0';
+    } else {
+        strncpy(app_bin_name, m.name, sizeof(app_bin_name) - 1);
+        app_bin_name[sizeof(app_bin_name) - 1] = '\0';
+    }
+
     if (strcmp(out, "apps") == 0) {
         char exedir[1024];
         get_exe_dir(exedir, sizeof(exedir));
         snprintf(final_out, sizeof(final_out), "%s%capps%c%s.arapp",
-                 exedir, SEPARATOR, SEPARATOR, m.name);
+                 exedir, SEPARATOR, SEPARATOR, app_bin_name);
     } else {
         const char *ext = strrchr(out, '.');
         if (ext && strcmp(ext, ".arapp") == 0) {
             snprintf(final_out, sizeof(final_out), "%s", out);
         } else {
             snprintf(final_out, sizeof(final_out), "%s%c%s.arapp",
-                     out, SEPARATOR, m.name);
+                     out, SEPARATOR, app_bin_name);
         }
     }
     normalize_path(final_out);

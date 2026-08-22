@@ -23,6 +23,7 @@ typedef enum {
 
 ArwsMode     arws_config_get_mode(void);
 int          arws_config_get_port(void);
+void         arws_config_set_port(int p);
 int          arws_config_get_operation_mode(void);
 const char*  arws_config_get_mode_name(void);
 const char*  arws_config_get_bind_address(void);

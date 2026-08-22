@@ -40,6 +40,16 @@ int arws_register_backend(const char *name, int fd) {
     if (!name || fd < 0) return -1;
 
     ar_mutex_lock(registry_mutex);
+    for (int i = 0; i < backend_count; i++) {
+        if (backends[i].registered && strcmp(backends[i].name, name) == 0) {
+            backends[i].fd = fd;
+            int id = backends[i].id;
+            ar_mutex_unlock(registry_mutex);
+            alri_print(CYN "[ARWS]" RST " Backend '%s' re-registered (id=%d, fd=%d)\n", name, id, fd);
+            return id;
+        }
+    }
+
     if (backend_count >= ARWS_MAX_BACKENDS) {
         ar_mutex_unlock(registry_mutex);
         return -1;

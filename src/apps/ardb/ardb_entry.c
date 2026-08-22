@@ -34,20 +34,26 @@ static void handle_sig(int s) {
 /* Handle IPC queries received from CLI 'alrios ardb <cmd>' */
 static void handle_ardb_ipc_query(int fd, const char *payload, int payload_len) {
     char resp[AR_IPC_BUF_SIZE];
+    memset(resp, 0, sizeof(resp));
     int rlen = 0;
 
-    char q[256] = {0};
+    char q[512] = {0};
     int qlen = payload_len < (int)sizeof(q) - 1 ? payload_len : (int)sizeof(q) - 1;
     memcpy(q, payload, qlen);
     q[qlen] = '\0';
 
+    const char *p = q;
+    while (*p == ' ' || *p == '\r' || *p == '\n' || *p == '\t') p++;
+
     char cmd[64] = {0};
     int i = 0;
-    while (q[i] && q[i] != ' ' && q[i] != '\n' && q[i] != '\r' && i < 63) {
-        cmd[i] = q[i];
+    while (p[i] && p[i] != ' ' && p[i] != '\n' && p[i] != '\r' && i < 63) {
+        cmd[i] = p[i];
         i++;
     }
     cmd[i] = '\0';
+    const char *args = p + i;
+    while (*args == ' ') args++;
 
     ArdbConfig *cfg = ardb_config_get();
 
@@ -66,7 +72,7 @@ static void handle_ardb_ipc_query(int fd, const char *payload, int payload_len) 
             cfg->audit_log);
     } else if (strcmp(cmd, "cfg") == 0) {
         char sub[32] = {0};
-        sscanf(q + i, "%31s", sub);
+        sscanf(args, "%31s", sub);
         if (strcmp(sub, "reload") == 0) {
             ardb_config_reload(NULL);
             ArdbConfig *new_cfg = ardb_config_get();
@@ -85,7 +91,7 @@ static void handle_ardb_ipc_query(int fd, const char *payload, int payload_len) 
     } else if (strcmp(cmd, "auth") == 0) {
         char sub[32] = {0};
         char target[128] = {0};
-        int parsed = sscanf(q + i, "%31s %127s", sub, target);
+        int parsed = sscanf(args, "%31s %127s", sub, target);
 
         if (strcmp(sub, "login") == 0 && parsed >= 2) {
             char tok[128] = {0};
@@ -114,16 +120,43 @@ static void handle_ardb_ipc_query(int fd, const char *payload, int payload_len) 
     } else if (strcmp(cmd, "user") == 0) {
         char sub[32] = {0};
         char u[64] = {0}, p[64] = {0}, t[64] = {0}, r[32] = "operator";
-        int parsed = sscanf(q + i, "%31s %63s %63s %63s %31s", sub, u, p, t, r);
+        int parsed = sscanf(args, "%31s %63s %63s %63s %31s", sub, u, p, t, r);
         if (strcmp(sub, "add") == 0 && parsed >= 4) {
             ardb_auth_add_user(u, p, t, r);
             rlen = snprintf(resp, sizeof(resp), "[ALRI DB] User '%s' created for tenant '%s' with role '%s'.\n", u, t, r);
         } else {
             rlen = snprintf(resp, sizeof(resp), "usage: user add <user> <pass> <tenant> [role]");
         }
+    } else if (strcmp(cmd, "app") == 0) {
+        char sub[32] = {0};
+        char app_name[64] = {0}, token[128] = {0}, grp[64] = {0}, tables[256] = {0};
+        int parsed = sscanf(args, "%31s %63s %127s %63s %255s", sub, app_name, token, grp, tables);
+        if (strcmp(sub, "add") == 0 && parsed >= 3) {
+            ardb_auth_add_app(app_name, token, (parsed >= 4 && strcmp(grp, "-") != 0) ? grp : NULL, (parsed >= 5) ? tables : NULL);
+            rlen = snprintf(resp, sizeof(resp),
+                "[ALRI DB] App '%s' credentials provisioned.\n"
+                "  Assigned Group: %s\n"
+                "  Table Scope: %s\n",
+                app_name, (parsed >= 4 && strcmp(grp, "-") != 0) ? grp : "none", (parsed >= 5) ? tables : "app_isolated (*)");
+        } else {
+            rlen = snprintf(resp, sizeof(resp), "usage: app add <app_name> <token/hash> [group|-] [allowed_tables_csv]");
+        }
+    } else if (strcmp(cmd, "group") == 0) {
+        char sub[32] = {0};
+        char gname[64] = {0}, extra[256] = {0};
+        int parsed = sscanf(args, "%31s %63s %255s", sub, gname, extra);
+        if (strcmp(sub, "create") == 0 && parsed >= 2) {
+            ardb_auth_create_group(gname, (parsed >= 3) ? extra : NULL);
+            rlen = snprintf(resp, sizeof(resp), "[ALRI DB] App Group '%s' created with shared tables: %s\n", gname, (parsed >= 3) ? extra : "none");
+        } else if (strcmp(sub, "add-app") == 0 && parsed >= 3) {
+            ardb_auth_add_app_to_group(gname, extra);
+            rlen = snprintf(resp, sizeof(resp), "[ALRI DB] Added app '%s' to App Group '%s'.\n", extra, gname);
+        } else {
+            rlen = snprintf(resp, sizeof(resp), "usage: group <create|add-app> <group_name> <tables_csv|app_name>");
+        }
     } else if (strcmp(cmd, "audit") == 0) {
         char sub[32] = {0};
-        sscanf(q + i, "%31s", sub);
+        sscanf(args, "%31s", sub);
         if (strcmp(sub, "verify") == 0) {
             char err[256] = {0};
             int ok = ardb_audit_verify_integrity(cfg->audit_log, err, sizeof(err));
@@ -143,6 +176,18 @@ static void handle_ardb_ipc_query(int fd, const char *payload, int payload_len) 
         }
     } else if (strcmp(cmd, "ping") == 0) {
         rlen = snprintf(resp, sizeof(resp), "pong");
+    } else if (strcmp(cmd, "help") == 0 || cmd[0] == '\0') {
+        rlen = snprintf(resp, sizeof(resp),
+            "ALRI DB Sovereign Guardian commands:\n"
+            "  alrios ardb status\n"
+            "  alrios ardb auth login <user>\n"
+            "  alrios ardb auth revoke <token>\n"
+            "  alrios ardb user add <user> <pass> <tenant> [role]\n"
+            "  alrios ardb app add <app_name> <token> [group|-] [tables_csv]\n"
+            "  alrios ardb group create <group_name> <tables_csv>\n"
+            "  alrios ardb group add-app <group_name> <app_name>\n"
+            "  alrios ardb audit verify\n"
+            "  alrios ardb cfg reload\n");
     } else {
         rlen = snprintf(resp, sizeof(resp), "unknown ardb command: %s (run 'alrios ardb help')", cmd);
     }
@@ -162,7 +207,8 @@ static void *ardb_ipc_thread(void *arg) {
             continue;
         }
 
-        ar_ipc_send_frame(g_ipc_fd, IPC_REGISTER, "ardb", 4);
+        const char *reg_frame = "ardb /ardb-internal * * production";
+        ar_ipc_send_frame(g_ipc_fd, IPC_REGISTER, reg_frame, (uint32_t)strlen(reg_frame));
 
         char buf[AR_IPC_BUF_SIZE];
         while (g_app_running) {

@@ -17,7 +17,7 @@ find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 target_link_libraries(arcore PRIVATE arkernel OpenSSL::SSL OpenSSL::Crypto Threads::Threads ${CMAKE_DL_LIBS})
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_link_options(arcore PRIVATE -rdynamic)
+    target_link_options(arcore PRIVATE -rdynamic "-Wl,-rpath,$ORIGIN/lib")
 endif()
 if(WIN32)
     set_target_properties(arcore PROPERTIES

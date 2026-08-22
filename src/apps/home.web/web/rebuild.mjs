@@ -10,15 +10,39 @@ import { existsSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { resolve, join } from 'node:path'
 
-const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+let npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const useShell = process.platform === 'win32'
 
+// Auto-discover npm in known paths if not found in current PATH
+if (process.platform !== 'win32') {
+  const candidatePaths = [
+    '/home/alexsar/.local/bin/npm',
+    resolve('../../../arcore/programfiles/npm/bin/npm'),
+    resolve('../../../arcore/programfiles/node/bin/npm'),
+    '/usr/local/bin/npm',
+    '/usr/bin/npm'
+  ]
+  for (const cand of candidatePaths) {
+    if (existsSync(cand)) {
+      npmCmd = cand
+      break
+    }
+  }
+}
+
 const run = (cmd, args) => {
-  const r = spawnSync(cmd, args, { stdio: 'inherit', shell: useShell })
+  const env = { ...process.env }
+  const extraPaths = [
+    '/home/alexsar/.local/bin',
+    resolve('../../../arcore/programfiles/node/bin'),
+    resolve('../../../arcore/programfiles/npm/bin')
+  ]
+  env.PATH = `${extraPaths.join(':')}:${env.PATH || ''}`
+  const r = spawnSync(cmd, args, { stdio: 'inherit', shell: useShell, env })
   if (r.status !== 0) process.exit(r.status ?? 1)
 }
 
-if (!existsSync('node_modules')) {
+if (!existsSync('node_modules') || !existsSync('node_modules/.bin/vite')) {
   run(npmCmd, ['ci', '--no-audit', '--no-fund'])
 }
 run(npmCmd, ['run', 'build'])

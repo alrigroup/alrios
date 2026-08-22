@@ -68,20 +68,23 @@ python test_suite.py
 
 ## 📂 Infrastructure Documentation
 
+- **[Tutorial Completo de Autenticação, Usuários e Cargos](AUTH_TUTORIAL.md):** Guia passo a passo de criação de usuários, gestão de cargos (FiveM/Discord), blueprints e fluxo de login no frontend.
 - **[ALRI DB Sovereign Data Guardian Plan](ALRI_DB_PLAN.md):** Architectural specification for zero-trust PostgreSQL proxy.
 - **[ALRI DB Security Tests Suite](ALRI_DB_SECURITY_TESTS.md):** Mandatory automated tests for memory safety, fuzzing, timing attacks, and RLS bypass.
 - **[ARWN Framework & .arweb Containers](apps/arwn.md):** High-performance multi-language container engine and multi-threaded embedded server.
 - **[Developer Guide & IPC Specification](DEVELOPER_GUIDE.md):** `.arapp` package creation and IPC protocol.
+- **[Complete Features Catalog](features.md):** Full technical catalog of all 9 core subsystems, features, and capabilities.
 - **[Production & Deployment Guide](PRODUCTION.md):** Deployment manual for Debian/Linux servers and SSL configuration.
 - **[Requirements & Dependencies](REQUIREMENTS.md):** Complete software dependencies list.
 - **[ARKernel](KERNEL.md):** OS Hardware Abstraction Layer (`aros_hal.h`).
 - **[Core Daemon (arcore.exe)](CORE.md):** Lifecycle manager and service runner.
 - **[Tools armake & arinstall](TOOLS.md):** Package manager, runtime installer, and `alrios db` CLI.
 - **[alrios CLI Reference](comands.md):** Command-line interface reference guide.
-- **[Changelog](CHANGELOG.md):** Complete feature and optimization history (v4.0.0).
+- **[Changelog](CHANGELOG.md):** Complete feature and optimization history (v6.0.0).
 
 ### Native Applications (`/docs/apps/`)
-- **[ALRI DB Sovereign Guardian (ardb.arapp)](apps/ardb.md):** Sovereign PostgreSQL proxy, SQL Firewall, and forensic audit engine (Port 5432).
+- **[ARAUTH Sovereign Identity & Vault (arauth.arapp / libarauth)](apps/arauth.md):** Native C identity framework, multi-identifier login, dynamic RBAC, and Zero-Waste RAM sessions.
+- **[ALRI DB Sovereign Guardian (ardb.arapp)](apps/ardb.md):** Sovereign PostgreSQL proxy, SQL Firewall, App Table Isolation, and forensic audit engine (Port 5432).
 - **[ARWS Gateway (arws.arapp)](apps/arws.md):** HTTP/HTTPS server and Reverse Proxy.
 - **[CDN (cdn.arapp)](apps/cdn.md):** Media delivery and static asset server.
 - **[Home Web (home-web.arapp)](apps/home.web.md):** React SPA application (Port 3001).

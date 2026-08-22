@@ -61,7 +61,14 @@ dist/
 *.cache
 *.tmp
 *.bak
-*.log
-*.snapshot
-nul
-checks.txt
+# Environment & Secrets Files
+.env
+.env.*
+*.env
+!.env.example
+
+# Root Local Tool Symlink
+/alrios
+
+
+

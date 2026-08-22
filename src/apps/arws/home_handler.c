@@ -15,12 +15,20 @@ extern "C" {
 #include "arws_utils.h"
 #include <string.h>
 
+static int is_loopback_str(const char *h) {
+    if (!h || !h[0]) return 0;
+    if (strcasecmp(h, "localhost") == 0) return 1;
+    if (strcasecmp(h, "0.0.0.0") == 0) return 1;
+    if (strncmp(h, "127.", 4) == 0) return 1;
+    if (strcasecmp(h, "::1") == 0 || strcasecmp(h, "[::1]") == 0) return 1;
+    return 0;
+}
+
 static int origin_is_allowed(HttpRequest *req) {
     if (!req->host || req->host[0] == '\0') return 0;
     if (strcmp(req->host, "alrigroup.com") == 0) return 1;
     if (strcmp(req->host, "www.alrigroup.com") == 0) return 1;
-    if (strcmp(req->host, "localhost") == 0) return 1;
-    if (strncmp(req->host, "localhost:", 10) == 0) return 1;
+    if (is_loopback_str(req->host)) return 1;
     return 0;
 }
 
