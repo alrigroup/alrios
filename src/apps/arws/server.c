@@ -937,19 +937,16 @@ int server_start(int port, int mode, RequestHandler handler) {
 
     if (mode == MODE_SECURE) {
         ctx = ar_ssl_ctx_create(1);
-        if (!ctx) {
-            alri_print("Failed to create SSL context\n");
-            return -1;
+        if (ctx && ar_ssl_ctx_use_certificate(ctx, "storage/arws/certs/cert.pem", "storage/arws/certs/key.pem") == 0) {
+            void *redir = ar_thread_create(redirector_thread, NULL);
+            if (redir) ar_thread_detach(redir);
+            using_ssl = 1;
+        } else {
+            alri_print("[ARWS] SSL cert.pem/key.pem not found in storage/arws/certs. Falling back to HTTP mode...\n");
+            if (ctx) { ar_ssl_ctx_free(ctx); ctx = NULL; }
+            using_ssl = 0;
+            mode = 0;
         }
-
-        if (ar_ssl_ctx_use_certificate(ctx, "storage/arws/certs/cert.pem", "storage/arws/certs/key.pem") != 0) {
-            alri_print("Failed to load cert.pem / key.pem\n");
-            return -1;
-        }
-
-        void *redir = ar_thread_create(redirector_thread, NULL);
-        if (redir) ar_thread_detach(redir);
-        using_ssl = 1;
     }
 
     while (http_server_running) {
