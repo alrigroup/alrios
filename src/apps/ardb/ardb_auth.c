@@ -60,9 +60,7 @@ void ardb_auth_init(void) {
     g_auth_initialized = 1;
     ar_mutex_unlock(g_auth_mutex);
 
-    /* Default ALRIOS system accounts for bootstrapping and testing */
-    ardb_auth_add_user("alri_admin", "alrios_master_sec_2026", "holding_alri", "admin");
-    ardb_auth_add_user("alri_op", "alrios_op_sec_2026", "holding_alri", "operator");
+    /* ARDB auth initialized clean — apps and accounts are provisioned via CLI */
 }
 
 void ardb_auth_cleanup(void) {

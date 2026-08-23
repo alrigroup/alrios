@@ -58,7 +58,7 @@ export default function App() {
             checked: true,
             authenticated: true,
             user: data.user,
-            tenant: data.tenant || 'holding_alri',
+            tenant: data.tenant || 'alrigroup',
             role: data.role || 'user',
             sessionToken: storedToken
           })
@@ -200,7 +200,7 @@ export default function App() {
           checked: true,
           authenticated: true,
           user: data.user || usernameInput.trim(),
-          tenant: data.tenant || 'holding_alri',
+          tenant: data.tenant || 'alrigroup',
           role: data.role || 'user',
           sessionToken: data.session_token || ''
         })
