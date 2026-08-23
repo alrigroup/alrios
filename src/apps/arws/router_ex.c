@@ -326,7 +326,13 @@ static int path_matches(const char *prefix, const char *req_path) {
     if (prefix[prefix_len - 1] == '*') {
         return strncmp(prefix, req_path, prefix_len - 1) == 0;
     }
-    return strcmp(prefix, req_path) == 0;
+    if (strcmp(prefix, req_path) == 0) return 1;
+    if (prefix_len > 1 && strncmp(prefix, req_path, prefix_len) == 0) {
+        if (req_path[prefix_len] == '/' || req_path[prefix_len] == '?' || req_path[prefix_len] == '\0' || prefix[prefix_len - 1] == '/') {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 static int route_priority(const ArwsRoute *route, const char *path) {
