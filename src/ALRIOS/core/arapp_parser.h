@@ -22,13 +22,13 @@
 #define AR_PLATFORM_RAW_MAX    1024
 
 /* Build pipeline */
-#define AR_BUILD_MAX_STEPS     16
-#define AR_BUILD_STEP_CMD_MAX  512
-#define AR_BUILD_STEP_CWD_MAX  256
-#define AR_BUILD_STEP_NAME_MAX 64
-#define AR_BUILD_STAGING_MAX   512
-#define AR_BUILD_CLEANUP_MAX   16
-#define AR_BUILD_CLEANUP_PATH  256
+#define AR_BUILD_MAX_STEPS     32
+#define AR_BUILD_STEP_CMD_MAX  8192
+#define AR_BUILD_STEP_CWD_MAX  1024
+#define AR_BUILD_STEP_NAME_MAX 128
+#define AR_BUILD_STAGING_MAX   2048
+#define AR_BUILD_CLEANUP_MAX   32
+#define AR_BUILD_CLEANUP_PATH  1024
 
 /* Platform detection result (max 32 chars) */
 void ar_platform_detect(char *out, int max);
