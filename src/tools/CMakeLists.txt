@@ -4,13 +4,11 @@ add_executable(armake
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/core/arapp_parser.c
 )
 target_include_directories(armake PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src/ALRIOS/core)
-if(WIN32)
-    set_target_properties(armake PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
-        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"
-        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore"
-    )
-endif()
+set_target_properties(armake PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore"
+)
 
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
@@ -22,10 +20,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_options(alrios PRIVATE "-Wl,-rpath,$ORIGIN/lib")
     target_link_options(armake PRIVATE "-Wl,-rpath,$ORIGIN/lib")
 endif()
-if(WIN32)
-    set_target_properties(alrios PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
-        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"
-        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore"
-    )
-endif()
+set_target_properties(alrios PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore"
+)

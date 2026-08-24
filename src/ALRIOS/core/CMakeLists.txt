@@ -19,11 +19,9 @@ target_link_libraries(arcore PRIVATE arkernel OpenSSL::SSL OpenSSL::Crypto Threa
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_options(arcore PRIVATE -rdynamic "-Wl,-rpath,$ORIGIN/lib")
 endif()
-if(WIN32)
-    set_target_properties(arcore PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
-        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"
-        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore"
-        ENABLE_EXPORTS TRUE
-    )
-endif()
+set_target_properties(arcore PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore"
+    ENABLE_EXPORTS TRUE
+)

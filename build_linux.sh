@@ -29,6 +29,8 @@ cmake -S "${ROOT}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release
 
 echo "[2/4] Compiling kernel + developer tools"
 cmake --build "${BUILD_DIR}" --target arcore alrios armake -- -j"${NPROC}"
+ln -sf arcore/alrios "${ROOT}/alrios"
+chmod +x "${ROOT}/arcore/alrios" "${ROOT}/arcore/armake" "${ROOT}/arcore/arcore" "${ROOT}/alrios" 2>/dev/null || true
 
 echo "[3/4] Packaging all apps modularly via armake"
 for appdir in "${ROOT}"/src/apps/*/; do
