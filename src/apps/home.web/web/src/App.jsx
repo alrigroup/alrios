@@ -8,9 +8,16 @@
 
 import { useEffect, useState, useRef } from 'react'
 import translations from './i18n.js'
+import EnterpriseSuite from './EnterpriseSuite.jsx'
 
 export default function App() {
   const [lang, setLang] = useState(() => localStorage.getItem('alri_lang') || 'en')
+  const [currentView, setCurrentView] = useState(() => {
+    if (typeof window !== 'undefined' && (window.location.pathname.startsWith('/restrict-area') || window.location.hash === '#restrict-area')) {
+      return 'restrict-area'
+    }
+    return 'home'
+  })
   const [authSession, setAuthSession] = useState({
     checked: false,
     authenticated: false,
@@ -259,14 +266,37 @@ export default function App() {
 
   const t = translations[lang] || translations.pt || translations.en
 
+  if (currentView === 'restrict-area' && authSession.authenticated) {
+    return (
+      <EnterpriseSuite
+        authSession={authSession}
+        onLogout={handleLogout}
+        lang={lang}
+        onBackToPublic={() => {
+          setCurrentView('home')
+          if (typeof window !== 'undefined') window.history.pushState(null, '', '/')
+        }}
+      />
+    )
+  }
+
   return (
     <>
       <nav className="navbar">
-        <div className="logo">ALRI<span>GROUP</span></div>
+        <div className="logo" onClick={() => setCurrentView('home')} style={{ cursor: 'pointer' }}>ALRI<span>GROUP</span></div>
         <div className="nav-links">
           <a href="#about" data-i18n="nav_about">{t.nav_about}</a>
           <a href="#portfolio" data-i18n="nav_portfolio">{t.nav_portfolio}</a>
           <a href="#elite" data-i18n="nav_elite">{t.nav_elite}</a>
+          {authSession.authenticated && (
+            <button
+              className="ent-badge-gold"
+              style={{ border: 'none', cursor: 'pointer', marginLeft: '6px' }}
+              onClick={() => setCurrentView('restrict-area')}
+            >
+              🛡️ Área Restrita
+            </button>
+          )}
         </div>
         <div className="nav-actions">
           {/* User Session Menu & Avatar */}
@@ -332,7 +362,7 @@ export default function App() {
                       className="dropdown-btn dropdown-btn-private"
                       onClick={() => {
                         setDropdownOpen(false)
-                        window.location.href = '/restrict-area'
+                        setCurrentView('restrict-area')
                       }}
                     >
                       <i className="fas fa-key"></i>
