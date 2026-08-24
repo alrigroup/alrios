@@ -218,8 +218,9 @@ export default function App() {
           setPasswordInput('')
           setTotpInput('')
           setAuthSuccess('')
-          window.location.href = '/restrict-area'
-        }, 800)
+          setCurrentView('restrict-area')
+          if (typeof window !== 'undefined') window.history.pushState(null, '', '/restrict-area')
+        }, 600)
       } else {
         if (data.status === 'need_2fa') {
           setShowTotp(true);
