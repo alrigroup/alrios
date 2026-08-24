@@ -386,6 +386,22 @@ static void handle_client_conn(arwn_server_t *s, int fd) {
         /* Match Route */
         arwn_route_t *r = find_route(s, req.path, req.path_len);
         if (!r) {
+            /* SPA Fallback: If route has no file extension (e.g. /restrict-area), serve root index.html */
+            if (!memchr(req.path, '.', req.path_len)) {
+                r = find_route(s, "/", 1);
+                if (!r) r = find_route(s, "", 0);
+                if (!r) r = find_route(s, "/index.html", 11);
+                if (!r) {
+                    for (int i = 0; i < s->route_count; i++) {
+                        if (s->routes[i].content_type && strstr(s->routes[i].content_type, "text/html") != NULL) {
+                            r = &s->routes[i];
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if (!r) {
             if (s->has_notfound_route && s->notfound_route.data) {
                 char hbuf[1024];
                 size_t hlen = build_head(hbuf, sizeof(hbuf), 404, "Not Found",
