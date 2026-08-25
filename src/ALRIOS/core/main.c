@@ -241,8 +241,12 @@ int main(void) {
         print_status("Starting services", "OK", GRN);
     }
 
-    /* Spawn standalone app processes AFTER services (arws on port 9500) are up */
+    /* Scan and register standalone app processes AFTER services are up */
     loader_scan_phase(apps_dir, 2);
+
+    /* Spawn standalone apps in dependency priority order (ardb -> arauth -> arapiauth -> arcdn -> arenterprise -> home-web) */
+    alri_printf("\n  " DIM "◇" RST " Spawning autostart applications by priority...\n");
+    loader_spawn_autostart_priority();
 
     ctl_start();
     alri_printf("\n");

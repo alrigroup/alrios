@@ -31,6 +31,7 @@ void loader_reap_apps(void);
 
 void loader_get_autostart_path(char *buf, int size);
 void loader_load_autostart(void);
+void loader_spawn_autostart_priority(void);
 int  loader_autostart_add(const char *name);
 int  loader_autostart_del(const char *name);
 

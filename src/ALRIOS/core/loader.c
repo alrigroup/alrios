@@ -101,6 +101,7 @@ static loader_app_t *app_register(const ar_app_manifest_t *m, const char *app_di
 }
 
 static int is_autostart(const char *name);
+static int app_priority(const char *name);
 static void spawn_survive_check(loader_app_t *a);
 
 loader_app_t *loader_find_app(const char *name) {
@@ -649,7 +650,7 @@ static void process_app(const char *app_dir, int phase) {
             alri_printf(" " DIM "(autostart off)" RST "\n");
             return;
         }
-        loader_spawn(a);
+        alri_printf(" " GRN "✓" RST " queued (prio %d)\n", app_priority(m.name));
     }
 }
 
@@ -743,6 +744,35 @@ static int is_autostart(const char *name) {
     for (int i = 0; i < autostart_count; i++)
         if (strcmp(autostart_apps[i], name) == 0) return 1;
     return 0;
+}
+
+static int app_priority(const char *name) {
+    if (strcmp(name, "ardb") == 0) return 1;
+    if (strcmp(name, "arauth") == 0) return 2;
+    if (strcmp(name, "arapiauth") == 0) return 3;
+    if (strcmp(name, "arcdn") == 0) return 4;
+    if (strcmp(name, "arenterprise") == 0) return 5;
+    if (strcmp(name, "home-web") == 0 || strcmp(name, "home.web") == 0) return 6;
+    if (strcmp(name, "detroit-web") == 0 || strcmp(name, "detroit.web") == 0) return 7;
+    return 10;
+}
+
+void loader_spawn_autostart_priority(void) {
+    loader_load_autostart();
+    for (int p = 1; p <= 10; p++) {
+        for (int i = 0; i < app_count; i++) {
+            if (apps[i].is_native_service) continue;
+            if (app_priority(apps[i].name) == p) {
+                if (is_autostart(apps[i].name) && apps[i].state == APP_STOPPED) {
+                    alri_printf("    " DIM "⚡ Booting (" CYN "priority %d" RST "): " BLD "%s" RST "\n",
+                                p, apps[i].name);
+                    loader_spawn(&apps[i]);
+                    if (p <= 3) ar_sleep_ms(150);
+                    else ar_sleep_ms(50);
+                }
+            }
+        }
+    }
 }
 
 int loader_autostart_add(const char *name) {
