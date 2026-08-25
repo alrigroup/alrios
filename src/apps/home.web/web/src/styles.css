@@ -1338,6 +1338,73 @@ footer { text-align: center; padding: 3rem 0; border-top: 1px solid var(--border
     border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+/* Multi-Company Filter & Header */
+.ent-header-center { display: flex; align-items: center; justify-content: center; }
+.ent-filter-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 6px 14px;
+    border-radius: 20px;
+    color: #fff;
+    font-size: 0.85rem;
+}
+.ent-filter-label { color: #888899; font-weight: 600; }
+.ent-select-filter {
+    background: transparent;
+    border: none;
+    color: #ffd700;
+    font-weight: 700;
+    font-size: 0.85rem;
+    outline: none;
+    cursor: pointer;
+}
+.ent-select-filter option { background: #0a0a0f; color: #fff; }
+.ent-badge-lock { background: rgba(255, 0, 60, 0.15); border: 1px solid rgba(255, 0, 60, 0.3); color: #ff4d6d; }
+
+/* Alert Box */
+.ent-alert-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255, 215, 0, 0.08);
+    border: 1px solid rgba(255, 215, 0, 0.25);
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin-bottom: 1.2rem;
+    font-size: 0.82rem;
+    color: #ddd;
+    line-height: 1.4;
+}
+
+/* Roles / RBAC Cards */
+.ent-role-card { display: flex; flex-direction: column; justify-content: space-between; }
+.ent-role-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
+.ent-role-head h3 { font-size: 1.05rem; font-weight: 800; color: #fff; margin-top: 4px; }
+.ent-btn-icon-danger { background: transparent; border: none; color: #ff003c; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+.ent-btn-icon-danger:hover { background: rgba(255, 0, 60, 0.2); }
+.ent-role-body h4 { font-size: 0.75rem; font-weight: 700; color: #888899; text-transform: uppercase; margin-bottom: 8px; }
+.ent-perm-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.ent-perm-tag {
+    background: rgba(0, 255, 128, 0.08);
+    border: 1px solid rgba(0, 255, 128, 0.2);
+    color: #00ff80;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+.ent-perm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-height: 200px; overflow-y: auto; padding: 6px 0; }
+.ent-checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #ccc; cursor: pointer; }
+.ent-checkbox-label input { accent-color: #ff003c; cursor: pointer; }
+
+/* Chat Channels Sidebar */
+.ent-chat-sidebar-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); margin-bottom: 12px; }
+.ent-btn-icon { background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.12); color: #fff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.ent-btn-icon:hover { background: rgba(255, 0, 60, 0.2); border-color: #ff003c; }
+
 @media (max-width: 900px) {
     .ent-container { flex-direction: column; }
     .ent-sidebar { width: 100%; border-right: none; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
@@ -1345,4 +1412,5 @@ footer { text-align: center; padding: 3rem 0; border-top: 1px solid var(--border
     .ent-chat-container { flex-direction: column; height: 80vh; }
     .ent-chat-channels { width: 100%; border-right: none; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
     .ent-form-grid { grid-template-columns: 1fr; }
+    .ent-perm-grid { grid-template-columns: 1fr; }
 }
