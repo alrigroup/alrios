@@ -350,7 +350,7 @@ static int cmd_fullupdate(int argc, char **argv) {
 
     /* 5. Print status table */
     printf("\033[1;36m=== Status Atual do Ecossistema ===\033[0m\n");
-    run_ctl(IPC_CTL_STATUS, NULL);
+    run_ctl(IPC_CTL_LIST, NULL);
     return 0;
 }
 
