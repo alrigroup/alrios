@@ -60,7 +60,10 @@ export default function EnterpriseSuite({ userSession, onLogout, onBackToPortal 
   }
 
   const getApiUrl = (endpoint) => {
-    return `http://${window.location.hostname}:9670/arapi/enterprise${endpoint}`
+    if (typeof window !== 'undefined' && (window.location.port === '3001' || window.location.port === '5173')) {
+      return `http://${window.location.hostname}:9670/arapi/enterprise${endpoint}`
+    }
+    return `/arapi/enterprise${endpoint}`
   }
 
   const notify = (msg, type = 'success') => {
