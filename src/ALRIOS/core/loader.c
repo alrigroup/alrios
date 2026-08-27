@@ -1071,24 +1071,30 @@ int loader_stop_app(const char *name) {
         if (ar_svc_status(name) != SVC_RUNNING) return 0;
         return (ar_svc_stop(name) == 0) ? 0 : -1;
     }
-    if (a->state == APP_STOPPED) return 0;
+    if (a->state == APP_STOPPED && a->pid <= 0) return 0;
     if (a->pid > 0) {
+#ifndef _WIN32
+        kill(-(pid_t)a->pid, SIGTERM);
+        kill((pid_t)a->pid, SIGTERM);
+#else
         ar_process_kill(a->pid);
+#endif
         int stopped = 0;
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 30; i++) {
             if (ar_process_wait_nohang(a->pid) != 0) {
                 stopped = 1;
                 break;
             }
-            ar_sleep_ms(25);
+            ar_sleep_ms(30);
         }
         if (!stopped) {
 #ifndef _WIN32
+            kill(-(pid_t)a->pid, SIGKILL);
             kill((pid_t)a->pid, SIGKILL);
 #endif
-            for (int i = 0; i < 10; i++) {
+            for (int i = 0; i < 15; i++) {
                 if (ar_process_wait_nohang(a->pid) != 0) break;
-                ar_sleep_ms(10);
+                ar_sleep_ms(20);
             }
         }
     }
@@ -1105,6 +1111,7 @@ int loader_restart_app(const char *name) {
     if (a->is_native_service)
         return (ar_svc_restart(name) == 0) ? 0 : -1;
     loader_stop_app(name);
+    ar_sleep_ms(100);
     return loader_start_app(name);
 }
 

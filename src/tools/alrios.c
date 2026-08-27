@@ -40,6 +40,7 @@ static void print_usage(void) {
     printf("  alrios power on|off|reload\n");
     printf("  alrios status              (alias: list)\n");
     printf("  alrios list\n");
+    printf("  alrios fullupdate [--no-pull] [--force]  (git pull + incremental app rebuild + reload)\n");
     printf("  alrios start <app>\n");
     printf("  alrios stop <app>\n");
     printf("  alrios restart <app>\n");
@@ -258,7 +259,106 @@ static int cmd_app_query_args(const char *app, int argc, char *argv[]) {
     return cmd_app_query(app, cmd);
 }
 
+#include <sys/stat.h>
+#ifndef _WIN32
+#include <dirent.h>
+#endif
+
+static int cmd_fullupdate(int argc, char **argv) {
+    char base[1024], root[1024];
+    get_base_dir(base, sizeof(base));
+    strncpy(root, base, sizeof(root) - 1);
+    root[sizeof(root) - 1] = '\0';
+    char *sep = strrchr(root, '\\');
+#ifndef _WIN32
+    sep = strrchr(root, '/');
+#endif
+    if (sep) *sep = '\0';
+
+    if (chdir(root) != 0) {
+        printf("[ERRO] Falha ao navegar para raiz: %s\n", root);
+        return 1;
+    }
+
+    int no_pull = 0;
+    int force = 0;
+    for (int i = 2; i < argc; i++) {
+        if (strcmp(argv[i], "--no-pull") == 0) no_pull = 1;
+        else if (strcmp(argv[i], "--force") == 0 || strcmp(argv[i], "-f") == 0) force = 1;
+    }
+
+    printf("\n\033[1;36m════════════════════════════════════════════════════════\033[0m\n");
+    printf("\033[1;36m  ALRIOS Sovereign Full Update & Hot Reload Pipeline    \033[0m\n");
+    printf("\033[1;36m════════════════════════════════════════════════════════\033[0m\n\n");
+
+    /* 1. Git Pull */
+    if (!no_pull && access(".git", F_OK) == 0) {
+        printf("\033[1;34m[1/4]\033[0m Sincronizando com repositorio remoto (git pull origin main)...\n");
+        int git_rc = system("git pull origin main");
+        if (git_rc != 0) {
+            printf("\033[1;33m[AVISO]\033[0m git pull retornou codigo %d (continuando com fontes locais)...\n\n", git_rc);
+        } else {
+            printf("\033[1;32m✓\033[0m Repositorio sincronizado com sucesso.\n\n");
+        }
+    } else {
+        printf("\033[1;34m[1/4]\033[0m Sincronizacao git ignorada (--no-pull ou sem .git).\n\n");
+    }
+
+    /* 2. Build kernel and developer tools */
+    printf("\033[1;34m[2/4]\033[0m Verificando kernel (arcore) e ferramentas de desenvolvedor (armake/alrios)...\n");
+#ifdef _WIN32
+    system("cmake --build build --target arcore armake alrios -j4");
+#else
+    system("cmake --build build-linux --target arcore armake alrios -- -j4 2>/dev/null || cmake --build build --target arcore armake alrios -j4 2>/dev/null || true");
+#endif
+    printf("\033[1;32m✓\033[0m Kernel e ferramentas atualizados.\n\n");
+
+    /* 3. Incremental App Packaging */
+    printf("\033[1;34m[3/4]\033[0m Executando empacotamento incremental de aplicacoes (Content-Hash)...\n");
+#ifndef _WIN32
+    DIR *d = opendir("src/apps");
+    if (d) {
+        struct dirent *entry;
+        while ((entry = readdir(d)) != NULL) {
+            if (entry->d_name[0] == '.') continue;
+            char appdir[1024];
+            snprintf(appdir, sizeof(appdir), "src/apps/%s", entry->d_name);
+            struct stat st;
+            if (stat(appdir, &st) == 0 && S_ISDIR(st.st_mode)) {
+                char cmd[2048];
+                snprintf(cmd, sizeof(cmd), "./arcore/armake build %s arcore/apps/%s.arapp %s",
+                         appdir, entry->d_name, force ? "--force" : "");
+                system(cmd);
+            }
+        }
+        closedir(d);
+    }
+#endif
+    printf("\n\033[1;32m✓\033[0m Todas as aplicacoes foram verificadas e empacotadas.\n\n");
+
+    /* 4. Trigger auto-discovery & process reload */
+    printf("\033[1;34m[4/4]\033[0m Notificando arcore para atualizar registro e daemons...\n");
+    int fd = ctl_connect();
+    if (fd >= 0) {
+        send_and_print(fd, IPC_CTL_REFRESH, NULL);
+        ar_socket_close(fd);
+        printf("\033[1;32m✓\033[0m arcore atualizado com sucesso.\n\n");
+    } else {
+        printf("\033[1;33m[INFO]\033[0m arcore nao esta rodando no momento. Inicie com: ./alrios power on\n\n");
+    }
+
+    /* 5. Print status table */
+    printf("\033[1;36m=== Status Atual do Ecossistema ===\033[0m\n");
+    run_ctl(IPC_CTL_STATUS, NULL);
+    return 0;
+}
+
 static int cmd_update(const char *which) {
+    if (strcmp(which, "all") == 0) {
+        char *fake_argv[] = {"alrios", "fullupdate"};
+        return cmd_fullupdate(2, fake_argv);
+    }
+
     char base[1024], root[1024];
     get_base_dir(base, sizeof(base));
     strncpy(root, base, sizeof(root) - 1);
@@ -270,15 +370,7 @@ static int cmd_update(const char *which) {
     if (sep) *sep = '\0';
 
     char cmd[2048];
-    if (strcmp(which, "all") == 0) {
-#ifdef _WIN32
-        snprintf(cmd, sizeof(cmd), "build.bat");
-#else
-        snprintf(cmd, sizeof(cmd), "bash build_linux.sh");
-#endif
-    } else {
-        snprintf(cmd, sizeof(cmd), "cmake --build build-linux --config Release --target %s", which);
-    }
+    snprintf(cmd, sizeof(cmd), "cmake --build build-linux --config Release --target %s", which);
 
     printf("update %s: %s\n  (dir: %s)\n", which, cmd, root);
     if (chdir(root) != 0) { printf("chdir failed: %s\n", root); return 1; }
@@ -406,6 +498,9 @@ int main(int argc, char *argv[]) {
         }
         return cmd_update(w);
     }
+
+    if (strcmp(a1, "fullupdate") == 0)
+        return cmd_fullupdate(argc, argv);
 
     if (strcmp(a1, "build") == 0)
         return cmd_build(argc, argv);

@@ -54,6 +54,11 @@ dist/
 .vs/
 .vscode/
 .idea/
+# Storage & backups
+storage/
+storage.bak/
+*.db
+*.db.tmp
 *.user
 *.suo
 *.userosv

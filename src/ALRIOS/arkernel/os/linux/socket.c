@@ -24,6 +24,10 @@ static int os_socket_create(int type) {
     if (fd == -1) return -errno;
     int flag = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(int));
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *)&flag, sizeof(int));
+#ifdef SO_REUSEPORT
+    setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, (char *)&flag, sizeof(int));
+#endif
     return fd;
 }
 

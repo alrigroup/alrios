@@ -1059,6 +1059,66 @@ static void prepare_staging(ar_app_manifest_t *m,
     }
 }
 
+static unsigned long long hash_file_content(const char *path, unsigned long long seed) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return seed;
+    unsigned long long h = seed;
+    unsigned char buf[8192];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+        for (size_t i = 0; i < n; i++) {
+            h ^= (unsigned long long)buf[i];
+            h *= 1099511628211ULL;
+        }
+    }
+    fclose(f);
+    return h;
+}
+
+static unsigned long long calc_dir_src_hash(const char *base, const char *rel, unsigned long long h) {
+    walker_t w;
+    if (walker_open(&w, base) != 0) return h;
+
+    char name[1024];
+    int is_dir;
+    while (walker_next(&w, name, &is_dir)) {
+        if (is_dir) {
+            if (strcmp(name, ".git") == 0 || strcmp(name, "node_modules") == 0 ||
+                strcmp(name, "build") == 0 || strcmp(name, "dist") == 0 ||
+                strcmp(name, ".staging") == 0 || strcmp(name, "tmp") == 0)
+                continue;
+            char sub_base[1024], sub_rel[1024];
+            snprintf(sub_base, sizeof(sub_base), "%s%c%s", base, SEPARATOR, name);
+            if (rel && rel[0]) snprintf(sub_rel, sizeof(sub_rel), "%s/%s", rel, name);
+            else snprintf(sub_rel, sizeof(sub_rel), "%s", name);
+            h = calc_dir_src_hash(sub_base, sub_rel, h);
+        } else {
+            if (should_skip(name)) continue;
+            const char *ext = strrchr(name, '.');
+            if (ext && (strcmp(ext, ".hash") == 0 || strcmp(ext, ".arapp") == 0 || strcmp(ext, ".tmp") == 0))
+                continue;
+
+            char fullpath[1024];
+            snprintf(fullpath, sizeof(fullpath), "%s%c%s", base, SEPARATOR, name);
+            for (const char *p = name; *p; p++) {
+                h ^= (unsigned long long)(*p);
+                h *= 1099511628211ULL;
+            }
+            long sz = file_size(fullpath);
+            h ^= (unsigned long long)sz;
+            h *= 1099511628211ULL;
+            h = hash_file_content(fullpath, h);
+        }
+    }
+    walker_close(&w);
+    return h;
+}
+
+static unsigned long long calc_app_source_hash(const char *app_dir) {
+    unsigned long long h = 14695981039346656037ULL; /* FNV-1a 64-bit offset basis */
+    return calc_dir_src_hash(app_dir, "", h);
+}
+
 static int cmd_build(int argc, char **argv) {
 
     const char *dir = ".";
@@ -1067,6 +1127,7 @@ static int cmd_build(int argc, char **argv) {
     const char *arwn_build_override = NULL;
     char target[32] = {0};
     int universal = 0;
+    int force_build = 0;
 
     /* parse flags and positional args */
     for (int i = 2; i < argc; i++) {
@@ -1074,6 +1135,8 @@ static int cmd_build(int argc, char **argv) {
             strncpy(target, argv[++i], sizeof(target) - 1);
         } else if (strcmp(argv[i], "--universal") == 0) {
             universal = 1;
+        } else if (strcmp(argv[i], "--force") == 0 || strcmp(argv[i], "-f") == 0) {
+            force_build = 1;
         } else if (strcmp(argv[i], "--staging") == 0 && i + 1 < argc) {
             staging_override = argv[++i];
         } else if (strcmp(argv[i], "--arwn-build") == 0 && i + 1 < argc) {
@@ -1110,25 +1173,11 @@ static int cmd_build(int argc, char **argv) {
         return 1;
     }
 
-    /* --- Execute build steps / legacy command if specified --- */
-    int has_build = (m.build.step_count > 0 || m.build.command[0]);
-    if (has_build) {
-        char app_dir_buf[1024] = {0};
-        snprintf(app_dir_buf, sizeof(app_dir_buf), "%s", manifest_path);
-        char *lsep = strrchr(app_dir_buf, SEPARATOR);
-        if (lsep) *lsep = '\0';
-        else snprintf(app_dir_buf, sizeof(app_dir_buf), "%s", dir);
-
-        set_g_appdir(app_dir_buf);
-        g_snap_count = 0;
-        g_snap = NULL;
-        snap_dir(app_dir_buf, "", &g_snap, &g_snap_count);
-
-        if (run_build_steps_from_manifest(&m, app_dir_buf, staging_override, arwn_build_override) != 0) {
-            cleanup_and_report();
-            return 1;
-        }
-    }
+    char app_dir_buf[1024] = {0};
+    snprintf(app_dir_buf, sizeof(app_dir_buf), "%s", manifest_path);
+    char *lsep = strrchr(app_dir_buf, SEPARATOR);
+    if (lsep) *lsep = '\0';
+    else snprintf(app_dir_buf, sizeof(app_dir_buf), "%s", dir);
 
     /* determine output path */
     char output[1024];
@@ -1140,6 +1189,38 @@ static int cmd_build(int argc, char **argv) {
         snprintf(output, sizeof(output), "%s%c%s.arapp", dir, SEPARATOR, m.name);
     }
     normalize_path(output);
+
+    /* --- Content-Hash Incremental Checking --- */
+    char hash_file[1024];
+    snprintf(hash_file, sizeof(hash_file), "%s.hash", output);
+    unsigned long long current_src_hash = calc_app_source_hash(app_dir_buf);
+
+    if (!force_build && file_size(output) > 0) {
+        FILE *hf = fopen(hash_file, "r");
+        if (hf) {
+            unsigned long long cached_hash = 0;
+            if (fscanf(hf, "%llx", &cached_hash) == 1 && cached_hash == current_src_hash) {
+                fclose(hf);
+                printf("\033[32m[armake]\033[0m \033[1m[UP-TO-DATE]\033[0m %s (source unchanged, 0.00s)\n", m.name);
+                return 0;
+            }
+            fclose(hf);
+        }
+    }
+
+    /* --- Execute build steps / legacy command if specified --- */
+    int has_build = (m.build.step_count > 0 || m.build.command[0]);
+    if (has_build) {
+        set_g_appdir(app_dir_buf);
+        g_snap_count = 0;
+        g_snap = NULL;
+        snap_dir(app_dir_buf, "", &g_snap, &g_snap_count);
+
+        if (run_build_steps_from_manifest(&m, app_dir_buf, staging_override, arwn_build_override) != 0) {
+            cleanup_and_report();
+            return 1;
+        }
+    }
 
     /* create output directory if needed */
     char *last_sep = strrchr(output, SEPARATOR);
@@ -1296,6 +1377,13 @@ static int cmd_build(int argc, char **argv) {
 
     zip_close(z);
     cleanup_and_report();
+
+    FILE *hf = fopen(hash_file, "w");
+    if (hf) {
+        fprintf(hf, "%llx\n", current_src_hash);
+        fclose(hf);
+    }
+
     printf("[OK] %s criado (%d files)\n", output, total_packed);
     return 0;
 }
