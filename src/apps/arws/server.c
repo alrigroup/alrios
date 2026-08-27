@@ -937,7 +937,17 @@ int server_start(int port, int mode, RequestHandler handler) {
 
     if (mode == MODE_SECURE) {
         ctx = ar_ssl_ctx_create(1);
-        if (ctx && ar_ssl_ctx_use_certificate(ctx, "storage/arws/certs/cert.pem", "storage/arws/certs/key.pem") == 0) {
+        int ssl_ok = 0;
+        if (ctx) {
+            if (ar_ssl_ctx_use_certificate(ctx, "storage/arws/certs/cert.pem", "storage/arws/certs/key.pem") == 0) {
+                ssl_ok = 1;
+            } else if (ar_ssl_ctx_use_certificate(ctx, "arcore/storage/arws/certs/cert.pem", "arcore/storage/arws/certs/key.pem") == 0) {
+                ssl_ok = 1;
+            } else if (ar_ssl_ctx_use_certificate(ctx, "../storage/arws/certs/cert.pem", "../storage/arws/certs/key.pem") == 0) {
+                ssl_ok = 1;
+            }
+        }
+        if (ssl_ok) {
             void *redir = ar_thread_create(redirector_thread, NULL);
             if (redir) ar_thread_detach(redir);
             using_ssl = 1;
