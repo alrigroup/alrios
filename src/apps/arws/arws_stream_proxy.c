@@ -86,8 +86,11 @@ int arws_build_http_request(ClientConnection *conn, HttpRequest *req,
     for (int i = 0; i < req->header_count; i++) {
         const char *n = req->headers[i].name;
         if (!has_host && strcasecmp(n, "Host") == 0) has_host = 1;
-        if (!has_connection && (strcasecmp(n, "Connection") == 0
-            || strcasecmp(n, "Proxy-Connection") == 0)) has_connection = 1;
+        if (strcasecmp(n, "Connection") == 0 || strcasecmp(n, "Proxy-Connection") == 0) {
+            has_connection = 1;
+            pos = append_str(buf, bufsize, pos, "Connection: close\r\n");
+            continue;
+        }
         pos = append_str(buf, bufsize, pos, "%s: %s\r\n", n, req->headers[i].value);
         if (pos < 0) return -1;
     }
@@ -99,7 +102,7 @@ int arws_build_http_request(ClientConnection *conn, HttpRequest *req,
     pos = append_str(buf, bufsize, pos, "X-Forwarded-For: %s\r\n", ip ? ip : "unknown");
     if (pos < 0) return -1;
     if (!has_connection) {
-        pos = append_str(buf, bufsize, pos, "Connection: keep-alive\r\n");
+        pos = append_str(buf, bufsize, pos, "Connection: close\r\n");
         if (pos < 0) return -1;
     }
     pos = append_str(buf, bufsize, pos, "\r\n");
@@ -224,20 +227,6 @@ static int socket_is_alive(int fd) {
 }
 
 static int upstream_get_conn(const char *host, int port) {
-    if (!upstream_pool_mutex) upstream_pool_mutex = ar_mutex_create();
-    ar_mutex_lock(upstream_pool_mutex);
-    for (int i = upstream_pool_count - 1; i >= 0; i--) {
-        if (upstream_pool[i].port == port && strcmp(upstream_pool[i].host, host) == 0) {
-            int fd = upstream_pool[i].fd;
-            upstream_pool[i] = upstream_pool[--upstream_pool_count];
-            ar_mutex_unlock(upstream_pool_mutex);
-            if (socket_is_alive(fd)) return fd;
-            ar_socket_close(fd);
-            ar_mutex_lock(upstream_pool_mutex);
-        }
-    }
-    ar_mutex_unlock(upstream_pool_mutex);
-
     int fd = ar_socket_create(1);
     if (fd < 0) return -1;
     if (ar_socket_connect(fd, host, (uint16_t)port) < 0) {
@@ -248,23 +237,8 @@ static int upstream_get_conn(const char *host, int port) {
 }
 
 static void upstream_release_conn(const char *host, int port, int fd, int keep_alive) {
-    if (!keep_alive || fd < 0) {
-        if (fd >= 0) ar_socket_close(fd);
-        return;
-    }
-    if (!upstream_pool_mutex) upstream_pool_mutex = ar_mutex_create();
-    ar_mutex_lock(upstream_pool_mutex);
-    if (upstream_pool_count < UPSTREAM_POOL_MAX) {
-        strncpy(upstream_pool[upstream_pool_count].host, host, sizeof(upstream_pool[0].host) - 1);
-        upstream_pool[upstream_pool_count].host[sizeof(upstream_pool[0].host) - 1] = '\0';
-        upstream_pool[upstream_pool_count].port = port;
-        upstream_pool[upstream_pool_count].fd = fd;
-        upstream_pool_count++;
-        ar_mutex_unlock(upstream_pool_mutex);
-        return;
-    }
-    ar_mutex_unlock(upstream_pool_mutex);
-    ar_socket_close(fd);
+    (void)host; (void)port; (void)keep_alive;
+    if (fd >= 0) ar_socket_close(fd);
 }
 
 int arws_stream_proxy_forward(ClientConnection *conn, HttpRequest *req,

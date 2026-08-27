@@ -342,10 +342,13 @@ static int route_priority(const ArwsRoute *route, const char *path) {
     int path_len = (int)strlen(path);
     int is_exact = (effective == path_len && strncmp(route->prefix, path, effective) == 0);
 
-    int prio = is_exact ? (is_wildcard ? (effective + 1000) : (effective + 2000)) : effective;
+    /* Longer path prefixes must always beat root wildcards /* */
+    int prio = (effective * 1000);
+    if (is_exact) prio += 50000;
 
+    /* Specific host gives a small tie-breaker bonus */
     if (route->host[0] != '\0' && strcmp(route->host, "*") != 0) {
-        prio += 10000;
+        prio += 100;
     }
     return prio;
 }

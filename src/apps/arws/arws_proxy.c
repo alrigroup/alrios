@@ -89,6 +89,8 @@ int arws_proxy_forward(const char *target_url,
         return build_502_response(out_resp, max_resp_len);
     }
 
+    ar_socket_set_recv_timeout(fd, 3000);
+
     int sent = 0;
     while (sent < raw_len) {
         int n = ar_socket_send(fd, (const char*)raw_req + sent, raw_len - sent);
@@ -104,17 +106,14 @@ int arws_proxy_forward(const char *target_url,
     int header_end = -1;
 
     while (total < max_resp_len) {
-        int r;
-        if (total > 0) {
-            fd_set rfds;
-            struct timeval tv;
-            FD_ZERO(&rfds);
-            FD_SET(fd, &rfds);
-            tv.tv_sec = ARWS_PROXY_TIMEOUT_MS / 1000;
-            tv.tv_usec = (ARWS_PROXY_TIMEOUT_MS % 1000) * 1000;
-            r = select(fd + 1, &rfds, NULL, NULL, &tv);
-            if (r <= 0) break;
-        }
+        fd_set rfds;
+        struct timeval tv;
+        FD_ZERO(&rfds);
+        FD_SET(fd, &rfds);
+        tv.tv_sec = 3;
+        tv.tv_usec = 0;
+        int r = select(fd + 1, &rfds, NULL, NULL, &tv);
+        if (r <= 0) break;
 
         int n = ar_socket_recv(fd, out_resp + total, max_resp_len - total);
         if (n <= 0) break;
