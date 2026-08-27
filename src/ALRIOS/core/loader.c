@@ -1186,6 +1186,8 @@ int loader_power_reload(void) {
 
     loader_scan_phase(apps_dir, 2);
     g_force_extract = 0;
+
+    loader_spawn_autostart_priority();
     return 0;
 }
 
