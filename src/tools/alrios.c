@@ -126,8 +126,9 @@ static int cmd_power_on(void) {
             uint32_t rlen = sizeof(buf);
             int rtype;
             if (ar_ipc_recv_frame(fd, &rtype, buf, &rlen) == 0) {
+                send_and_print(fd, IPC_CTL_POWER_RELOAD, NULL);
                 ar_socket_close(fd);
-                printf("ALRIOS is already running\n");
+                printf("ALRIOS daemons reloaded\n");
                 return 0;
             }
         }
