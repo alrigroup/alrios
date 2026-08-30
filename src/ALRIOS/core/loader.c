@@ -397,6 +397,11 @@ static void spawn_script(const ar_app_manifest_t *m, const char *app_dir, loader
 #else
     pid_t pid = fork();
     if (pid == 0) {
+        int max_fd = (int)sysconf(_SC_OPEN_MAX);
+        if (max_fd < 0 || max_fd > 4096) max_fd = 4096;
+        for (int fd = 3; fd < max_fd; fd++) {
+            close(fd);
+        }
         if (chdir(app_dir) != 0) _exit(127);
         execvp(rt_path, argv);
         _exit(127);

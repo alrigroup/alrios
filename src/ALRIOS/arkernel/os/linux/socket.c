@@ -11,6 +11,7 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <string.h>
 #include <errno.h>
 
@@ -20,14 +21,16 @@ static int os_socket_reuseaddr(int fd, int enable) {
 }
 
 static int os_socket_create(int type) {
+#ifdef SOCK_CLOEXEC
+    int fd = socket(AF_INET, type | SOCK_CLOEXEC, 0);
+#else
     int fd = socket(AF_INET, type, 0);
+#endif
     if (fd == -1) return -errno;
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
     int flag = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(int));
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *)&flag, sizeof(int));
-#ifdef SO_REUSEPORT
-    setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, (char *)&flag, sizeof(int));
-#endif
     return fd;
 }
 
@@ -54,6 +57,7 @@ static int os_socket_accept(int fd) {
     socklen_t slen = sizeof(sa);
     int client = accept(fd, (struct sockaddr *)&sa, &slen);
     if (client == -1) return -errno;
+    fcntl(client, F_SETFD, FD_CLOEXEC);
     return client;
 }
 

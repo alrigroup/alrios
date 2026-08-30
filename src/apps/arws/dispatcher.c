@@ -109,22 +109,7 @@ int arws_dispatch(ClientConnection *conn, HttpRequest *req, const char *effectiv
             final_target[sizeof(final_target) - 1] = '\0';
         }
 
-        unsigned char raw_buf[65536];
-        int raw_len = arws_build_http_request(conn, req, raw_buf, sizeof(raw_buf));
-        if (raw_len <= 0) {
-            arws_send_502(conn, "Bad Gateway (Build Request Failed)");
-            return -1;
-        }
-
-        unsigned char resp_buf[65536];
-        int resp_len = arws_proxy_forward(final_target, raw_buf, raw_len, resp_buf, sizeof(resp_buf));
-        if (resp_len <= 0) {
-            arws_send_502(conn, "Bad Gateway (Upstream No Response)");
-            return -1;
-        }
-
-        server_conn_write(conn, resp_buf, resp_len);
-        return 0;
+        return arws_stream_proxy_forward(conn, req, final_target);
     }
 
     if (result == 1 && route.backend_id >= 0) {

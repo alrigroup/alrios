@@ -324,8 +324,8 @@ int arws_stream_proxy_forward(ClientConnection *conn, HttpRequest *req,
     while (total < ARWS_STREAM_BUF_SIZE) {
         FD_ZERO(&rfds);
         FD_SET(target_fd, &rfds);
-        tv.tv_sec = ARWS_STREAM_TIMEOUT_MS / 1000;
-        tv.tv_usec = (ARWS_STREAM_TIMEOUT_MS % 1000) * 1000;
+        tv.tv_sec = 5;
+        tv.tv_usec = 0;
         int r = eintr_select(target_fd + 1, &rfds, &tv);
         if (r <= 0) {
             alri_print(RED "[ARWS-PROXY]" RST " select timeout/error r=%d (total=%d)\n", r, total);
