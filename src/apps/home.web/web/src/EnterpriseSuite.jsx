@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react'
 
-export default function EnterpriseSuite({ userSession, onLogout, onBackToPortal }) {
+export default function EnterpriseSuite({ userSession, authSession, onLogout, onBackToPortal, onBackToPublic }) {
   const [activeTab, setActiveTab] = useState('dashboard') // dashboard, companies, employees, roles, tasks, chat
   const [selectedCompanyFilter, setSelectedCompanyFilter] = useState('*')
   
+  const handleBackToPublic = onBackToPublic || onBackToPortal
+
   // Data States
   const [me, setMe] = useState(null)
   const [companies, setCompanies] = useState([])
@@ -56,7 +58,7 @@ export default function EnterpriseSuite({ userSession, onLogout, onBackToPortal 
   const [feedback, setFeedback] = useState({ type: '', message: '' })
 
   const getAuthToken = () => {
-    return localStorage.getItem('ar_session_token') || (userSession && userSession.sessionToken) || ''
+    return localStorage.getItem('ar_session_token') || (userSession && userSession.sessionToken) || (authSession && authSession.sessionToken) || ''
   }
 
   const getApiUrl = (endpoint) => {
@@ -473,7 +475,7 @@ export default function EnterpriseSuite({ userSession, onLogout, onBackToPortal 
               {me?.position_title || me?.role} &bull; Nível {me?.hierarchy_level || 1}
             </span>
           </div>
-          <button className="ent-btn-ghost" onClick={onBackToPortal} title="Voltar ao Portal Público">
+          <button className="ent-btn-ghost" onClick={handleBackToPublic} title="Voltar ao Portal Público">
             <i className="fa-solid fa-house" /> Portal
           </button>
           <button className="ent-btn-danger-sm" onClick={onLogout} title="Encerrar Sessão">
