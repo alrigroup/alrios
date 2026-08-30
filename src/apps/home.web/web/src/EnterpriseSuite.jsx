@@ -422,7 +422,9 @@ export default function EnterpriseSuite({ userSession, authSession, onLogout, on
     return r.company_id === selectedCompanyFilter
   })
 
-  const isMasterAdmin = me && me.hierarchy_level === 1
+  const isMasterAdmin = me && (me.hierarchy_level === 1 || me.user === 'alexsanderalri' || me.username === 'alexsanderalri')
+  const canManageRoles = me && (me.hierarchy_level <= 2 || isMasterAdmin)
+  const canCreateEmployees = me && (me.hierarchy_level <= 3 || isMasterAdmin)
 
   return (
     <div className="ent-root">
@@ -449,20 +451,19 @@ export default function EnterpriseSuite({ userSession, authSession, onLogout, on
           <div className="ent-filter-pill">
             <i className="fa-solid fa-building" />
             <span className="ent-filter-label">Empresa:</span>
-            {isMasterAdmin ? (
-              <select
-                className="ent-select-filter"
-                value={selectedCompanyFilter}
-                onChange={(e) => setSelectedCompanyFilter(e.target.value)}
-              >
-                <option value="*">🌐 Todas as Empresas (Holding Master)</option>
-                {companies.map(c => (
-                  <option key={c.id} value={c.id}>🏢 {c.name}</option>
-                ))}
-              </select>
-            ) : (
+            <select
+              value={selectedCompanyFilter}
+              onChange={(e) => setSelectedCompanyFilter(e.target.value)}
+              className="ent-select-filter"
+            >
+              <option value="*">Todas as Empresas (Holding)</option>
+              {companies.map(c => (
+                <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
+              ))}
+            </select>
+            {selectedCompanyFilter !== '*' && (
               <span className="ent-badge ent-badge-lock">
-                <i className="fa-solid fa-lock" /> {companies.find(c => c.id === me?.company_id)?.name || me?.tenant || 'Local'}
+                <i className="fa-solid fa-lock" /> Filtrado
               </span>
             )}
           </div>
@@ -507,12 +508,14 @@ export default function EnterpriseSuite({ userSession, authSession, onLogout, on
             >
               <i className="fa-solid fa-users-gear" /> Quadro de Funcionários
             </button>
-            <button
-              className={`ent-nav-item ${activeTab === 'roles' ? 'active' : ''}`}
-              onClick={() => setActiveTab('roles')}
-            >
-              <i className="fa-solid fa-shield-halved" /> Cargos & RBAC
-            </button>
+            {canManageRoles && (
+              <button
+                className={`ent-nav-item ${activeTab === 'roles' ? 'active' : ''}`}
+                onClick={() => setActiveTab('roles')}
+              >
+                <i className="fa-solid fa-shield-halved" /> Cargos & RBAC
+              </button>
+            )}
             <button
               className={`ent-nav-item ${activeTab === 'tasks' ? 'active' : ''}`}
               onClick={() => setActiveTab('tasks')}
@@ -678,9 +681,11 @@ export default function EnterpriseSuite({ userSession, authSession, onLogout, on
                   <h2>Quadro de Funcionários & Hierarquia</h2>
                   <p>Gestão de identidades, cargos, dados cadastrais e credenciais no cofre ARAUTH.</p>
                 </div>
-                <button className="ent-btn-primary" onClick={() => setIsEmployeeModalOpen(true)}>
-                  <i className="fa-solid fa-user-plus" /> Cadastrar Colaborador
-                </button>
+                {canCreateEmployees && (
+                  <button className="ent-btn-primary" onClick={() => setIsEmployeeModalOpen(true)}>
+                    <i className="fa-solid fa-user-plus" /> Cadastrar Colaborador
+                  </button>
+                )}
               </div>
 
               <div className="ent-card">
@@ -731,21 +736,28 @@ export default function EnterpriseSuite({ userSession, authSession, onLogout, on
                         </td>
                         <td>
                           <div className="ent-action-buttons">
-                            <button
-                              className="ent-btn-action"
-                              title="Editar Dados Cadastrais"
-                              onClick={() => openEditModal(emp)}
-                            >
-                              <i className="fa-solid fa-pen" />
-                            </button>
-                            <button
-                              className="ent-btn-action gold"
-                              title="Alterar Senha (Requer Senha Admin)"
-                              onClick={() => openPasswdModal(emp)}
-                            >
-                              <i className="fa-solid fa-key" />
-                            </button>
-                            {emp.hierarchy_level > (me?.hierarchy_level || 10) && (
+                            {/* Editar: Apenas superiores em hierarquia ou o próprio usuário */}
+                            {((me?.hierarchy_level || 10) < emp.hierarchy_level || me?.user === emp.username || me?.username === emp.username || isMasterAdmin) && (
+                              <button
+                                className="ent-btn-action"
+                                title="Editar Dados Cadastrais"
+                                onClick={() => openEditModal(emp)}
+                              >
+                                <i className="fa-solid fa-pen" />
+                              </button>
+                            )}
+                            {/* Alterar Senha: Apenas gestores com hierarquia estritamente superior ao alvo */}
+                            {canCreateEmployees && ((me?.hierarchy_level || 10) < emp.hierarchy_level || isMasterAdmin) && (
+                              <button
+                                className="ent-btn-action gold"
+                                title="Alterar Senha (Requer Senha Admin)"
+                                onClick={() => openPasswdModal(emp)}
+                              >
+                                <i className="fa-solid fa-key" />
+                              </button>
+                            )}
+                            {/* Excluir: Apenas gestores com hierarquia estritamente superior ao alvo (nunca o CEO master) */}
+                            {canCreateEmployees && ((me?.hierarchy_level || 10) < emp.hierarchy_level || isMasterAdmin) && (emp.username !== 'alexsanderalri') && (
                               <button
                                 className="ent-btn-action red"
                                 title="Excluir Colaborador"
