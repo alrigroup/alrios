@@ -126,10 +126,10 @@ static int gw_register_host_routes(int fd, const char *name, const char *host, c
         }
     }
 
-    /* 2. Se o app tem página 404 própria (unit notfound), cadastra automaticamente '/*' no ARWS */
-    if (!registered_wildcard && server && arwn_server_has_notfound_route(server)) {
+    /* 2. Cadastra automaticamente catch-all '/*' no ARWS para rotear SPAs e sub-rotas */
+    if (!registered_wildcard && server) {
         if (gw_register_single_route(fd, name, "/*", &host_cfg) == 0) {
-            printf("[arwn] auto-registered catch-all GET /* host=%s (has custom 404) -> proxy://%s:%u\n",
+            printf("[arwn] auto-registered catch-all GET /* host=%s -> proxy://%s:%u\n",
                    host_cfg.route_host, host_cfg.server_bind, host_cfg.server_port);
             registered_wildcard = 1;
         }

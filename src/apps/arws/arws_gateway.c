@@ -583,10 +583,10 @@ static void *client_handler_loop(void *arg) {
                                 char cfg_path[256];
                                 const char *p = prefix;
                                 while (*p == '/') p++;
-                                if (strcmp(p, "*") == 0) {
+                                if (strcmp(p, "*") == 0 || strcmp(prefix, "/*") == 0 || strcmp(prefix, "*") == 0) {
                                     snprintf(cfg_path, sizeof(cfg_path), "*");
-                                } else if (!p[0]) {
-                                    snprintf(cfg_path, sizeof(cfg_path), "/");
+                                } else if (!p[0] || strcmp(prefix, "/") == 0) {
+                                    snprintf(cfg_path, sizeof(cfg_path), "*");
                                 } else {
                                     snprintf(cfg_path, sizeof(cfg_path), "%s", p);
                                 }

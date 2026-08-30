@@ -310,25 +310,34 @@ static int save_config(void) {
     fprintf(f, "cache_ttl=%d\n", cache_ttl_config);
 
     for (int i = 0; i < override_count; i++) {
+        const char *p = overrides[i].path;
+        while (*p == '/') p++;
+        if (!p[0]) p = "*";
         if (overrides[i].mode[0]) {
             fprintf(f, "\"%s/%s\" = %s%s\n",
-                    overrides[i].host, overrides[i].path, overrides[i].mode,
+                    overrides[i].host, p, overrides[i].mode,
                     overrides[i].no_cache ? " no-cache" : "");
         } else if (overrides[i].no_cache) {
             fprintf(f, "\"%s/%s\" = no-cache\n",
-                    overrides[i].host, overrides[i].path);
+                    overrides[i].host, p);
         }
     }
 
     for (int i = 0; i < proxy_route_count; i++) {
+        const char *p = proxy_routes[i].path;
+        while (*p == '/') p++;
+        if (!p[0]) p = "*";
         fprintf(f, "\"%s/%s\" = %s\n",
-                proxy_routes[i].host, proxy_routes[i].path,
+                proxy_routes[i].host, p,
                 proxy_routes[i].target_url);
     }
 
     for (int i = 0; i < stream_route_count; i++) {
+        const char *p = stream_routes[i].path;
+        while (*p == '/') p++;
+        if (!p[0]) p = "*";
         fprintf(f, "\"%s/%s\" = stream %s\n",
-                stream_routes[i].host, stream_routes[i].path,
+                stream_routes[i].host, p,
                 stream_routes[i].target_url);
     }
 

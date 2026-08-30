@@ -8,6 +8,7 @@ copyright=/*Copyright (c) 2026 ALRIGROUP. All rights reserved.*/
 [arws]
 gateway=127.0.0.1:9500
 route.host=alrigroup.com, localhost, 127.0.0.1
+route.path=/*
 route.mode=production
 
 [unit:main]
