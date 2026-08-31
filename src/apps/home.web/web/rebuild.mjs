@@ -47,10 +47,15 @@ if (!existsSync('node_modules') || !existsSync('node_modules/.bin/vite')) {
 }
 run(npmCmd, ['run', 'build'])
 
-// Copy index.html -> main.arhtml for ARWN unit entry
+// Copy index.html -> main.arhtml for ARWN unit entry with cache-busting
 const dist = resolve('dist')
 if (existsSync(join(dist, 'index.html'))) {
-  writeFileSync(join(dist, 'main.arhtml'), readFileSync(join(dist, 'index.html')), 'utf-8')
+  let html = readFileSync(join(dist, 'index.html'), 'utf-8')
+  const v = Date.now()
+  html = html.replace(/href="([^"]*main\.css[^"]*)"/g, (_, p1) => `href="${p1.split('?')[0]}?v=${v}"`)
+             .replace(/src="([^"]*main\.js[^"]*)"/g, (_, p1) => `src="${p1.split('?')[0]}?v=${v}"`)
+  writeFileSync(join(dist, 'index.html'), html, 'utf-8')
+  writeFileSync(join(dist, 'main.arhtml'), html, 'utf-8')
 }
 
 // Cleanup: delete node_modules (dist/ is preserved so arwn_build can read it next)
