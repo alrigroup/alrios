@@ -282,6 +282,63 @@ body {
     color: var(--neon-red);
 }
 
+/* Sovereign Language Switcher */
+.lang-switcher {
+    display: flex;
+    align-items: center;
+}
+
+.lang-switcher button,
+#langBtn {
+    background: rgba(17, 17, 17, 0.7);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 7px 14px;
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    letter-spacing: 1px;
+    cursor: pointer;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    outline: none;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.lang-switcher button i,
+#langBtn i {
+    color: var(--neon-red);
+    font-size: 0.82rem;
+    transition: transform 0.3s ease, color 0.3s ease;
+}
+
+.lang-switcher button:hover,
+#langBtn:hover {
+    background: rgba(255, 0, 60, 0.12);
+    border-color: var(--neon-red);
+    color: #ffffff;
+    box-shadow: 0 0 16px var(--neon-red-glow);
+    transform: translateY(-1px);
+}
+
+.lang-switcher button:hover i,
+#langBtn:hover i {
+    transform: rotate(20deg);
+    color: #ffffff;
+}
+
+.lang-switcher button:active,
+#langBtn:active {
+    transform: translateY(0);
+    box-shadow: 0 0 8px var(--neon-red-glow);
+}
+
 /* Modal Backdrop & Popup */
 .auth-modal-overlay {
     position: fixed;
