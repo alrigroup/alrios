@@ -305,10 +305,23 @@ static void load_native(const ar_app_manifest_t *m, const char *app_dir, loader_
                         m->name, libpath);
             return;
         }
+        char saved_cwd[1024];
+#ifdef _WIN32
+        if (!_getcwd(saved_cwd, sizeof(saved_cwd))) saved_cwd[0] = '\0';
+        if (_chdir(app_dir) != 0) saved_cwd[0] = '\0';
+#else
+        if (!getcwd(saved_cwd, sizeof(saved_cwd))) saved_cwd[0] = '\0';
+        if (chdir(app_dir) != 0) saved_cwd[0] = '\0';
+#endif
         char *argv[2];
         argv[0] = libpath;
         argv[1] = NULL;
         int pid = ar_process_create(libpath, argv);
+#ifdef _WIN32
+        if (saved_cwd[0]) _chdir(saved_cwd);
+#else
+        if (saved_cwd[0]) chdir(saved_cwd);
+#endif
         if (pid > 0) {
             if (proc_group)
                 ar_process_group_add(proc_group, pid);
@@ -754,12 +767,13 @@ static int is_autostart(const char *name) {
 static int app_priority(const char *name) {
     if (strcmp(name, "ardb") == 0) return 1;
     if (strcmp(name, "arauth") == 0) return 2;
-    if (strcmp(name, "arapiauth") == 0) return 3;
+    if (strcmp(name, "arapiauth") == 0 || strcmp(name, "arapilogs") == 0) return 3;
     if (strcmp(name, "arcdn") == 0) return 4;
-    if (strcmp(name, "arenterprise") == 0) return 5;
+    if (strncmp(name, "arapi", 5) == 0) return 5;
     if (strcmp(name, "home-web") == 0 || strcmp(name, "home.web") == 0) return 6;
     if (strcmp(name, "detroit-web") == 0 || strcmp(name, "detroit.web") == 0) return 7;
-    return 10;
+    if (strcmp(name, "arwork-web") == 0 || strcmp(name, "arwork.web") == 0) return 8;
+    return 9;
 }
 
 void loader_spawn_autostart_priority(void) {
@@ -1216,6 +1230,7 @@ void loader_stop_all(void) {
 
 int loader_power_reload(void) {
     loader_stop_all();
+    ar_sleep_ms(500);
 
     char apps_dir[1024];
     loader_get_apps_dir(apps_dir, sizeof(apps_dir));
@@ -1229,6 +1244,7 @@ int loader_power_reload(void) {
     loader_scan_phase(apps_dir, 2);
     g_force_extract = 0;
 
+    ar_sleep_ms(200);
     loader_spawn_autostart_priority();
     return 0;
 }
