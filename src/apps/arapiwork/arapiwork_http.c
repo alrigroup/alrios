@@ -6,9 +6,8 @@
  * and at: https://github.com/alrigroup/licenses/tree/main
  */
 
-#include "arapilogs_http.h"
-#include "arapilogs_config.h"
-#include "arapilogs_db.h"
+#include "arapiwork_http.h"
+#include "arapiwork_config.h"
 #include "aros_hal.h"
 #include "log.h"
 #include <stdio.h>
@@ -87,7 +86,7 @@ static char* extract_json_string(const char *json, const char *key) {
 }
 
 static char* extract_session_token_from_request(const char *buf) {
-    char *auth = strstr(buf, "Authorization: Bearer ");
+    char *auth = strstr((char*)buf, "Authorization: Bearer ");
     if (auth) {
         auth += 22;
         char token[128] = {0};
@@ -122,7 +121,7 @@ static int verify_auth_token(const char *token, AuthSession *out_sess) {
     if (!token || !out_sess) return -1;
     memset(out_sess, 0, sizeof(AuthSession));
 
-    ArapilogsConfig *cfg = arapilogs_config_get();
+    ArapiworkConfig *cfg = arapiwork_config_get();
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) return -1;
 
@@ -170,15 +169,45 @@ static int verify_auth_token(const char *token, AuthSession *out_sess) {
     if (t) { strncpy(out_sess->tenant, t, sizeof(out_sess->tenant) - 1); free(t); }
     if (r) { strncpy(out_sess->role, r, sizeof(out_sess->role) - 1); free(r); }
     if (m) {
-        out_sess->is_master = (strncmp(m, "true", 4) == 0 || strcmp(m, "1") == 0);
+        out_sess->is_master = (strcmp(m, "true") == 0 || strcmp(m, "1") == 0);
         free(m);
-    }
-    if (strcmp(out_sess->user, "alexsanderalri") == 0 ||
-        (strcmp(out_sess->role, "admin") == 0 && (strcmp(out_sess->tenant, "alrigroup") == 0 || strcmp(out_sess->tenant, "holding") == 0 || strcmp(out_sess->tenant, "global") == 0))) {
-        out_sess->is_master = 1;
     }
     out_sess->valid = 1;
     return 0;
+}
+
+static void log_audit_event(const char *user, const char *tenant, const char *action, const char *details) {
+    ArapiworkConfig *cfg = arapiwork_config_get();
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return;
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(cfg->logs_port);
+    inet_pton(AF_INET, cfg->logs_host, &addr.sin_addr);
+
+    if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
+        close(fd);
+        return;
+    }
+
+    char body[512];
+    int body_len = snprintf(body, sizeof(body),
+        "{\"user\":\"%s\",\"tenant\":\"%s\",\"service\":\"arwork\",\"action\":\"%s\",\"severity\":\"INFO\",\"status_code\":200,\"details\":\"%s\"}",
+        user ? user : "system", tenant ? tenant : "global", action, details);
+
+    char req[1024];
+    int req_len = snprintf(req, sizeof(req),
+        "POST /arapi/logs/ingest HTTP/1.1\r\n"
+        "Host: %s:%d\r\n"
+        "Content-Type: application/json\r\n"
+        "Content-Length: %d\r\n"
+        "Connection: close\r\n\r\n%s",
+        cfg->logs_host, cfg->logs_port, body_len, body);
+
+    write(fd, req, req_len);
+    close(fd);
 }
 
 static void* http_client_worker(void *arg) {
@@ -202,114 +231,20 @@ static void* http_client_worker(void *arg) {
         return NULL;
     }
 
-    char client_ip[64] = "127.0.0.1";
-    char *xff = strstr(buf, "X-Forwarded-For:");
-    if (xff) {
-        sscanf(xff + 16, "%63s", client_ip);
-        char *comma = strchr(client_ip, ',');
-        if (comma) *comma = '\0';
-    }
-
-    char *body = strstr(buf, "\r\n\r\n");
-    if (body) body += 4;
-
-    /* 1. GET /arapi/logs/status or /health */
+    /* 1. GET /arapi/work/status or /health */
     if (strcmp(method, "GET") == 0 &&
-        (strcmp(path, "/arapi/logs/status") == 0 || strcmp(path, "/arapi/logs/health") == 0 || strcmp(path, "/arapi/logs/") == 0)) {
+        (strcmp(path, "/arapi/work/status") == 0 || strcmp(path, "/arapi/work/health") == 0 || strcmp(path, "/arapi/work/") == 0)) {
         char json[512];
         snprintf(json, sizeof(json),
-            "{\"status\":\"online\",\"backend\":\"arapilogs\",\"prefix\":\"/arapi/logs\","
-            "\"guarantee\":\"Sovereign Audit Log with Strict DM Privacy Isolation\"}\n");
+            "{\"status\":\"online\",\"backend\":\"arapiwork\",\"prefix\":\"/arapi/work\","
+            "\"hub\":\"ALRIGROUP Sovereign Workspace Hub\"}\n");
         send_http_response(client_fd, 200, "OK", "application/json", NULL, json);
         ar_socket_close(client_fd);
         return NULL;
     }
 
-    /* 2. POST /arapi/logs/ingest (Event Ingestion from any internal ALRI service) */
-    if (strcmp(method, "POST") == 0 && (strcmp(path, "/arapi/logs/ingest") == 0 || strcmp(path, "/arapi/logs") == 0)) {
-        if (!body) {
-            send_http_response(client_fd, 400, "Bad Request", "application/json", NULL, "{\"error\":\"Missing body\"}\n");
-            ar_socket_close(client_fd);
-            return NULL;
-        }
-
-        char *user = extract_json_string(body, "user");
-        char *tenant = extract_json_string(body, "tenant");
-        char *service = extract_json_string(body, "service");
-        char *action = extract_json_string(body, "action");
-        char *severity = extract_json_string(body, "severity");
-        char *status_str = extract_json_string(body, "status_code");
-        char *details = extract_json_string(body, "details");
-        char *req_ip = extract_json_string(body, "ip");
-
-        int status_code = status_str ? atoi(status_str) : 200;
-        const char *effective_ip = (req_ip && req_ip[0]) ? req_ip : client_ip;
-
-        arapilogs_db_append(user, tenant, service, action, severity ? severity : "INFO",
-                            status_code, effective_ip, details);
-
-        if (user) free(user);
-        if (tenant) free(tenant);
-        if (service) free(service);
-        if (action) free(action);
-        if (severity) free(severity);
-        if (status_str) free(status_str);
-        if (details) free(details);
-        if (req_ip) free(req_ip);
-
-        send_http_response(client_fd, 201, "Created", "application/json", NULL, "{\"status\":\"success\",\"message\":\"Event ingested\"}\n");
-        ar_socket_close(client_fd);
-        return NULL;
-    }
-
-    /* 3. GET /arapi/logs or /arapi/logs/query (Protected with Zero-Trust ARAUTH Session) */
-    if (strcmp(method, "GET") == 0 && (strncmp(path, "/arapi/logs/query", 17) == 0 || strcmp(path, "/arapi/logs") == 0)) {
-        char *token = extract_session_token_from_request(buf);
-        AuthSession sess;
-        int auth_ok = (token && verify_auth_token(token, &sess) == 0 && sess.valid);
-        if (token) free(token);
-
-        if (!auth_ok) {
-            send_http_response(client_fd, 401, "Unauthorized", "application/json", NULL, "{\"error\":\"Authentication required to access audit telemetry\"}\n");
-            ar_socket_close(client_fd);
-            return NULL;
-        }
-
-        // Parse query params: ?tenant=...&service=...&severity=...&q=...&limit=...
-        char tenant_param[64] = {0}, service_param[32] = {0}, severity_param[16] = {0}, q_param[128] = {0};
-        int limit = 150;
-
-        char *qmark = strchr(path, '?');
-        if (qmark) {
-            char *p = qmark + 1;
-            char *tok = strtok(p, "&");
-            while (tok) {
-                if (strncmp(tok, "tenant=", 7) == 0) strncpy(tenant_param, tok + 7, sizeof(tenant_param) - 1);
-                else if (strncmp(tok, "service=", 8) == 0) strncpy(service_param, tok + 8, sizeof(service_param) - 1);
-                else if (strncmp(tok, "severity=", 9) == 0) strncpy(severity_param, tok + 9, sizeof(severity_param) - 1);
-                else if (strncmp(tok, "q=", 2) == 0) strncpy(q_param, tok + 2, sizeof(q_param) - 1);
-                else if (strncmp(tok, "limit=", 6) == 0) limit = atoi(tok + 6);
-                tok = strtok(NULL, "&");
-            }
-        }
-
-        // If caller is not master, force tenant filter to caller's own tenant
-        const char *effective_tenant = sess.is_master ? (tenant_param[0] ? tenant_param : "all") : sess.tenant;
-
-        char *json = arapilogs_db_query_json(effective_tenant, sess.is_master,
-                                             service_param[0] ? service_param : NULL,
-                                             severity_param[0] ? severity_param : NULL,
-                                             q_param[0] ? q_param : NULL,
-                                             limit);
-
-        send_http_response(client_fd, 200, "OK", "application/json", NULL, json);
-        free(json);
-        ar_socket_close(client_fd);
-        return NULL;
-    }
-
-    /* 4. GET /arapi/logs/metrics (Protected Dashboard Metrics) */
-    if (strcmp(method, "GET") == 0 && strcmp(path, "/arapi/logs/metrics") == 0) {
+    /* 2. GET /arapi/work/catalog (Protected App Directory) */
+    if (strcmp(method, "GET") == 0 && (strcmp(path, "/arapi/work/catalog") == 0 || strcmp(path, "/arapi/work/apps") == 0)) {
         char *token = extract_session_token_from_request(buf);
         AuthSession sess;
         int auth_ok = (token && verify_auth_token(token, &sess) == 0 && sess.valid);
@@ -321,17 +256,137 @@ static void* http_client_worker(void *arg) {
             return NULL;
         }
 
-        const char *effective_tenant = sess.is_master ? "all" : sess.tenant;
-        char *metrics_json = arapilogs_db_metrics_json(effective_tenant, sess.is_master);
+        log_audit_event(sess.user, sess.tenant, "workspace_catalog_view", "Accessed application hub catalog");
 
-        send_http_response(client_fd, 200, "OK", "application/json", NULL, metrics_json);
-        free(metrics_json);
+        char json[4096];
+        snprintf(json, sizeof(json),
+            "{\n"
+            "  \"user\": \"%s\",\n"
+            "  \"tenant\": \"%s\",\n"
+            "  \"role\": \"%s\",\n"
+            "  \"is_master\": %s,\n"
+            "  \"apps\": [\n"
+            "    {\n"
+            "      \"id\": \"arbus\",\n"
+            "      \"name\": \"ALRI-Business\",\n"
+            "      \"sigla\": \"ARBUS\",\n"
+            "      \"category\": \"Gestão Corporativa\",\n"
+            "      \"description\": \"RH, Organograma, Empresas, Departamentos e Cargos\",\n"
+            "      \"icon\": \"🏢\",\n"
+            "      \"badge\": \"Core\",\n"
+            "      \"url\": \"https://arbus.alrigroup.com\",\n"
+            "      \"local_url\": \"http://arbus.localhost\"\n"
+            "    },\n"
+            "    {\n"
+            "      \"id\": \"arconn\",\n"
+            "      \"name\": \"ALRI-Connect\",\n"
+            "      \"sigla\": \"ARCONN\",\n"
+            "      \"category\": \"Comunicação & Demandas\",\n"
+            "      \"description\": \"Canais por equipe, tarefas Kanban e conversas privadas sigilosas\",\n"
+            "      \"icon\": \"💬\",\n"
+            "      \"badge\": \"Colaboração\",\n"
+            "      \"url\": \"https://arconn.alrigroup.com\",\n"
+            "      \"local_url\": \"http://arconn.localhost\"\n"
+            "    },\n"
+            "    {\n"
+            "      \"id\": \"ardash\",\n"
+            "      \"name\": \"ALRI-Dashboard\",\n"
+            "      \"sigla\": \"ARDASH\",\n"
+            "      \"category\": \"Business Intelligence\",\n"
+            "      \"description\": \"Gráficos analíticos, faturamento executivo e KPIs de performance\",\n"
+            "      \"icon\": \"📊\",\n"
+            "      \"badge\": \"Analytics\",\n"
+            "      \"url\": \"https://ardash.alrigroup.com\",\n"
+            "      \"local_url\": \"http://ardash.localhost\"\n"
+            "    },\n"
+            "    {\n"
+            "      \"id\": \"archat\",\n"
+            "      \"name\": \"ALRI-Chat\",\n"
+            "      \"sigla\": \"ARCHAT\",\n"
+            "      \"category\": \"Atendimento & Suporte\",\n"
+            "      \"description\": \"Painel de atendimento multicanal e widget institucional\",\n"
+            "      \"icon\": \"🎧\",\n"
+            "      \"badge\": \"Tickets\",\n"
+            "      \"url\": \"https://archat.alrigroup.com\",\n"
+            "      \"local_url\": \"http://archat.localhost\"\n"
+            "    },\n"
+            "    {\n"
+            "      \"id\": \"arcloud\",\n"
+            "      \"name\": \"ALRI-Cloud\",\n"
+            "      \"sigla\": \"ARCLOUD\",\n"
+            "      \"category\": \"Arquivos & Drive\",\n"
+            "      \"description\": \"Armazenamento em nuvem soberano e documentos compartilhados\",\n"
+            "      \"icon\": \"☁️\",\n"
+            "      \"badge\": \"Storage\",\n"
+            "      \"url\": \"https://arcloud.alrigroup.com\",\n"
+            "      \"local_url\": \"http://arcloud.localhost\"\n"
+            "    },\n"
+            "    {\n"
+            "      \"id\": \"arstock\",\n"
+            "      \"name\": \"ALRI-Stock\",\n"
+            "      \"sigla\": \"ARSTOCK\",\n"
+            "      \"category\": \"Estoque & Suprimentos\",\n"
+            "      \"description\": \"Controle de inventário, catalogação de SKUs e almoxarifados\",\n"
+            "      \"icon\": \"📦\",\n"
+            "      \"badge\": \"Logística\",\n"
+            "      \"url\": \"https://arstock.alrigroup.com\",\n"
+            "      \"local_url\": \"http://arstock.localhost\"\n"
+            "    },\n"
+            "    {\n"
+            "      \"id\": \"arlogs\",\n"
+            "      \"name\": \"ALRI-Logs\",\n"
+            "      \"sigla\": \"ARLOGS\",\n"
+            "      \"category\": \"Auditoria & Observabilidade\",\n"
+            "      \"description\": \"Central de logs de segurança, telemetria e integridade\",\n"
+            "      \"icon\": \"📜\",\n"
+            "      \"badge\": \"Segurança\",\n"
+            "      \"url\": \"https://arlogs.alrigroup.com\",\n"
+            "      \"local_url\": \"http://arlogs.localhost\"\n"
+            "    }%s\n"
+            "  ]\n"
+            "}\n",
+            sess.user, sess.tenant, sess.role, sess.is_master ? "true" : "false",
+            sess.is_master ? ",\n    {\n      \"id\": \"arctrl\",\n      \"name\": \"ALRI-Server Control\",\n      \"sigla\": \"ARCTRL\",\n      \"category\": \"Infraestrutura\",\n      \"description\": \"Gerenciamento de servidores, modo manutenção e daemons\",\n      \"icon\": \"⚡\",\n      \"badge\": \"Master\",\n      \"url\": \"https://arctrl.alrigroup.com\",\n      \"local_url\": \"http://arctrl.localhost\"\n    }" : "");
+
+        send_http_response(client_fd, 200, "OK", "application/json", NULL, json);
+        ar_socket_close(client_fd);
+        return NULL;
+    }
+
+    /* 3. GET /arapi/work/summary (Workspace Summary & Stats) */
+    if (strcmp(method, "GET") == 0 && strcmp(path, "/arapi/work/summary") == 0) {
+        char *token = extract_session_token_from_request(buf);
+        AuthSession sess;
+        int auth_ok = (token && verify_auth_token(token, &sess) == 0 && sess.valid);
+        if (token) free(token);
+
+        if (!auth_ok) {
+            send_http_response(client_fd, 401, "Unauthorized", "application/json", NULL, "{\"error\":\"Authentication required\"}\n");
+            ar_socket_close(client_fd);
+            return NULL;
+        }
+
+        char json[1024];
+        snprintf(json, sizeof(json),
+            "{\n"
+            "  \"user\": \"%s\",\n"
+            "  \"tenant\": \"%s\",\n"
+            "  \"role\": \"%s\",\n"
+            "  \"unread_notifications\": 0,\n"
+            "  \"active_tasks\": 4,\n"
+            "  \"open_tickets\": 1,\n"
+            "  \"system_status\": \"operational\",\n"
+            "  \"security_shield\": \"Zero-Trust RBAC Active\"\n"
+            "}\n",
+            sess.user, sess.tenant, sess.role);
+
+        send_http_response(client_fd, 200, "OK", "application/json", NULL, json);
         ar_socket_close(client_fd);
         return NULL;
     }
 
     /* Fallback 404 */
-    send_http_response(client_fd, 404, "Not Found", "application/json", NULL, "{\"error\":\"Endpoint not found in /arapi/logs\"}\n");
+    send_http_response(client_fd, 404, "Not Found", "application/json", NULL, "{\"error\":\"Endpoint not found in /arapi/work\"}\n");
     ar_socket_close(client_fd);
     return NULL;
 }
@@ -349,7 +404,7 @@ static void* http_listen_worker(void *arg) {
     return NULL;
 }
 
-int arapilogs_http_server_start(const char *bind_ip, int port) {
+int arapiwork_http_server_start(const char *bind_ip, int port) {
     if (g_http_running) return 0;
 
     g_http_listen_fd = ar_socket_create(1);
@@ -371,20 +426,20 @@ int arapilogs_http_server_start(const char *bind_ip, int port) {
 
     g_http_running = 1;
     g_http_thread = ar_thread_create(http_listen_worker, NULL);
-    alri_print(GRN "[ARAPILOGS]" RST " Audit & Telemetry API Backend listening on %s:%d (prefix: /arapi/logs)\n", bind_ip ? bind_ip : "127.0.0.1", port);
+    alri_print(GRN "[ARAPIWORK]" RST " Workspace Hub API Backend listening on %s:%d (prefix: /arapi/work)\n", bind_ip ? bind_ip : "127.0.0.1", port);
     return 0;
 }
 
-void arapilogs_http_server_stop(void) {
+void arapiwork_http_server_stop(void) {
     if (!g_http_running) return;
     g_http_running = 0;
     if (g_http_listen_fd >= 0) {
         ar_socket_close(g_http_listen_fd);
         g_http_listen_fd = -1;
     }
-    alri_print(CYN "[ARAPILOGS]" RST " Audit & Telemetry API Backend stopped.\n");
+    alri_print(CYN "[ARAPIWORK]" RST " Workspace Hub API Backend stopped.\n");
 }
 
-int arapilogs_http_is_running(void) {
+int arapiwork_http_is_running(void) {
     return g_http_running;
 }
