@@ -906,15 +906,6 @@ static void* pool_worker(void *arg) {
 
 void server_stop(void) {
     http_server_running = 0;
-    if (job_mutex) {
-        ar_mutex_lock(job_mutex);
-        pool_shutdown = 1;
-        if (job_cond) {
-            for (int i = 0; i < POOL_SIZE; i++)
-                ar_cond_signal(job_cond);
-        }
-        ar_mutex_unlock(job_mutex);
-    }
     int fd = http_server_sock;
     http_server_sock = -1;
     if (fd >= 0) {
@@ -933,13 +924,14 @@ int server_start(int port, int mode, RequestHandler handler) {
     if (!job_mutex) {
         job_mutex = ar_mutex_create();
         job_cond = ar_cond_create();
+        pool_shutdown = 0;
+        job_head = job_tail = job_count = 0;
         for (int i = 0; i < POOL_SIZE; i++) {
             pool_threads[i] = ar_thread_create(pool_worker, NULL);
             if (pool_threads[i]) ar_thread_detach(pool_threads[i]);
         }
     }
     pool_shutdown = 0;
-    job_head = job_tail = job_count = 0;
 
     void *ctx = NULL;
     int using_ssl = 0;
