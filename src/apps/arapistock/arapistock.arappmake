@@ -1,0 +1,27 @@
+ALRIGROUP@APPMAKE
+{
+  "name": "arapistock",
+  "bin": "arapistock.arapp",
+  "version": "1.0.0",
+  "runtime": "native",
+  "entry": "arapistock",
+  "platforms": {
+    "windows": {"entry": "arapistock"},
+    "linux": {"entry": "arapistock"},
+    "linux-x64": {"entry": "arapistock"},
+    "linux-arm64": {"entry": "arapistock"}
+  },
+  "build": {
+    "staging": "$ARCORE/.staging/$APP_NAME",
+    "steps": [
+      {
+        "name": "cc",
+        "cmd": "gcc -O2 -I. -I../../ALRIOS/core -I../../ALRIOS/arkernel/include -I../../ALRIOS/arkernel/os/include -o $STAGING/arapistock arapistock_entry.c arapistock_config.c arapistock_db.c arapistock_http.c -L$ARCORE/lib -larkernel -lssl -lcrypto -lpthread"
+      }
+    ]
+  },
+  "files": [
+    "arapistock",
+    "arapistock.cfg"
+  ]
+}

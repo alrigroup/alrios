@@ -8,6 +8,9 @@ pkill -9 -f arapibus || true
 pkill -9 -f arapiconn || true
 pkill -9 -f arapidash || true
 pkill -9 -f arapichat || true
+pkill -9 -f arapicloud || true
+pkill -9 -f arapistock || true
+pkill -9 -f arapictrl || true
 
 sleep 1
 
@@ -20,5 +23,8 @@ setsid /mnt/HD/ALRIGROUP/local/alrios/arcore/.staging/arapibus/arapibus > /tmp/a
 setsid /mnt/HD/ALRIGROUP/local/alrios/arcore/.staging/arapiconn/arapiconn > /tmp/arapiconn.log 2>&1 &
 setsid /mnt/HD/ALRIGROUP/local/alrios/arcore/.staging/arapidash/arapidash > /tmp/arapidash.log 2>&1 &
 setsid /mnt/HD/ALRIGROUP/local/alrios/arcore/.staging/arapichat/arapichat > /tmp/arapichat.log 2>&1 &
+setsid /mnt/HD/ALRIGROUP/local/alrios/arcore/.staging/arapicloud/arapicloud > /tmp/arapicloud.log 2>&1 &
+setsid /mnt/HD/ALRIGROUP/local/alrios/arcore/.staging/arapistock/arapistock > /tmp/arapistock.log 2>&1 &
+setsid /mnt/HD/ALRIGROUP/local/alrios/arcore/.staging/arapictrl/arapictrl > /tmp/arapictrl.log 2>&1 &
 
 sleep 2

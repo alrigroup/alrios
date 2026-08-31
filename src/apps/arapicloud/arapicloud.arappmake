@@ -1,0 +1,27 @@
+ALRIGROUP@APPMAKE
+{
+  "name": "arapicloud",
+  "bin": "arapicloud.arapp",
+  "version": "1.0.0",
+  "runtime": "native",
+  "entry": "arapicloud",
+  "platforms": {
+    "windows": {"entry": "arapicloud"},
+    "linux": {"entry": "arapicloud"},
+    "linux-x64": {"entry": "arapicloud"},
+    "linux-arm64": {"entry": "arapicloud"}
+  },
+  "build": {
+    "staging": "$ARCORE/.staging/$APP_NAME",
+    "steps": [
+      {
+        "name": "cc",
+        "cmd": "gcc -O2 -I. -I../../ALRIOS/core -I../../ALRIOS/arkernel/include -I../../ALRIOS/arkernel/os/include -o $STAGING/arapicloud arapicloud_entry.c arapicloud_config.c arapicloud_db.c arapicloud_http.c -L$ARCORE/lib -larkernel -lssl -lcrypto -lpthread"
+      }
+    ]
+  },
+  "files": [
+    "arapicloud",
+    "arapicloud.cfg"
+  ]
+}
