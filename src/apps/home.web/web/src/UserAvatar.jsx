@@ -21,8 +21,7 @@ export default function UserAvatar({ user, avatarUrl, name, username, size = 'md
     if (typeof window !== 'undefined') {
       const hostname = window.location.hostname
       if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.localhost')) {
-        const port = window.location.port ? `:${window.location.port}` : ''
-        fullSrc = `http://cdn.localhost${port}${rawUrl}`
+        fullSrc = `http://localhost:8080${rawUrl}`
       } else {
         fullSrc = `https://cdn.alrigroup.com${rawUrl}`
       }
