@@ -38,7 +38,7 @@ static void set_defaults(ArdbConfig *cfg) {
     strncpy(cfg->backend_password, "postgres", sizeof(cfg->backend_password) - 1);
     strncpy(cfg->backend_database, "postgres", sizeof(cfg->backend_database) - 1);
 
-    cfg->http_enabled = 0;
+    cfg->http_enabled = 1;
     strncpy(cfg->http_bind, "127.0.0.1", sizeof(cfg->http_bind) - 1);
     cfg->http_port = 5435;
     strncpy(cfg->http_route_prefix, "/api/v1/db", sizeof(cfg->http_route_prefix) - 1);
@@ -55,17 +55,21 @@ int ardb_config_load(const char *cfg_path, ArdbConfig *out_cfg) {
     if (!out_cfg) out_cfg = &g_config;
     set_defaults(out_cfg);
 
-    const char *paths_to_try[4];
-    int try_count = 0;
-    if (cfg_path && cfg_path[0]) {
-        paths_to_try[try_count++] = cfg_path;
-    } else {
-        paths_to_try[try_count++] = "storage/ardb/ardb.cfg";
-        paths_to_try[try_count++] = "ardb.cfg";
-    }
+    const char *paths_to_try[] = {
+        cfg_path,
+        "ardb.cfg",
+        "storage/ardb/ardb.cfg",
+        "arcore/storage/ardb/ardb.cfg",
+        "../storage/ardb/ardb.cfg",
+        "../../storage/ardb/ardb.cfg",
+        "arcore/programfiles/ardb/ardb.cfg",
+        "/mnt/HD/ALRIGROUP/local/alrios/arcore/storage/ardb/ardb.cfg",
+        NULL
+    };
 
     FILE *f = NULL;
-    for (int i = 0; i < try_count; i++) {
+    for (int i = 0; paths_to_try[i]; i++) {
+        if (!paths_to_try[i] || !paths_to_try[i][0]) continue;
         f = fopen(paths_to_try[i], "r");
         if (f) {
             strncpy(g_last_cfg_path, paths_to_try[i], sizeof(g_last_cfg_path) - 1);

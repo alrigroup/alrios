@@ -11,7 +11,7 @@
 
 #include "server.h"
 
-#define ARWS_STREAM_BUF_SIZE 16384
+#define ARWS_STREAM_BUF_SIZE 65536
 #define ARWS_STREAM_TIMEOUT_MS 30000
 
 int arws_stream_proxy_forward(ClientConnection *conn, HttpRequest *req,

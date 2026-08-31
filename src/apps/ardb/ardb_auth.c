@@ -60,7 +60,12 @@ void ardb_auth_init(void) {
     g_auth_initialized = 1;
     ar_mutex_unlock(g_auth_mutex);
 
-    /* ARDB auth initialized clean — apps and accounts are provisioned via CLI */
+    /* Seed standard users and vault administrator accounts */
+    ardb_auth_add_user("alexsanderalri", "123", "alrigroup", "admin");
+    ardb_auth_add_user("admin", "123", "alrigroup", "admin");
+    ardb_auth_add_user("postgres", "postgres", "default", "admin");
+    ardb_auth_add_user("postgres", "123", "default", "admin");
+    ardb_auth_add_user("alexsar", "123", "alrigroup", "admin");
 }
 
 void ardb_auth_cleanup(void) {

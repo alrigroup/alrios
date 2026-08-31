@@ -240,7 +240,7 @@ int main(int argc, char **argv) {
     alri_print_force(CYN "[ALRI DB]" RST " Starting Sovereign Database Guardian Service...\n");
 
     /* Load ardb.cfg */
-    ardb_config_load("ardb.cfg", ardb_config_get());
+    ardb_config_load(NULL, ardb_config_get());
     ArdbConfig *cfg = ardb_config_get();
 
     /* Initialize security modules */

@@ -121,21 +121,10 @@ static int gw_register_host_routes(int fd, const char *name, const char *host, c
         if (gw_register_single_route(fd, name, host_cfg.route_path, &host_cfg) == 0) {
             printf("[arwn] registered GET %s host=%s -> proxy://%s:%u\n",
                    host_cfg.route_path, host_cfg.route_host, host_cfg.server_bind, host_cfg.server_port);
-            if (strcmp(host_cfg.route_path, "/*") == 0 || strcmp(host_cfg.route_path, "*") == 0)
-                registered_wildcard = 1;
         }
     }
 
-    /* 2. Cadastra automaticamente catch-all '/*' no ARWS para rotear SPAs e sub-rotas */
-    if (!registered_wildcard && server) {
-        if (gw_register_single_route(fd, name, "/*", &host_cfg) == 0) {
-            printf("[arwn] auto-registered catch-all GET /* host=%s -> proxy://%s:%u\n",
-                   host_cfg.route_host, host_cfg.server_bind, host_cfg.server_port);
-            registered_wildcard = 1;
-        }
-    }
-
-    /* 3. Cadastra todas as rotas específicas conhecidas do servidor */
+    /* 2. Cadastra todas as rotas específicas conhecidas do servidor */
     if (server) {
         int n = arwn_server_route_count(server);
         for (int i = 0; i < n; i++) {

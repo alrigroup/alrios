@@ -152,7 +152,7 @@ int arwn_server_load_arweb(arwn_server_t *s, const arwn_unit_t *unit,
                 arwn_server_add_route(s, strdup(route), views[i].data, views[i].size,
                                       "text/html; charset=utf-8",
                                       ARWN_CACHE_NO_CACHE);
-                if (strcmp(unit->name, "index") == 0 || strcmp(unit->name, "main") == 0) {
+                if (strcmp(route, "/") == 0) {
                     arwn_server_add_route(s, "/", views[i].data, views[i].size,
                                           "text/html; charset=utf-8",
                                           ARWN_CACHE_NO_CACHE);
@@ -166,29 +166,61 @@ int arwn_server_load_arweb(arwn_server_t *s, const arwn_unit_t *unit,
             arwn_server_add_route(s, strdup(wasm_route), views[i].data, views[i].size,
                                   "application/wasm", ARWN_CACHE_IMMUTABLE);
         } else if (strcmp(views[i].name, "bundle.js") == 0 || strcmp(views[i].name, "main.js") == 0) {
-            char unit_js[128];
-            snprintf(unit_js, sizeof(unit_js), "/%s.js", unit->name);
-            arwn_server_add_route(s, strdup(unit_js), views[i].data, views[i].size,
-                                  "application/javascript; charset=utf-8", ARWN_CACHE_IMMUTABLE);
-            arwn_server_add_route(s, "/bundle.js", views[i].data, views[i].size,
-                                  "application/javascript; charset=utf-8", ARWN_CACHE_IMMUTABLE);
-            arwn_server_add_route(s, "/main.js", views[i].data, views[i].size,
-                                  "application/javascript; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+            if (strcmp(route, "/") == 0) {
+                char unit_js[128];
+                snprintf(unit_js, sizeof(unit_js), "/%s.js", unit->name);
+                arwn_server_add_route(s, strdup(unit_js), views[i].data, views[i].size,
+                                      "application/javascript; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+                arwn_server_add_route(s, "/bundle.js", views[i].data, views[i].size,
+                                      "application/javascript; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+                arwn_server_add_route(s, "/main.js", views[i].data, views[i].size,
+                                      "application/javascript; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+            } else {
+                char scoped_js[256];
+                snprintf(scoped_js, sizeof(scoped_js), "%s/main.js", route);
+                arwn_server_add_route(s, strdup(scoped_js), views[i].data, views[i].size,
+                                      "application/javascript; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+                snprintf(scoped_js, sizeof(scoped_js), "%s/%s.js", route, unit->name);
+                arwn_server_add_route(s, strdup(scoped_js), views[i].data, views[i].size,
+                                      "application/javascript; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+                snprintf(scoped_js, sizeof(scoped_js), "%s/bundle.js", route);
+                arwn_server_add_route(s, strdup(scoped_js), views[i].data, views[i].size,
+                                      "application/javascript; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+            }
         } else if (strcmp(views[i].name, "main.css") == 0 || strcmp(views[i].name, "style.css") == 0) {
-            char unit_css[128];
-            snprintf(unit_css, sizeof(unit_css), "/%s.css", unit->name);
-            arwn_server_add_route(s, strdup(unit_css), views[i].data, views[i].size,
-                                  "text/css; charset=utf-8", ARWN_CACHE_IMMUTABLE);
-            arwn_server_add_route(s, "/main.css", views[i].data, views[i].size,
-                                  "text/css; charset=utf-8", ARWN_CACHE_IMMUTABLE);
-            arwn_server_add_route(s, "/style.css", views[i].data, views[i].size,
-                                  "text/css; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+            if (strcmp(route, "/") == 0) {
+                char unit_css[128];
+                snprintf(unit_css, sizeof(unit_css), "/%s.css", unit->name);
+                arwn_server_add_route(s, strdup(unit_css), views[i].data, views[i].size,
+                                      "text/css; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+                arwn_server_add_route(s, "/main.css", views[i].data, views[i].size,
+                                      "text/css; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+                arwn_server_add_route(s, "/style.css", views[i].data, views[i].size,
+                                      "text/css; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+            } else {
+                char scoped_css[256];
+                snprintf(scoped_css, sizeof(scoped_css), "%s/main.css", route);
+                arwn_server_add_route(s, strdup(scoped_css), views[i].data, views[i].size,
+                                      "text/css; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+                snprintf(scoped_css, sizeof(scoped_css), "%s/%s.css", route, unit->name);
+                arwn_server_add_route(s, strdup(scoped_css), views[i].data, views[i].size,
+                                      "text/css; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+                snprintf(scoped_css, sizeof(scoped_css), "%s/style.css", route);
+                arwn_server_add_route(s, strdup(scoped_css), views[i].data, views[i].size,
+                                      "text/css; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+            }
         } else if (strcmp(views[i].name, "arwn-bridge.js") == 0) {
-            /* bridge (F3): servida com hash estável p/ V8 code cache */
-            arwn_server_add_route(s, "/arwn-bridge.js", views[i].data,
-                                  views[i].size,
-                                  "application/javascript; charset=utf-8",
-                                  ARWN_CACHE_IMMUTABLE);
+            if (strcmp(route, "/") == 0) {
+                arwn_server_add_route(s, "/arwn-bridge.js", views[i].data,
+                                      views[i].size,
+                                      "application/javascript; charset=utf-8",
+                                      ARWN_CACHE_IMMUTABLE);
+            } else {
+                char scoped_bridge[256];
+                snprintf(scoped_bridge, sizeof(scoped_bridge), "%s/arwn-bridge.js", route);
+                arwn_server_add_route(s, strdup(scoped_bridge), views[i].data, views[i].size,
+                                      "application/javascript; charset=utf-8", ARWN_CACHE_IMMUTABLE);
+            }
         } else if (strcmp(views[i].name, "config.arwn") != 0) {
             /* Demais arquivos estáticos empacotados (ex: robots.txt, sitemap.xml, favicon.ico) */
             char static_route[128];
@@ -271,8 +303,8 @@ static size_t build_head(char *out, size_t cap, int status,
         "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
         "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com https://ka-f.fontawesome.com https://use.fontawesome.com data:; "
-        "img-src 'self' data: https:; "
-        "connect-src 'self' https:\r\n"
+        "img-src 'self' data: blob: https: http://*.localhost:* http://localhost:* http://127.0.0.1:*; "
+        "connect-src 'self' https: http://*.localhost:* http://localhost:* http://127.0.0.1:*\r\n"
         "%s"
         "Connection: %s\r\n"
         "\r\n",

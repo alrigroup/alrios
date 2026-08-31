@@ -8,20 +8,16 @@
 
 import { useEffect, useState, useRef } from 'react'
 import translations from './i18n.js'
-import EnterpriseSuite from './EnterpriseSuite.jsx'
+import UserAvatar from './UserAvatar.jsx'
 
 export default function App() {
   const [lang, setLang] = useState(() => localStorage.getItem('alri_lang') || 'en')
-  const [currentView, setCurrentView] = useState(() => {
-    if (typeof window !== 'undefined' && (window.location.pathname.startsWith('/restrict-area') || window.location.hash === '#restrict-area')) {
-      return 'restrict-area'
-    }
-    return 'home'
-  })
   const [authSession, setAuthSession] = useState({
     checked: false,
     authenticated: false,
     user: '',
+    full_name: '',
+    avatar_url: '',
     tenant: '',
     role: '',
     sessionToken: ''
@@ -36,24 +32,32 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const sessionMenuRef = useRef(null)
   const [showTotp, setShowTotp] = useState(false)
+  
   const getAuthBaseUrl = () => {
-    // If running directly on ARWN frontend port 3001 without reverse proxy, route to arapiauth port 9650
     if (typeof window !== 'undefined' && (window.location.port === '3001' || window.location.port === '5173')) {
-      return `http://${window.location.hostname}:9650`
+      return `http://${window.location.hostname}:9600`
     }
     return ''
   }
 
-  // Verify active session against ARAUTH backend (/arapi/auth/me)
+  const getEnterpriseBaseUrl = () => {
+    if (typeof window !== 'undefined' && (window.location.port === '3001' || window.location.port === '5173')) {
+      return `http://${window.location.hostname}:9670`
+    }
+    return ''
+  }
+
+  // Verify active session against ARAUTH & ARENTERPRISE (/arapi/enterprise/me)
   const verifySession = async () => {
     try {
-      const storedToken = localStorage.getItem('ar_session_token') || ''
+      const storedToken = localStorage.getItem('ar_session_token') || localStorage.getItem('alrios_token') || ''
       const headers = { 'Accept': 'application/json' }
       if (storedToken) {
         headers['Authorization'] = `Bearer ${storedToken}`
       }
-      const baseUrl = getAuthBaseUrl()
-      const res = await fetch(`${baseUrl}/arapi/auth/me`, {
+      
+      const entBase = getEnterpriseBaseUrl()
+      const res = await fetch(`${entBase}/arapi/enterprise/me`, {
         method: 'GET',
         headers,
         credentials: 'include'
@@ -65,20 +69,24 @@ export default function App() {
             checked: true,
             authenticated: true,
             user: data.user,
+            full_name: data.full_name || data.user,
+            avatar_url: data.avatar_url || '',
             tenant: data.tenant || 'alrigroup',
-            role: data.role || 'user',
+            role: data.role || data.position_title || 'user',
             sessionToken: storedToken
           })
           return
         }
       }
     } catch (err) {
-      console.warn('[ARAUTH] Session verification offline or pending gateway:', err)
+      console.warn('[ARAUTH] Session verification:', err)
     }
     setAuthSession({
       checked: true,
       authenticated: false,
       user: '',
+      full_name: '',
+      avatar_url: '',
       tenant: '',
       role: '',
       sessionToken: ''
@@ -86,7 +94,11 @@ export default function App() {
   }
 
   useEffect(() => {
-    verifySession()
+    verifySession().then(() => {
+      if (typeof window !== 'undefined' && window.location.search.includes('auth=1')) {
+        setLoginModalOpen(true)
+      }
+    })
   }, [])
 
   // Close dropdown on click outside
@@ -218,8 +230,7 @@ export default function App() {
           setPasswordInput('')
           setTotpInput('')
           setAuthSuccess('')
-          setCurrentView('restrict-area')
-          if (typeof window !== 'undefined') window.history.pushState(null, '', '/restrict-area')
+          window.location.href = '/restrict-area'
         }, 600)
       } else {
         if (data.status === 'need_2fa') {
@@ -239,7 +250,7 @@ export default function App() {
   // Handle Logout
   const handleLogout = async () => {
     try {
-      const storedToken = localStorage.getItem('ar_session_token') || ''
+      const storedToken = localStorage.getItem('ar_session_token') || localStorage.getItem('alrios_token') || ''
       const baseUrl = getAuthBaseUrl()
       await fetch(`${baseUrl}/arapi/auth/logout`, {
         method: 'POST',
@@ -253,11 +264,14 @@ export default function App() {
       console.warn('[ARAUTH] Logout call completed with local fallback')
     }
     localStorage.removeItem('ar_session_token')
+    localStorage.removeItem('alrios_token')
     localStorage.removeItem('ar_refresh_token')
     setAuthSession({
       checked: true,
       authenticated: false,
       user: '',
+      full_name: '',
+      avatar_url: '',
       tenant: '',
       role: '',
       sessionToken: ''
@@ -267,36 +281,22 @@ export default function App() {
 
   const t = translations[lang] || translations.pt || translations.en
 
-  if (currentView === 'restrict-area' && authSession.authenticated) {
-    return (
-      <EnterpriseSuite
-        authSession={authSession}
-        onLogout={handleLogout}
-        lang={lang}
-        onBackToPublic={() => {
-          setCurrentView('home')
-          if (typeof window !== 'undefined') window.history.pushState(null, '', '/')
-        }}
-      />
-    )
-  }
-
   return (
     <>
       <nav className="navbar">
-        <div className="logo" onClick={() => setCurrentView('home')} style={{ cursor: 'pointer' }}>ALRI<span>GROUP</span></div>
+        <div className="logo" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} style={{ cursor: 'pointer' }}>ALRI<span>GROUP</span></div>
         <div className="nav-links">
           <a href="#about" data-i18n="nav_about">{t.nav_about}</a>
           <a href="#portfolio" data-i18n="nav_portfolio">{t.nav_portfolio}</a>
           <a href="#elite" data-i18n="nav_elite">{t.nav_elite}</a>
           {authSession.authenticated && (
-            <button
+            <a
+              href="/restrict-area"
               className="ent-badge-gold"
-              style={{ border: 'none', cursor: 'pointer', marginLeft: '6px' }}
-              onClick={() => setCurrentView('restrict-area')}
+              style={{ textDecoration: 'none', border: 'none', cursor: 'pointer', marginLeft: '6px' }}
             >
               🛡️ Área Restrita
-            </button>
+            </a>
           )}
         </div>
         <div className="nav-actions">
@@ -307,13 +307,10 @@ export default function App() {
               onClick={() => setDropdownOpen(!dropdownOpen)}
               title={authSession.authenticated ? `Sessão: ${authSession.user}` : 'Identidade & Acesso'}
               aria-label="User Session"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none' }}
             >
               {authSession.authenticated ? (
-                <img
-                  src={`https://ui-avatars.com/api/?name=${encodeURIComponent(authSession.user)}&background=0088ff&color=ffffff&bold=true`}
-                  alt={authSession.user}
-                  className="avatar-img"
-                />
+                <UserAvatar user={authSession} size="sm" />
               ) : (
                 <i className="fas fa-user-shield avatar-icon-anon"></i>
               )}
@@ -326,17 +323,13 @@ export default function App() {
                 <div className="user-dropdown-header">
                   <div className="dropdown-avatar-large">
                     {authSession.authenticated ? (
-                      <img
-                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(authSession.user)}&background=0088ff&color=ffffff&bold=true`}
-                        alt={authSession.user}
-                        className="avatar-img"
-                      />
+                      <UserAvatar user={authSession} size="lg" />
                     ) : (
                       <i className="fas fa-user-secret"></i>
                     )}
                   </div>
                   <div className="dropdown-user-info">
-                    <h5>{authSession.authenticated ? authSession.user : t.auth_anonymous}</h5>
+                    <h5>{authSession.authenticated ? (authSession.full_name || authSession.user) : t.auth_anonymous}</h5>
                     <span>
                       {authSession.authenticated
                         ? (authSession.role === 'admin'
@@ -359,16 +352,14 @@ export default function App() {
 
                 {authSession.authenticated ? (
                   <>
-                    <button
+                    <a
+                      href="/restrict-area"
                       className="dropdown-btn dropdown-btn-private"
-                      onClick={() => {
-                        setDropdownOpen(false)
-                        setCurrentView('restrict-area')
-                      }}
+                      style={{ textDecoration: 'none' }}
                     >
                       <i className="fas fa-key"></i>
                       <span>{t.auth_private_area}</span>
-                    </button>
+                    </a>
                     <button className="dropdown-btn dropdown-btn-logout" onClick={handleLogout}>
                       <i className="fas fa-arrow-right-from-bracket"></i>
                       <span>{t.auth_logout}</span>

@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <ctype.h>
 #ifdef _WIN32
 #include <direct.h>
 #else
@@ -350,6 +351,10 @@ static int connect_and_register(void) {
             return -1;
         }
     }
+    register_route(fd, "/avatars/*", "*", mode);
+    register_route(fd, "/avatars/*", "alrigroup.com", mode);
+    register_route(fd, "/avatars/*", "localhost", mode);
+    register_route(fd, "/avatars/*", "127.0.0.1", mode);
     return fd;
 }
 
@@ -775,6 +780,41 @@ static void serve(int c, const char *path, const char *range_hdr, int is_head) {
     char file[1536] = {0};
     if (e) snprintf(file, sizeof(file), "%s", e->file);
     ar_mutex_unlock(g_mutex);
+
+    if (!file[0]) {
+        /* Dynamic Avatar Resolution: /avatars/pfp_* */
+        if (strncmp(clean, "/avatars/pfp_", 13) == 0) {
+            const char *fn = clean + 9; /* points to pfp_... */
+            int valid = 1;
+            for (int i = 0; fn[i]; i++) {
+                if (!isalnum((unsigned char)fn[i]) && fn[i] != '.' && fn[i] != '_' && fn[i] != '-') {
+                    valid = 0;
+                    break;
+                }
+            }
+            if (valid && strlen(fn) > 4) {
+                char cand1[1024], cand2[1024], cand3[1024], cand4[1024], cand5[1024];
+                snprintf(cand1, sizeof(cand1), "storage/enterprise/avatars/%s", fn);
+                snprintf(cand2, sizeof(cand2), "storage/arenterprise/avatars/%s", fn);
+                snprintf(cand3, sizeof(cand3), "arcore/storage/enterprise/avatars/%s", fn);
+                snprintf(cand4, sizeof(cand4), "arcore/storage/arenterprise/avatars/%s", fn);
+                snprintf(cand5, sizeof(cand5), "../../storage/enterprise/avatars/%s", fn);
+
+                long long sz = 0;
+                if (file_get_size(cand1, &sz) == 0) {
+                    snprintf(file, sizeof(file), "%s", cand1);
+                } else if (file_get_size(cand2, &sz) == 0) {
+                    snprintf(file, sizeof(file), "%s", cand2);
+                } else if (file_get_size(cand3, &sz) == 0) {
+                    snprintf(file, sizeof(file), "%s", cand3);
+                } else if (file_get_size(cand4, &sz) == 0) {
+                    snprintf(file, sizeof(file), "%s", cand4);
+                } else if (file_get_size(cand5, &sz) == 0) {
+                    snprintf(file, sizeof(file), "%s", cand5);
+                }
+            }
+        }
+    }
 
     if (!file[0]) {
         send_404(c);

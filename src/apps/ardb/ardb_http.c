@@ -12,6 +12,7 @@
 #include "ardb_firewall.h"
 #include "ardb_audit.h"
 #include "ardb_backend.h"
+#include "ardb_storage_engine.h"
 #include "aros_hal.h"
 #include "log.h"
 #include <stdio.h>
@@ -180,25 +181,28 @@ static void* http_client_worker(void *arg) {
             return NULL;
         }
 
-        /* Execução da consulta (Standalone mock inteligente / PostgreSQL Backend) */
-        char resp_body[4096];
-        if (strstr(sql, "version()") || strstr(sql, "VERSION()")) {
-            snprintf(resp_body, sizeof(resp_body),
-                "{\"status\":\"success\",\"tenant\":\"%s\",\"user\":\"%s\",\"execution_time_us\":%llu,"
-                "\"rows\":[{\"version\":\"PostgreSQL 15.4 on x86_64-pc-linux-gnu, compiled by ALRIOS ARDB Sovereign Guardian\"}],"
-                "\"row_count\":1}\n",
-                tenant, user, (unsigned long long)120);
-        } else if (strstr(sql, "current_schema") || strstr(sql, "current_user")) {
-            snprintf(resp_body, sizeof(resp_body),
-                "{\"status\":\"success\",\"tenant\":\"%s\",\"user\":\"%s\",\"execution_time_us\":%llu,"
-                "\"rows\":[{\"current_schema\":\"public\",\"current_user\":\"%s\"}],\"row_count\":1}\n",
-                tenant, user, (unsigned long long)95, user);
-        } else {
-            snprintf(resp_body, sizeof(resp_body),
-                "{\"status\":\"success\",\"tenant\":\"%s\",\"user\":\"%s\",\"execution_time_us\":%llu,"
-                "\"rows\":[{\"result\":\"1\"}],\"row_count\":1}\n",
-                tenant, user, (unsigned long long)210);
+        /* Execução da consulta via ARDB Storage Engine */
+        ArdbQueryResult qres;
+        ardb_storage_execute_query("postgres", rewritten, &qres);
+
+        char resp_body[16384] = "{\"status\":\"success\",\"rows\":[";
+        for (int r = 0; r < qres.row_count; r++) {
+            if (r > 0) strcat(resp_body, ",");
+            strcat(resp_body, "{");
+            for (int c = 0; c < qres.column_count; c++) {
+                if (c > 0) strcat(resp_body, ",");
+                char item[1024];
+                snprintf(item, sizeof(item), "\"%s\":\"%s\"", qres.columns[c].name,
+                         qres.rows[r].fields[c] ? qres.rows[r].fields[c] : "");
+                strcat(resp_body, item);
+            }
+            strcat(resp_body, "}");
+            if (strlen(resp_body) > 15000) break;
         }
+        char tail[128];
+        snprintf(tail, sizeof(tail), "],\"row_count\":%d}\n", qres.row_count);
+        strcat(resp_body, tail);
+        ardb_storage_free_result(&qres);
 
         ardb_audit_log_query(user, tenant, "127.0.0.1",
                              rewritten, 200, (uint64_t)ar_time_ms() * 1000 - start_us);

@@ -35,6 +35,7 @@ arcore/*.pid
 *.dylib
 *.dll
 *.exe
+*_web
 *.exp
 *.pdb
 *.i

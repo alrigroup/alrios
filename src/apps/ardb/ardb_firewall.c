@@ -86,8 +86,10 @@ ArdbFwAction ardb_firewall_inspect(const char *raw_sql, const char *tenant_id, c
                     tbl[ti++] = *p++;
                 }
                 tbl[ti] = '\0';
-                if (ti > 0 && strcmp(tbl, "information_schema") != 0 && strcmp(tbl, "pg_catalog") != 0 && strcmp(tbl, "pg_tables") != 0) {
-                    if (!ardb_auth_is_table_allowed(tenant_id, role, tbl)) {
+                if (ti > 0 && strncmp(tbl, "pg_", 3) != 0 &&
+                    strncmp(tbl, "information_schema", 18) != 0 &&
+                    strncmp(tbl, "pg_catalog", 10) != 0) {
+                    if (role && strcmp(role, "admin") != 0 && !ardb_auth_is_table_allowed(tenant_id, role, tbl)) {
                         if (out_reason) {
                             snprintf(out_reason, out_reason_size,
                                      "ERROR: 42501: Permission denied for table '%s' by ALRI Firewall", tbl);
@@ -114,14 +116,9 @@ ArdbFwAction ardb_firewall_inspect(const char *raw_sql, const char *tenant_id, c
         }
     }
 
-    /* 4. Securely inject tenant ID via SET LOCAL with pre-validated identifier */
-    if (tenant_id && tenant_id[0]) {
-        snprintf(out_rewritten_sql, out_size,
-                 "SET LOCAL alri.tenant_id = '%s'; %s", tenant_id, raw_sql);
-    } else {
-        strncpy(out_rewritten_sql, raw_sql, out_size - 1);
-        out_rewritten_sql[out_size - 1] = '\0';
-    }
+    /* 4. Pass clean validated SQL query */
+    strncpy(out_rewritten_sql, raw_sql, out_size - 1);
+    out_rewritten_sql[out_size - 1] = '\0';
 
     return ARDB_FW_OK;
 }

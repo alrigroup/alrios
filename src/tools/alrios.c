@@ -500,7 +500,7 @@ int main(int argc, char *argv[]) {
         return cmd_update(w);
     }
 
-    if (strcmp(a1, "fullupdate") == 0)
+    if (strcmp(a1, "fullupdate") == 0 || strcmp(a1, "updateall") == 0)
         return cmd_fullupdate(argc, argv);
 
     if (strcmp(a1, "build") == 0)

@@ -254,17 +254,19 @@ int arws_stream_proxy_forward(ClientConnection *conn, HttpRequest *req,
     int target_fd = upstream_get_conn(host, port);
     if (target_fd < 0) { arws_send_502(conn, "Bad Gateway"); return -1; }
 
-    unsigned char *raw_buf = (unsigned char *)ar_mem_alloc(ARWS_STREAM_BUF_SIZE);
+    size_t req_body_len = (req->body && req->body[0]) ? strlen(req->body) : 0;
+    size_t raw_buf_size = req_body_len + 65536;
+    unsigned char *raw_buf = (unsigned char *)ar_mem_alloc(raw_buf_size);
     if (!raw_buf) {
         ar_socket_close(target_fd);
-        arws_send_502(conn, "Bad Gateway");
+        arws_send_502(conn, "Bad Gateway (OOM)");
         return -1;
     }
-    int raw_len = arws_build_http_request(conn, req, raw_buf, ARWS_STREAM_BUF_SIZE);
+    int raw_len = arws_build_http_request(conn, req, raw_buf, (int)raw_buf_size);
     if (raw_len <= 0) {
         ar_mem_free(raw_buf);
         ar_socket_close(target_fd);
-        arws_send_502(conn, "Bad Gateway");
+        arws_send_502(conn, "Bad Gateway (Build Request Failed)");
         return -1;
     }
 

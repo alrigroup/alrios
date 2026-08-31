@@ -63,6 +63,7 @@ typedef struct {
     uint32_t secret_key;
     char tx_status;
     uint64_t session_start_ms;
+    char prepared_query[2048];
 } ArdbClientSession;
 
 /* Inicialização do Gateway PG-Wire */
