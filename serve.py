@@ -62,8 +62,14 @@ def wait_port(port, timeout):
 
 
 def stop_all():
-    for name in ("arcore.exe", "node.exe", "home.web.exe", "detroit.web.exe"):
-        run("taskkill /f /im %s >nul 2>nul" % name)
+    if os.name == 'nt':
+        for name in ("arcore.exe", "node.exe", "home.web.exe", "detroit.web.exe"):
+            run("taskkill /f /im %s >nul 2>nul" % name)
+    else:
+        run("pkill -9 -f 'arcore' 2>/dev/null || true")
+        run("pkill -9 -f 'arapiauth' 2>/dev/null || true")
+        run("pkill -9 -f 'arapilogs' 2>/dev/null || true")
+        run("pkill -9 -f 'arenterprise' 2>/dev/null || true")
 
 
 def http_get(port, path, host):
@@ -108,12 +114,12 @@ def main():
             print("      switched to TEST; production saved to arws.cfg.production")
 
         print("[3/5] starting arcore (background, no console)...")
-        flags = subprocess.CREATE_NO_WINDOW
         logf = open(LOG, "wb")
-        proc = subprocess.Popen(
-            [os.path.join(ARWS, "arcore.exe")],
-            cwd=ARWS, stdout=logf, stderr=subprocess.STDOUT,
-            creationflags=flags)
+        exe_path = os.path.join(ARWS, "arcore.exe" if os.name == 'nt' else "arcore")
+        kwargs = {"cwd": ARWS, "stdout": logf, "stderr": subprocess.STDOUT}
+        if os.name == 'nt' and hasattr(subprocess, "CREATE_NO_WINDOW"):
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+        proc = subprocess.Popen([exe_path], **kwargs)
         print("      arcore pid=%d" % proc.pid)
 
         print("[4/5] waiting for gateway/admin/apps...")
