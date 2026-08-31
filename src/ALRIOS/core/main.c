@@ -244,13 +244,11 @@ int main(void) {
     /* Scan and register standalone app processes AFTER services are up */
     loader_scan_phase(apps_dir, 2);
 
-    /* Start control channel (TCP 127.0.0.1:9600) so CLI can query status immediately */
-    ctl_start();
-
-    /* Spawn standalone apps in dependency priority order */
+    /* Spawn standalone apps in dependency priority order (ardb -> arauth -> arapiauth -> arcdn -> arenterprise -> home-web) */
     alri_printf("\n  " DIM "◇" RST " Spawning autostart applications by priority...\n");
     loader_spawn_autostart_priority();
 
+    ctl_start();
     alri_printf("\n");
     alri_printf("  " GRN BLD "✓ System ready." RST " Press Ctrl+C to stop.\n");
     alri_printf("\n");
