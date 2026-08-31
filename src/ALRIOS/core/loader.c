@@ -1160,18 +1160,55 @@ void loader_reap_apps(void) {
 
 void loader_stop_all(void) {
     app_lock();
+    /* 1. Signal all running standalone app processes concurrently with SIGTERM */
     for (int i = 0; i < app_count; i++) {
-        char n[AR_APP_NAME_MAX];
-        strncpy(n, apps[i].name, sizeof(n) - 1);
-        n[sizeof(n) - 1] = '\0';
+        if (!apps[i].is_native_service && apps[i].pid > 0) {
+#ifndef _WIN32
+            kill((pid_t)apps[i].pid, SIGTERM);
+#else
+            ar_process_kill(apps[i].pid);
+#endif
+        }
+    }
+
+    /* 2. Stop native services (arws, etc.) */
+    for (int i = 0; i < app_count; i++) {
         if (apps[i].is_native_service) {
+            char n[AR_APP_NAME_MAX];
+            strncpy(n, apps[i].name, sizeof(n) - 1);
+            n[sizeof(n) - 1] = '\0';
             app_unlock();
             ar_svc_stop(n);
             app_lock();
-        } else if (apps[i].state == APP_RUNNING || apps[i].pid > 0) {
-            app_unlock();
-            loader_stop_app(n);
-            app_lock();
+        }
+    }
+
+    /* 3. Wait concurrently for apps to exit (up to 300ms) */
+    for (int t = 0; t < 15; t++) {
+        int all_gone = 1;
+        for (int i = 0; i < app_count; i++) {
+            if (!apps[i].is_native_service && apps[i].pid > 0) {
+                if (ar_process_wait_nohang(apps[i].pid) == 0) {
+                    all_gone = 0;
+                } else {
+                    apps[i].pid = 0;
+                    apps[i].state = APP_STOPPED;
+                }
+            }
+        }
+        if (all_gone) break;
+        ar_sleep_ms(20);
+    }
+
+    /* 4. Force kill (SIGKILL) any stubborn remaining app processes */
+    for (int i = 0; i < app_count; i++) {
+        if (!apps[i].is_native_service && apps[i].pid > 0) {
+#ifndef _WIN32
+            kill((pid_t)apps[i].pid, SIGKILL);
+#endif
+            ar_process_wait_nohang(apps[i].pid);
+            apps[i].pid = 0;
+            apps[i].state = APP_STOPPED;
         }
     }
     app_unlock();

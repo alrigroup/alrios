@@ -104,5 +104,8 @@ static int os_socket_set_recv_timeout(int fd, int timeout_ms) {
 }
 
 static void os_socket_close(int fd) {
-    close(fd);
+    if (fd >= 0) {
+        shutdown(fd, SHUT_RDWR);
+        close(fd);
+    }
 }
