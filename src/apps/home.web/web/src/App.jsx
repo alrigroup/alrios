@@ -230,7 +230,8 @@ export default function App() {
           setPasswordInput('')
           setTotpInput('')
           setAuthSuccess('')
-          window.location.href = '/restrict-area'
+          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          window.location.href = isLocal ? 'http://localhost:3012' : 'https://arwork.alrigroup.com';
         }, 600)
       } else {
         if (data.status === 'need_2fa') {
@@ -291,11 +292,11 @@ export default function App() {
           <a href="#elite" data-i18n="nav_elite">{t.nav_elite}</a>
           {authSession.authenticated && (
             <a
-              href="/restrict-area"
+              href={(typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) ? 'http://localhost:3012' : 'https://arwork.alrigroup.com'}
               className="ent-badge-gold"
               style={{ textDecoration: 'none', border: 'none', cursor: 'pointer', marginLeft: '6px' }}
             >
-              🛡️ Área Restrita
+              🛡️ Workspace Hub
             </a>
           )}
         </div>
@@ -353,7 +354,7 @@ export default function App() {
                 {authSession.authenticated ? (
                   <>
                     <a
-                      href="/restrict-area"
+                      href={(typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) ? 'http://localhost:3012' : 'https://arwork.alrigroup.com'}
                       className="dropdown-btn dropdown-btn-private"
                       style={{ textDecoration: 'none' }}
                     >
@@ -687,7 +688,7 @@ export default function App() {
           </a>
         </div>
         <p className="footer-quote" data-i18n="footer_quote">{t.footer_quote}</p>
-        <p className="footer-copy">&copy; 2020-2026 ALRI Group. All rights reserved. <span id="easter-egg" title="Restricted Area" onClick={() => { window.location.href = '/restrict-area' }}><i className="fas fa-lock"></i></span></p>
+        <p className="footer-copy">&copy; 2020-2026 ALRI Group. All rights reserved. <span id="easter-egg" title="Restricted Area" onClick={() => { window.location.href = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3012' : 'https://arwork.alrigroup.com' }}><i className="fas fa-lock"></i></span></p>
       </footer>
     </>
   )
