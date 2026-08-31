@@ -167,8 +167,9 @@ int arwn_http_parse(arwn_http_req_t *req, const char *buf, size_t len) {
         const char *pa = p;
         while (p < end && *p != ' ') p++;
         if (p >= end) return ARWN_HTTP_BAD;
+        const char *qmark = memchr(pa, '?', (size_t)(p - pa));
         req->path = pa;
-        req->path_len = (size_t)(p - pa);
+        req->path_len = qmark ? (size_t)(qmark - pa) : (size_t)(p - pa);
         p++; /* pula espaço */
 
         req->version = p;
