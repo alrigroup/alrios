@@ -89,8 +89,21 @@ export default function App() {
 
   const getTargetUrl = (app) => {
     const host = window.location.hostname
+    const portMap = {
+      arwork: 3012,
+      arbus: 3013,
+      archat: 3014,
+      ardash: 3015,
+      arcloud: 3016,
+      arconn: 3017,
+      arstock: 3018,
+      arctrl: 3019,
+      arlogs: 3005,
+      home: 3004,
+      detroit: 3001
+    }
     if (host.includes('localhost') || host === '127.0.0.1') {
-      return app.local_url || `http://${app.id}.localhost`
+      return app.local_url || `http://localhost:${portMap[app.id] || 3000}`
     }
     return app.url || `https://${app.id}.alrigroup.com`
   }
