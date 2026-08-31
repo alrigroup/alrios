@@ -20,9 +20,9 @@ export default function App() {
   const getAuthUrl = () => {
     const host = window.location.hostname
     if (host.includes('localhost') || host === '127.0.0.1') {
-      return 'http://arauth.localhost'
+      return 'http://localhost:8080'
     }
-    return 'https://arauth.alrigroup.com'
+    return 'https://alrigroup.com'
   }
 
   // 1. Check SSO session on load

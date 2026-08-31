@@ -275,7 +275,7 @@ static void* http_client_worker(void *arg) {
             "      \"icon\": \"🏢\",\n"
             "      \"badge\": \"Core\",\n"
             "      \"url\": \"https://arbus.alrigroup.com\",\n"
-            "      \"local_url\": \"http://arbus.localhost\"\n"
+            "      \"local_url\": \"http://localhost:3013\"\n"
             "    },\n"
             "    {\n"
             "      \"id\": \"arconn\",\n"
@@ -286,7 +286,7 @@ static void* http_client_worker(void *arg) {
             "      \"icon\": \"💬\",\n"
             "      \"badge\": \"Colaboração\",\n"
             "      \"url\": \"https://arconn.alrigroup.com\",\n"
-            "      \"local_url\": \"http://arconn.localhost\"\n"
+            "      \"local_url\": \"http://localhost:3017\"\n"
             "    },\n"
             "    {\n"
             "      \"id\": \"ardash\",\n"
@@ -297,7 +297,7 @@ static void* http_client_worker(void *arg) {
             "      \"icon\": \"📊\",\n"
             "      \"badge\": \"Analytics\",\n"
             "      \"url\": \"https://ardash.alrigroup.com\",\n"
-            "      \"local_url\": \"http://ardash.localhost\"\n"
+            "      \"local_url\": \"http://localhost:3015\"\n"
             "    },\n"
             "    {\n"
             "      \"id\": \"archat\",\n"
@@ -308,7 +308,7 @@ static void* http_client_worker(void *arg) {
             "      \"icon\": \"🎧\",\n"
             "      \"badge\": \"Tickets\",\n"
             "      \"url\": \"https://archat.alrigroup.com\",\n"
-            "      \"local_url\": \"http://archat.localhost\"\n"
+            "      \"local_url\": \"http://localhost:3014\"\n"
             "    },\n"
             "    {\n"
             "      \"id\": \"arcloud\",\n"
@@ -319,7 +319,7 @@ static void* http_client_worker(void *arg) {
             "      \"icon\": \"☁️\",\n"
             "      \"badge\": \"Storage\",\n"
             "      \"url\": \"https://arcloud.alrigroup.com\",\n"
-            "      \"local_url\": \"http://arcloud.localhost\"\n"
+            "      \"local_url\": \"http://localhost:3016\"\n"
             "    },\n"
             "    {\n"
             "      \"id\": \"arstock\",\n"
@@ -330,7 +330,7 @@ static void* http_client_worker(void *arg) {
             "      \"icon\": \"📦\",\n"
             "      \"badge\": \"Logística\",\n"
             "      \"url\": \"https://arstock.alrigroup.com\",\n"
-            "      \"local_url\": \"http://arstock.localhost\"\n"
+            "      \"local_url\": \"http://localhost:3018\"\n"
             "    },\n"
             "    {\n"
             "      \"id\": \"arlogs\",\n"
@@ -341,12 +341,12 @@ static void* http_client_worker(void *arg) {
             "      \"icon\": \"📜\",\n"
             "      \"badge\": \"Segurança\",\n"
             "      \"url\": \"https://arlogs.alrigroup.com\",\n"
-            "      \"local_url\": \"http://arlogs.localhost\"\n"
+            "      \"local_url\": \"http://localhost:3005\"\n"
             "    }%s\n"
             "  ]\n"
             "}\n",
             sess.user, sess.tenant, sess.role, sess.is_master ? "true" : "false",
-            sess.is_master ? ",\n    {\n      \"id\": \"arctrl\",\n      \"name\": \"ALRI-Server Control\",\n      \"sigla\": \"ARCTRL\",\n      \"category\": \"Infraestrutura\",\n      \"description\": \"Gerenciamento de servidores, modo manutenção e daemons\",\n      \"icon\": \"⚡\",\n      \"badge\": \"Master\",\n      \"url\": \"https://arctrl.alrigroup.com\",\n      \"local_url\": \"http://arctrl.localhost\"\n    }" : "");
+            sess.is_master ? ",\n    {\n      \"id\": \"arctrl\",\n      \"name\": \"ALRI-Server Control\",\n      \"sigla\": \"ARCTRL\",\n      \"category\": \"Infraestrutura\",\n      \"description\": \"Gerenciamento de servidores, modo manutenção e daemons\",\n      \"icon\": \"⚡\",\n      \"badge\": \"Master\",\n      \"url\": \"https://arctrl.alrigroup.com\",\n      \"local_url\": \"http://localhost:3019\"\n    }" : "");
 
         send_http_response(client_fd, 200, "OK", "application/json", NULL, json);
         ar_socket_close(client_fd);
