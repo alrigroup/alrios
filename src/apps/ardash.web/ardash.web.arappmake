@@ -1,0 +1,47 @@
+ALRIGROUP@APPMAKE
+{
+  "name": "ardash-web",
+  "bin": "ardash.web.arapp",
+  "version": "1.0.0",
+  "runtime": "native",
+  "entry": "ardash.web.exe",
+  "platforms": {
+    "windows": {
+      "entry": "ardash.web.exe"
+    },
+    "linux": {
+      "entry": "ardash_web"
+    },
+    "linux-x64": {
+      "entry": "ardash_web"
+    },
+    "linux-arm64": {
+      "entry": "ardash_web"
+    }
+  },
+  "build": {
+    "staging": "$ARCORE/.staging/$APP_NAME",
+    "steps": [
+      {
+        "name": "spa",
+        "cmd": "node rebuild.mjs",
+        "cwd": "web"
+      },
+      {
+        "name": "arweb",
+        "cmd": "$ARWN_BUILD build . --out $STAGING/build"
+      }
+    ],
+    "cleanup": [
+      "build",
+      "web/dist"
+    ]
+  },
+  "files": [
+    "ardash_web",
+    "config.arwn",
+    "build/main.arweb",
+    "robots.txt",
+    "sitemap.xml"
+  ]
+}

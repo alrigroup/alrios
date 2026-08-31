@@ -1,0 +1,28 @@
+# Configuracao ARWN para arcloud.web (Drive e Armazenamento)
+[app]
+name=arcloud-web
+port=3016
+bind=127.0.0.1
+copyright=/*Copyright (c) 2026 ALRIGROUP. All rights reserved.*/
+
+[arws]
+gateway=127.0.0.1:9500
+route.host=arcloud.alrigroup.com, arcloud.localhost, test-arcloud.alrigroup.com
+route.path=/*
+route.mode=production
+
+[unit:main]
+source=web/dist/
+entry=main.arhtml
+route=/
+compile=main.js
+compile.lang=js
+obfuscate=yes
+copyright=`/*
+========================================================================
+THIRD-PARTY NOTICES AND LICENSES
+========================================================================
+
+1. React / React DOM (MIT License) - Meta Platforms, Inc.
+========================================================================
+*/`

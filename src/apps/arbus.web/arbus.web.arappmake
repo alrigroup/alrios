@@ -1,0 +1,47 @@
+ALRIGROUP@APPMAKE
+{
+  "name": "arbus-web",
+  "bin": "arbus.web.arapp",
+  "version": "1.0.0",
+  "runtime": "native",
+  "entry": "arbus.web.exe",
+  "platforms": {
+    "windows": {
+      "entry": "arbus.web.exe"
+    },
+    "linux": {
+      "entry": "arbus_web"
+    },
+    "linux-x64": {
+      "entry": "arbus_web"
+    },
+    "linux-arm64": {
+      "entry": "arbus_web"
+    }
+  },
+  "build": {
+    "staging": "$ARCORE/.staging/$APP_NAME",
+    "steps": [
+      {
+        "name": "spa",
+        "cmd": "node rebuild.mjs",
+        "cwd": "web"
+      },
+      {
+        "name": "arweb",
+        "cmd": "$ARWN_BUILD build . --out $STAGING/build"
+      }
+    ],
+    "cleanup": [
+      "build",
+      "web/dist"
+    ]
+  },
+  "files": [
+    "arbus_web",
+    "config.arwn",
+    "build/main.arweb",
+    "robots.txt",
+    "sitemap.xml"
+  ]
+}

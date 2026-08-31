@@ -1,0 +1,27 @@
+ALRIGROUP@APPMAKE
+{
+  "name": "arapidash",
+  "bin": "arapidash.arapp",
+  "version": "1.0.0",
+  "runtime": "native",
+  "entry": "arapidash",
+  "platforms": {
+    "windows": {"entry": "arapidash"},
+    "linux": {"entry": "arapidash"},
+    "linux-x64": {"entry": "arapidash"},
+    "linux-arm64": {"entry": "arapidash"}
+  },
+  "build": {
+    "staging": "$ARCORE/.staging/$APP_NAME",
+    "steps": [
+      {
+        "name": "cc",
+        "cmd": "gcc -O2 -I. -I../../ALRIOS/core -I../../ALRIOS/arkernel/include -I../../ALRIOS/arkernel/os/include -o $STAGING/arapidash arapidash_entry.c arapidash_config.c arapidash_db.c arapidash_http.c -L$ARCORE/lib -larkernel -lssl -lcrypto -lpthread"
+      }
+    ]
+  },
+  "files": [
+    "arapidash",
+    "arapidash.cfg"
+  ]
+}
