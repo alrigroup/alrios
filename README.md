@@ -100,7 +100,6 @@ All technical documentation is in **[`/docs`](docs/README.md)**:
 - 📒 **[ARKernel Specification](docs/KERNEL.md)**
 - 📕 **[arcore Daemon Specification](docs/CORE.md)**
 - 📓 **[CLI Command Reference](docs/comands.md)**
-- 📑 **[Changelog](docs/CHANGELOG.md)**
 
 ---
 
