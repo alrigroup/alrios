@@ -208,8 +208,8 @@ static int match_app_alias(const char *registered, const char *target) {
         (strcmp(target, "arauth") == 0 || strcmp(target, "auth") == 0)) return 1;
     if ((strcmp(registered, "arcdn") == 0 || strcmp(registered, "cdn") == 0) &&
         (strcmp(target, "arcdn") == 0 || strcmp(target, "cdn") == 0)) return 1;
-    if ((strcmp(registered, "home.web") == 0 || strcmp(registered, "home-web") == 0) &&
-        (strcmp(target, "home.web") == 0 || strcmp(target, "home-web") == 0)) return 1;
+    if ((strcmp(registered, "home.web") == 0 || strcmp(registered, "home-web") == 0 || strcmp(registered, "alrigroup.web") == 0 || strcmp(registered, "alrigroup-web") == 0) &&
+        (strcmp(target, "home.web") == 0 || strcmp(target, "home-web") == 0 || strcmp(target, "alrigroup.web") == 0 || strcmp(target, "alrigroup-web") == 0)) return 1;
     if ((strcmp(registered, "detroit.web") == 0 || strcmp(registered, "detroit-web") == 0) &&
         (strcmp(target, "detroit.web") == 0 || strcmp(target, "detroit-web") == 0)) return 1;
     return 0;

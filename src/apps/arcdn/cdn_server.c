@@ -355,6 +355,11 @@ static int connect_and_register(void) {
     register_route(fd, "/avatars/*", "alrigroup.com", mode);
     register_route(fd, "/avatars/*", "localhost", mode);
     register_route(fd, "/avatars/*", "127.0.0.1", mode);
+
+    register_route(fd, "/media/*", "*", mode);
+    register_route(fd, "/media/*", "alrigroup.com", mode);
+    register_route(fd, "/media/*", "localhost", mode);
+    register_route(fd, "/media/*", "127.0.0.1", mode);
     return fd;
 }
 
@@ -799,6 +804,39 @@ static void serve(int c, const char *path, const char *range_hdr, int is_head) {
                 snprintf(cand3, sizeof(cand3), "arcore/storage/enterprise/avatars/%s", fn);
                 snprintf(cand4, sizeof(cand4), "arcore/storage/arenterprise/avatars/%s", fn);
                 snprintf(cand5, sizeof(cand5), "../../storage/enterprise/avatars/%s", fn);
+
+                long long sz = 0;
+                if (file_get_size(cand1, &sz) == 0) {
+                    snprintf(file, sizeof(file), "%s", cand1);
+                } else if (file_get_size(cand2, &sz) == 0) {
+                    snprintf(file, sizeof(file), "%s", cand2);
+                } else if (file_get_size(cand3, &sz) == 0) {
+                    snprintf(file, sizeof(file), "%s", cand3);
+                } else if (file_get_size(cand4, &sz) == 0) {
+                    snprintf(file, sizeof(file), "%s", cand4);
+                } else if (file_get_size(cand5, &sz) == 0) {
+                    snprintf(file, sizeof(file), "%s", cand5);
+                }
+            }
+        }
+
+        /* Dynamic Media Resolution: /media/post_* or /media/* */
+        if (!file[0] && strncmp(clean, "/media/", 7) == 0) {
+            const char *fn = clean + 7;
+            int valid = 1;
+            for (int i = 0; fn[i]; i++) {
+                if (!isalnum((unsigned char)fn[i]) && fn[i] != '.' && fn[i] != '_' && fn[i] != '-') {
+                    valid = 0;
+                    break;
+                }
+            }
+            if (valid && strlen(fn) > 3) {
+                char cand1[1024], cand2[1024], cand3[1024], cand4[1024], cand5[1024];
+                snprintf(cand1, sizeof(cand1), "storage/enterprise/media/%s", fn);
+                snprintf(cand2, sizeof(cand2), "storage/arenterprise/media/%s", fn);
+                snprintf(cand3, sizeof(cand3), "arcore/storage/enterprise/media/%s", fn);
+                snprintf(cand4, sizeof(cand4), "arcore/storage/arenterprise/media/%s", fn);
+                snprintf(cand5, sizeof(cand5), "../../storage/enterprise/media/%s", fn);
 
                 long long sz = 0;
                 if (file_get_size(cand1, &sz) == 0) {

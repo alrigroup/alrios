@@ -757,7 +757,7 @@ static int app_priority(const char *name) {
     if (strcmp(name, "arapiauth") == 0) return 3;
     if (strcmp(name, "arcdn") == 0) return 4;
     if (strcmp(name, "arenterprise") == 0) return 5;
-    if (strcmp(name, "home-web") == 0 || strcmp(name, "home.web") == 0) return 6;
+    if (strcmp(name, "home-web") == 0 || strcmp(name, "home.web") == 0 || strcmp(name, "alrigroup-web") == 0 || strcmp(name, "alrigroup.web") == 0) return 6;
     if (strcmp(name, "detroit-web") == 0 || strcmp(name, "detroit.web") == 0) return 7;
     return 10;
 }
