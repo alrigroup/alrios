@@ -77,6 +77,7 @@ python test_suite.py
 - **[Production & Deployment Guide](PRODUCTION.md):** Deployment manual for Debian/Linux servers and SSL configuration.
 - **[Requirements & Dependencies](REQUIREMENTS.md):** Complete software dependencies list.
 - **[ARKernel](KERNEL.md):** OS Hardware Abstraction Layer (`aros_hal.h`).
+- **[Recommended Applications](RECOMMENDED_APPS.md):** List of recommended apps with descriptions, install instructions, and repo links.
 - **[Core Daemon (arcore.exe)](CORE.md):** Lifecycle manager and service runner.
 - **[Tools armake & arinstall](TOOLS.md):** Package manager, runtime installer, and `alrios db` CLI.
 - **[alrios CLI Reference](comands.md):** Command-line interface reference guide.
