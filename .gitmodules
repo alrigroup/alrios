@@ -1,33 +1,15 @@
-[submodule "src/apps/alrigroup.web"]
-	path = src/apps/alrigroup.web
-	url = https://github.com/alrigroup/alrigroup.web.git
 [submodule "src/apps/arapiauth"]
 	path = src/apps/arapiauth
 	url = https://github.com/alrigroup/arapiauth.git
-[submodule "src/apps/arauth"]
-	path = src/apps/arauth
-	url = https://github.com/alrigroup/arauth.git
 [submodule "src/apps/arcdn"]
 	path = src/apps/arcdn
 	url = https://github.com/alrigroup/arcdn.git
 [submodule "src/apps/ardb"]
 	path = src/apps/ardb
 	url = https://github.com/alrigroup/ardb.git
-[submodule "src/apps/arenterprise"]
-	path = src/apps/arenterprise
-	url = https://github.com/alrigroup/arenterprise.git
-[submodule "src/apps/arenterprise.web"]
-	path = src/apps/arenterprise.web
-	url = https://github.com/alrigroup/arenterprise.web.git
 [submodule "src/apps/arwn"]
 	path = src/apps/arwn
 	url = https://github.com/alrigroup/arwn.git
 [submodule "src/apps/arws"]
 	path = src/apps/arws
 	url = https://github.com/alrigroup/arws.git
-[submodule "src/apps/detroit.web"]
-	path = src/apps/detroit.web
-	url = https://github.com/alrigroup/detroit.web.git
-[submodule "src/apps/fourtech.web"]
-	path = src/apps/fourtech.web
-	url = https://github.com/alrigroup/fourtech.web.git

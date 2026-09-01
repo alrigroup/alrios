@@ -1,111 +1,115 @@
-# ALRIOS / arcore
+<p align="center">
+  <img src="https://raw.githubusercontent.com/alrigroup/.github/main/alrigroup.svg" width="140" />
+</p>
 
-**High-Performance Microservices Architecture and Web Server Ecosystem developed by [ALRIGROUP](https://alrigroup.com/).**
+<h1 align="center">ALRIOS</h1>
+<p align="center"><strong>High-Performance Native Operating System & Microservice Platform</strong></p>
+<p align="center">
+  <img alt="Language" src="https://img.shields.io/badge/language-C-00599C?style=flat-square" />
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey?style=flat-square" />
+  <img alt="License" src="https://img.shields.io/badge/license-ARGLR--v1-red?style=flat-square" />
+</p>
 
 ---
 
-## 📋 Overview
+## Overview
 
-**ALRIOS** is an ultra-high-speed web server platform and native C microservice ecosystem capable of handling **65,536 concurrent connections**, featuring **Upstream TCP Connection Pooling**, **Sharded In-Memory Cache**, and native support for React/Vue SPA applications.
+**ALRIOS** is an ultra-high-performance web server platform and native C microservice ecosystem capable of handling **65,536 concurrent connections**, featuring **Upstream TCP Connection Pooling**, **Sharded In-Memory Cache**, and native support for React/Vue SPA applications.
+
+This repository contains the **Core OS Kernel**, **SDK**, and **CLI tools** (`alrios`, `armake`, `arinstall`, `arcreate`). Each application and service runs in its own standalone repository.
 
 ```
-┌─────────────────┐       ┌────────────────────────────────────────────────────────┐
-│     Browser     │──────▶│ ARWS Gateway (arws.arapp)                              │
-│  (HTTP / HTTPS) │       │ ─ Ports: 8080 (HTTP) / 443 (HTTPS) / 9500 (IPC)        │
-│                 │       │ ─ 65,536 Concurrent Connections, Upstream Pool        │
-│                 │       │ ─ Sharded Cache (16 shards), Active Rate Limiting      │
-└─────────────────┘       └───────────┬──────────────┬──────────────┬──────────────┘
+┌─────────────────┐       ┌──────────────────────────────────────────────────────┐
+│     Browser     │──────▶│ ARWS Gateway                                        │
+│  (HTTP / HTTPS) │       │ ─ 65,536 Concurrent Connections, Upstream Pool       │
+│                 │       │ ─ Sharded Cache (16 shards), Active Rate Limiting    │
+└─────────────────┘       └───────────┬──────────────┬──────────────┬────────────┘
                                       │              │              │
-                   ┌──────────────────▼──┐    ┌──────▼───────┐ ┌────▼─────────────────┐
-                   │ home-web.arapp      │    │ cdn.arapp    │ │ detroit-web.arapp    │
-                   │ Port: 3001          │    │ Port: 3005   │ │ Port: 3004           │
-                   └─────────────────────┘    └──────────────┘ └──────────────────────┘
+                   ┌──────────────────▼──┐    ┌──────▼───────┐ ┌────▼────────────┐
+                   │ ARDB Database       │    │ ARCDN        │ │ ARWN Web Native │
+                   │ PGWire + HTTP API   │    │ Static CDN   │ │ Compiler        │
+                   └─────────────────────┘    └──────────────┘ └─────────────────┘
 ```
 
 ---
 
-## 🐧 Linux / WSL Installation & Setup Guide
+## Ecosystem
 
-### 1. Install System Dependencies
-On Debian, Ubuntu, or WSL2 (Ubuntu):
+ALRIOS is a modular platform. Each component lives in its own repository:
+
+### 🌐 Public Repositories (Open Source)
+
+| Repository | Description |
+|---|---|
+| **[alrios](https://github.com/alrigroup/alrios)** | Core OS Kernel, SDK, CLI tools (`alrios`, `armake`, `arinstall`) |
+| **[arws](https://github.com/alrigroup/arws)** | High-performance reverse proxy, load balancer & stream proxy |
+| **[ardb](https://github.com/alrigroup/ardb)** | Native linear database engine with PGWire protocol |
+| **[arcdn](https://github.com/alrigroup/arcdn)** | Native static file server & CDN |
+| **[arwn](https://github.com/alrigroup/arwn)** | Web Native compiler, bundler & runtime |
+| **[arapiauth](https://github.com/alrigroup/arapiauth)** | OAuth2/OIDC authentication gateway |
+
+### 🔒 Private Repositories
+
+Additional enterprise applications and client portals are maintained in private repositories within the `alrigroup` organization.
+
+---
+
+## Quick Start
+
+### Linux / WSL
+
 ```bash
+# 1. Install dependencies
 sudo apt update && sudo apt install -y cmake gcc make libssl-dev pkg-config nodejs npm curl
-```
 
-### 2. Clone Repository & Navigate to Directory
-```bash
-git clone https://github.com/ALRIGROUP/alrios.git
+# 2. Clone with public submodules
+git clone --recurse-submodules https://github.com/alrigroup/alrios.git
 cd alrios
-```
 
-### 3. Build Entire Ecosystem (Kernel + Tools + Apps)
-```bash
+# 3. Build the entire ecosystem
 bash build_linux.sh
-```
 
-### 4. Start Server
-```bash
+# 4. Start
 cd arcore
 ./alrios power on
-```
 
-### 5. Check Service Status
-```bash
+# 5. Check status
 ./alrios status
 ```
 
----
+### Windows
 
-## 🪟 Windows Installation & Setup Guide
+Requires **Visual Studio 2022** (C++ workload), **CMake 3.20+**, **Node.js 18+**, **Python 3**.
 
-### 1. Requirements
-- **Visual Studio 2022** (with *Desktop Development with C++* workload) or **MSVC**.
-- **CMake** (`3.20` or higher).
-- **Node.js** (`18` or higher) and **Python 3**.
-
-### 2. Build via Visual Studio Command Prompt (x64 Native Tools Command Prompt)
 ```cmd
 build.bat
-```
-
-### 3. Launch Development Server
-```cmd
 python serve.py
 ```
 
-### 4. Run End-to-End Integration Test Suite
-```cmd
-python test_suite.py
-```
-
 ---
 
-## 📂 Complete Documentation Suite
+## Documentation
 
-All technical documentation is centralized in **[`/docs`](docs/README.md)**:
+All technical documentation is in **[`/docs`](docs/README.md)**:
 
-- 🏆 **[Complete Features Catalog (All 9 Core Subsystems)](docs/features.md)**
+- 🏆 **[Complete Features Catalog](docs/features.md)**
 - 📘 **[System Overview](docs/README.md)**
 - 📙 **[Developer Guide & IPC Specification](docs/DEVELOPER_GUIDE.md)**
-- 📕 **[Production Deployment & Operations Guide](docs/PRODUCTION.md)**
-- 🟢 **[System Requirements & Dependencies](docs/REQUIREMENTS.md)**
-- 📒 **[ARKernel Technical Specification](docs/KERNEL.md)**
-- 📕 **[arcore Daemon Technical Specification](docs/CORE.md)**
-- 📓 **[alrios CLI Command Reference](docs/comands.md)**
-- 📑 **[High-Speed Optimizations & Security Changelog](docs/CHANGELOG.md)**
-- 📱 **[Native Applications (ARWS, ARAUTH, ARDB, CDN, Home Web, Detroit Web)](docs/apps/arws.md)**
+- 📕 **[Production Deployment Guide](docs/PRODUCTION.md)**
+- 🟢 **[System Requirements](docs/REQUIREMENTS.md)**
+- 📒 **[ARKernel Specification](docs/KERNEL.md)**
+- 📕 **[arcore Daemon Specification](docs/CORE.md)**
+- 📓 **[CLI Command Reference](docs/comands.md)**
+- 📑 **[Changelog](docs/CHANGELOG.md)**
 
 ---
 
-## 🏢 Credits
+## Credits
 
-Developed and maintained by **[ALRIGROUP](https://alrigroup.com/)**.
-
-- **Official Website:** [https://alrigroup.com/](https://alrigroup.com/)
-- **Support & Infrastructure:** ALRI GROUP Engineering Team
+Developed and maintained by **[ALRI Group](https://alrigroup.com/)**.
 
 ---
 
-## 📄 License
+## License
 
-This project is governed by the **ARGLR (ALRI GROUP LICENSE RESERVED - Version 1)** license. Usage, distribution, and modifications are strictly restricted to authorized users. Please refer to the **[LICENSE](LICENSE)** file for complete terms and conditions.
+This project is governed by the **ARGLR (ALRI GROUP LICENSE RESERVED - Version 1)** license. See **[LICENSE](LICENSE)** for full terms.
