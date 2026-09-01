@@ -7,7 +7,7 @@
 <p align="center">
   <img alt="Language" src="https://img.shields.io/badge/language-C-00599C?style=flat-square" />
   <img alt="Platform" src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows-lightgrey?style=flat-square" />
-  <img alt="License" src="https://img.shields.io/badge/license-ARGLR--v1-red?style=flat-square" />
+  <img alt="License" src="https://img.shields.io/badge/license-ARGLP-green?style=flat-square" />
 </p>
 
 ---
@@ -110,4 +110,4 @@ Developed and maintained by **[ALRI Group](https://alrigroup.com/)**.
 
 ## License
 
-This project is governed by the **ARGLR (ALRI GROUP LICENSE RESERVED - Version 1)** license. See **[LICENSE](LICENSE)** for full terms.
+This project is governed by the **ARGLP (ALRI GROUP LICENSE PERMISSIVE - Version 2)** license. See **[LICENSE](LICENSE)** for full terms.

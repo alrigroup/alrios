@@ -1,36 +1,38 @@
-ARGLR - ALRI GROUP LICENSE RESERVED
+ARGLP - ALRI GROUP LICENSE PERMISSIVE
 Version 2 – 2026
 
 
 1. Definitions
 "The Work": Refers to the original software, source code, scripts, or documentation provided by ALRI Group.
 
-"Authorized User": An individual or organization that has received express written permission or a valid purchase key from ALRI Group.
+"Modification": Refers to any alteration, transformation, or derivative work based on the original source code.
 
 "Licensor": ALRI Group (@ALRI GROUP).
 
-2. Restricted Access and Usage
-Authorized Use Only: The Work is licensed for use strictly by Authorized Users. Any use by unauthorized parties is a violation of international copyright laws.
+2. Usage and Distribution
+The Work may be freely used and distributed for non-commercial purposes at no cost.
 
-Distribution Ban: Sharing, publishing, or leaking The Work to any third party is strictly prohibited.
+For verbatim distribution (sharing the original files without changes), attribution is optional but encouraged.
 
-3. Modifications and Breach of License
-Strict Modification Policy: Modifications are prohibited unless express written authorization is provided by ALRI Group.
+3. Rules for Modifications
+If you modify, adapt, or build upon The Work, the following conditions are mandatory:
 
-Breach of License: Any unauthorized modification, tampering, or reverse engineering of the source code results in an immediate and automatic termination of the license and all associated rights.
+Source Attribution: You must include a clear notice stating that your project is a "Modification based on the original work developed by @ALRI GROUP". You do not need to list ALRI Group as the primary author, only as the original source.
 
-4. Warranty and Support ("Original State Guarantee")
-Original Warranty: ALRI Group provides a technical guarantee and support for bugs or errors found in The Work, provided it remains in its Original, Unmodified State.
+Share-Alike: Any modified version must be distributed under this exact same license (ARGLP). You may not change the license terms for derivative works.
 
-Void of Warranty: Any unauthorized modification immediately voids the warranty and support. ALRI Group will not be responsible for fixing issues or providing updates for modified versions.
+Identity Differentiation: The modified project must use a name that is clearly different from the original Work to prevent brand confusion.
 
-5. Limitation of Liability
-Third-Party Damages: ALRI Group shall not be held liable for any damages to third parties, loss of profits, or data corruption caused by the use of The Work, even by Authorized Users.
+4. Commercial Restriction and Monetization
+Prohibition of Sale: It is strictly forbidden to sell, rent, or monetize The Work (or its modifications) without express written authorization from ALRI Group.
 
-The Authorized User assumes full responsibility for the implementation and consequences of using the software.
+The Work and its derivatives must remain free of charge for the end-user unless a prior commercial agreement is established with the Licensor.
 
-6. Intellectual Property
-All rights, titles, and interests remain exclusively with the ALRI Group. This license does not grant any rights to trademarks, logos, or brand names.
+5. Disclaimer of Liability (No Warranty)
+THE WORK IS PROVIDED "AS IS". ALRI Group shall not be held liable for any damages, data loss, technical failures, or legal issues arising from the use or misuse of the original project or its modifications. Use at your own risk.
+
+6. Trademark Protection
+This license does not grant permission to use the trade names, logos, or product names of ALRI Group for marketing or promotional purposes, except for the mandatory attribution required in Section 3.
 
 https://alrigroup.com
 https://github.com/alrigroup/licenses
