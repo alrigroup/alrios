@@ -110,4 +110,4 @@ Developed and maintained by **[ALRI Group](https://alrigroup.com/)**.
 
 ## License
 
-This project is governed by the **ARGLP (ALRI GROUP LICENSE PERMISSIVE - Version 2)** license. See **[LICENSE](LICENSE)** for full terms.
+This project is governed by the **ARGLP (ALRI GROUP LICENSE PERMISSIVE - Version 2)** license. Commercial and enterprise use is permitted. See **[LICENSE](LICENSE)** for full terms.
