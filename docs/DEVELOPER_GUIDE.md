@@ -27,7 +27,7 @@ Developed and maintained by **[ALRIGROUP](https://alrigroup.com/)**.
 - **Zero Runtime Disk Lookups**: Web applications and WASM micro-units are compiled into structured binary containers (`.arweb`) and served directly from RAM.
 - **Hardware-Level Performance**: Direct memory buffers, SIMD vectorization, and raw pointers without garbage collection stalls.
 - **Strict IP Protection**: Integrated multi-pass Base64 VM obfuscation and mandatory licensing injection on all web units.
-- **Unified IPC & Service Supervision**: All system services (`arws`, `cdn`) and web apps (`home-web`, `detroit-web`, `test_ecosystem.web`) are managed by a centralized supervision daemon (`arcore` / `alrios`).
+- **Unified IPC & Service Supervision**: All system services (`arws`, `arcdn`, `ardb`) and web apps are managed by a centralized supervision daemon (`arcore` / `alrios`).
 
 ---
 
@@ -47,10 +47,10 @@ Developed and maintained by **[ALRIGROUP](https://alrigroup.com/)**.
     │                                │                                │
 ┌───▼────────────────────────┐ ┌─────▼──────────────────────┐ ┌───────▼──────────────────────┐
 │ Legacy / SPA Native Apps   │ │ ARWN Native Web Framework  │ │ Static Delivery System       │
-│ - home-web (3001)          │ │ - test_ecosystem.web(3055) │ │ - cdn (3005)                 │
-│ - detroit-web (3004)       │ │   ├── c_engine.arweb (WASM)│ │   ├── Assets, Media, Videos  │
-│                            │ │   ├── cpp_engine.arweb     │ │   └── Zero-Copy Sendfile     │
-│   (Vite + React + C Serve) │ │   ├── rust_engine.arweb    │ │                              │
+│ - (Custom SPA apps)       │ │ - test_ecosystem.web(3055) │ │ - arcdn (3005)               │
+│                            │ │   ├── c_engine.arweb (WASM)│ │   ├── Assets, Media, Videos  │
+│   (Vite + React + C Serve) │ │   ├── cpp_engine.arweb     │ │   └── Zero-Copy Sendfile     │
+│                            │ │   ├── rust_engine.arweb    │ │                              │
 │                            │ │   └── main.arweb (Base64VM)│ │                              │
 └────────────────────────────┘ └────────────────────────────┘ └──────────────────────────────┘
 ```
@@ -181,51 +181,14 @@ The **ARWS (ALRI Web Services)** gateway sits in front of all services.
 
 ---
 
-## 6. Authentication & Database Frameworks (`libarauth` & `ARDB`)
+## 6. Authentication & Database Frameworks (`ARDB`)
 
-Every application in ALRIOS can embed native identity management and connect to the sovereign data guardian.
+Every application in ALRIOS can connect to the sovereign data guardian.
 
-### 6.1 Embedding `libarauth` (Native Identity Framework)
-Link against `-larauth` and define your application's Declarative Blueprint:
-
-```c
-#include "arauth.h"
-
-// 1. Define App Blueprint
-arauth_blueprint_t blueprint = {
-    .app_name = "analytics_web",
-    .allow_login_with_username = 1,
-    .allow_login_with_email = 1,
-    .allow_login_with_phone = 1,
-    .allow_login_with_custom_id = 1,
-    .min_password_len = 6,
-    .require_totp_2fa = 0,
-    .session_ttl_seconds = 86400
-};
-
-arauth_context_t *auth = arauth_init(&blueprint);
-
-// 2. Register Dynamic Groups (Discord / FiveM style)
-arauth_group_create(auth, "analyst", "reports.view,reports.export");
-arauth_group_create(auth, "lead", "reports.*,team.manage");
-
-// 3. Check Cascading Permissions (Direct -> Group -> Wildcard)
-if (arauth_has_permission(auth, user_id, "reports.export")) {
-    // Authorized
-}
-
-// 4. Authenticate multi-identifier login
-arauth_session_t session;
-int ok = arauth_login(auth, identifier, password, NULL, client_ip, ua, &session);
-
-// 5. Zero-Waste Session Purge on Logout
-arauth_session_revoke(auth, session.session_token); // Instantly zeroed in RAM
-```
-
-### 6.2 ARDB App Table Isolation & Shared Groups
+### 6.1 ARDB App Table Isolation & Shared Groups
 When provisioning your application in ARDB:
-1. **Private Scope**: Tables prefixed with your app name (e.g. `analytics_metrics`) are private to your app.
-2. **Shared Groups**: Join shared App Groups (e.g., `alrios ardb group add-app loja analytics_web`) to gain access to shared data spaces (`loja_produtos,loja_pedidos`).
+1. **Private Scope**: Tables prefixed with your app name are private to your app.
+2. **Shared Groups**: Join shared App Groups to gain access to shared data spaces.
 3. **Firewall Protection**: Unauthorized cross-table access is blocked automatically by the SQL Firewall with error `42501`.
 
 ---
@@ -374,13 +337,12 @@ cmake -B build -S . && cmake --build build
 
 ## 8. Ecosystem Applications Breakdown
 
-| Application | Port | Virtual Host | Architecture | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| **`arws`** | 8080 / 443 | `*` | Native C / Multi-Shard Cache | Central Reverse Proxy & Load Balancer |
-| **`cdn`** | 3005 | `cdn.localhost` | Native C / Sendfile | Static Asset & Media Streaming Server |
-| **`home.web`** | 3001 | `alrigroup.com` | React 18 / C Backend | Official ALRIGROUP Corporate Portal |
-| **`detroit.web`** | 3004 | `detroitgg.com` | React 18 / Tailwind | Gaming Community Portal & Leaderboards |
-| **`test_ecosystem.web`** | 3055 | `ecosystem.localhost` | ARWN / WASM Multi-Engine | Multi-Language Linear Memory Benchmark (C, C++, Rust, Go, JS) |
+| Application | Port | Architecture | Description |
+| :--- | :--- | :--- | :--- |
+| **`arws`** | 8080 / 443 | Native C / Multi-Shard Cache | Central Reverse Proxy & Load Balancer |
+| **`ardb`** | 5432 | Native C / PGWire | Sovereign Database Engine |
+| **`arcdn`** | 3005 | Native C / Sendfile | Static Asset & Media Streaming Server |
+| **`arwn`** | varies | Native C / ARWN | Web Native Compiler & Runtime |
 
 ---
 
@@ -397,10 +359,14 @@ alrios power reload    # Zero-downtime hot reload of packages & routes
 # Monitoring & Status
 alrios status          # Display PID table and daemon health
 alrios list            # List all installed .arapp applications
-alrios apps            # View active routing table
+
+# Application Control
+alrios start <app>     # Start a specific application
+alrios stop <app>      # Stop a specific application
+alrios restart <app>   # Restart a specific application
 
 # Package Management (armake)
-armake pack <dir> <out.arapp>     # Build and seal an .arapp container
+armake build <dir> <out.arapp>     # Build and seal an .arapp container
 armake extract <in.arapp> <dir>   # Unpack an .arapp archive
 armake info <in.arapp>            # Inspect headers and manifest
 ```
@@ -409,4 +375,4 @@ armake info <in.arapp>            # Inspect headers and manifest
 
 ## 🏢 Credits & Governance
 - **Architecture & Design**: **[ALRIGROUP Core Team](https://alrigroup.com/)**
-- **Licensing**: Governed by the **ARGLR (ALRI GROUP LICENSE RESERVED)** and **ARGLFU (ALRI GROUP LICENSE FREE USE)**.
+- **Licensing**: Governed by the **ARGLP (ALRI GROUP LICENSE PERMISSIVE - Version 2)**.

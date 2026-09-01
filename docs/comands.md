@@ -1,10 +1,10 @@
-# CLI Command Reference — alrios
+# CLI Command Reference - alrios
 
-Command-line reference for `alrios` management tool.
+Command-line reference for the `alrios` management tool.
 
 ---
 
-## 📋 Service Control Commands
+## Service Control Commands
 
 ```bash
 # Check status of arcore daemon and all applications
@@ -22,25 +22,25 @@ Command-line reference for `alrios` management tool.
 
 ---
 
-## ⚙️ Application Management Commands
+## Application Management Commands
 
 ```bash
 # List all registered applications
 ./alrios list
 
 # Start a specific application
-./alrios start home-web
+./alrios start <app-name>
 
 # Stop a specific application
-./alrios stop home-web
+./alrios stop <app-name>
 
 # Restart a specific application
-./alrios restart home-web
+./alrios restart <app-name>
 ```
 
 ---
 
-## 🌐 ARWS Gateway Management Commands
+## ARWS Gateway Management Commands
 
 ```bash
 # Query gateway routing table and current mode
@@ -55,8 +55,7 @@ Command-line reference for `alrios` management tool.
 ./alrios arws global maintenance
 
 # Set domain override
-./alrios arws override alrigroup.com * maintenance
-./alrios arws override alrigroup.com * production
+./alrios arws override <domain> <path> <mode>
 
 # Manage Upstream Load Balancing Pools
 ./alrios arws upstream list
@@ -66,52 +65,15 @@ Command-line reference for `alrios` management tool.
 
 ---
 
-## 🛡️ ALRI DB Sovereign Data Guardian Commands
+## Package Management (armake)
 
 ```bash
-# Display help menu for ardb
-./alrios ardb help
+# Build and seal an .arapp container
+armake build <app-dir> <output.arapp>
 
-# Check status of ALRI DB engine and isolated PostgreSQL
-./alrios ardb status
+# Unpack an .arapp archive
+armake extract <input.arapp> <output-dir>
 
-# Authenticate user with 2FA and generate 4-hour ephemeral session token for DBeaver
-./alrios ardb auth login <username>
-
-# Immediately revoke an active session token
-./alrios ardb auth revoke <token>
-
-# Create a new tenant user with RBAC role
-./alrios ardb user add <username> <password> <tenant_id> [role]
-
-# Provision app credentials, group binding, and isolated table scopes
-./alrios ardb app add <app_name> <token_or_hash> [group_name|-] [allowed_tables_csv]
-
-# Create shared App Group (shared data spaces) with allowed tables
-./alrios ardb group create <group_name> <shared_tables_csv>
-
-# Associate an application with an App Group
-./alrios ardb group add-app <group_name> <app_name>
-
-# Validate cryptographic integrity of the SHA-256 blockchain audit log
-./alrios ardb audit verify
-
-# Stream audit logs in real-time
-./alrios ardb audit tail
+# Inspect headers and manifest
+armake info <input.arapp>
 ```
-
----
-
-## 🔐 ARAUTH Sovereign Authentication & Vault Commands
-
-```bash
-# Query ARAUTH daemon status & active session metrics
-./alrios auth status
-
-# Verify cryptographic credentials and inspect user permissions
-./alrios auth verify <username> <password>
-
-# Invalidate/revoke active session token with Zero-Waste RAM purge
-./alrios auth revoke <session_token>
-```
-

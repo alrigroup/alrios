@@ -1,28 +1,6 @@
 # Recommended Applications for ALRIOS
 
-This document lists the recommended applications to use with ALRIOS, their purpose, and installation instructions.
-
----
-
-## ARAPIAUTH
-
-**Purpose:** OAuth2 / OIDC Authentication Gateway  
-**Language:** C  
-**Role:** Public-facing authentication API handling token exchange and SSO flows. Delegates secure credential storage to the internal ARAUTH vault.
-
-**Installation:**
-```bash
-# Private repository - requires authorization
-git clone https://github.com/alrigroup/arapiauth.git
-cd arapiauth
-
-# Build
-armake build arapiauth
-```
-
-**Repository:** https://github.com/alrigroup/arapiauth
-
-> ⚠️ Private - requires authorization from ALRI Group.
+This document lists the public, open-source applications recommended for use with ALRIOS.
 
 ---
 
@@ -30,17 +8,14 @@ armake build arapiauth
 
 **Purpose:** Native Static File Server & CDN  
 **Language:** C  
-**Role:** High-performance static file server with TLS support, hot reloading, and minimal footprint.
+**License:** ARGLP  
+**Description:** High-performance static file server with TLS support, hot reloading, and minimal footprint. Ideal for serving assets, media, and web content.
 
 **Installation:**
 ```bash
 git clone https://github.com/alrigroup/alrios.git
 cd alrios
-
-# Initialize submodules
 git submodule update --init --recursive
-
-# Build
 armake build arcdn
 ```
 
@@ -52,17 +27,14 @@ armake build arcdn
 
 **Purpose:** Native Linear Database Engine  
 **Language:** C  
-**Role:** High-performance embedded database with PostgreSQL-compatible wire protocol (PGZero), built-in authentication, firewall, and audit logging.
+**License:** ARGLP  
+**Description:** High-performance embedded database with PostgreSQL-compatible wire protocol (PGWire), built-in authentication, SQL firewall, and audit logging.
 
 **Installation:**
 ```bash
 git clone https://github.com/alrigroup/alrios.git
 cd alrios
-
-# Initialize submodules
 git submodule update --init --recursive
-
-# Build
 armake build ardb
 ```
 
@@ -74,17 +46,14 @@ armake build ardb
 
 **Purpose:** Web Native Compiler & Runtime  
 **Language:** C  
-**Role:** Compiler, bundler, and runtime for building web applications as native ALRIOS apps. Compiles `.arhtml` templates and JavaScript into optimized web packages.
+**License:** ARGLP  
+**Description:** Compiler, bundler, and runtime for building web applications as native ALRIOS apps. Compiles `.arhtml` templates and JavaScript into optimized `.arweb` binary packages.
 
 **Installation:**
 ```bash
 git clone https://github.com/alrigroup/alrios.git
 cd alrios
-
-# Initialize submodules
 git submodule update --init --recursive
-
-# Build
 armake build arwn
 ```
 
@@ -96,17 +65,14 @@ armake build arwn
 
 **Purpose:** High-Performance Reverse Proxy, Load Balancer & Stream Proxy  
 **Language:** C  
-**Role:** Native C reverse proxy and load balancer with round-robin distribution, stream proxying, rate limiting, response caching, and TLS termination.
+**License:** ARGLP  
+**Description:** Native C reverse proxy and load balancer with round-robin distribution, stream proxying, rate limiting, response caching, and TLS termination.
 
 **Installation:**
 ```bash
 git clone https://github.com/alrigroup/alrios.git
 cd alrios
-
-# Initialize submodules
 git submodule update --init --recursive
-
-# Build
 armake build arws
 ```
 
@@ -114,131 +80,7 @@ armake build arws
 
 ---
 
-## ALRIGROUP.WEB
-
-**Purpose:** ALRIOS Web Applications  
-**Language:** HTML/CSS/JS  
-**Role:** Collection of web applications providing browser-based management and monitoring interfaces for ALRIOS.
-
-**Installation:**
-```bash
-# Standalone clone (not a submodule)
-git clone https://github.com/alrigroup/alrigroup.web.git
-
-# Or via alrios
-git clone https://github.com/alrigroup/alrios.git
-cd alrios
-git submodule update --init --recursive
-```
-
-**Repository:** https://github.com/alrigroup/alrigroup.web
-
----
-
-## ARAUTH
-
-**Purpose:** Authentication & Authorization Service  
-**Language:** C  
-**Role:** Secure user authentication, token management, and access control for ALRIOS applications. Supports OAuth2/OIDC, TOTP, vault integration, and rate limiting.
-
-**Installation:**
-```bash
-git clone https://github.com/alrigroup/alrios.git
-cd alrios
-
-# Initialize submodules
-git submodule update --init --recursive
-
-# Build
-armake build arauth
-```
-
-**Repository:** https://github.com/alrigroup/arauth
-
----
-
-## AR ENTERPRISE
-
-**Purpose:** Enterprise Platform for ALRIOS  
-**Language:** C  
-**Role:** Comprehensive enterprise platform providing database management, authentication, and HTTP services for enterprise-grade applications.
-
-**Installation:**
-```bash
-git clone https://github.com/alrigroup/alrios.git
-cd alrios
-
-# Initialize submodules
-git submodule update --init --recursive
-
-# Build
-armake build arenterprise
-```
-
-**Repository:** https://github.com/alrigroup/arenterprise
-
----
-
-## AR ENTERPRISE.WEB
-
-**Purpose:** Web Interface for AR ENTERPRISE  
-**Language:** HTML/CSS/JS  
-**Role:** Browser-based management console for the AR ENTERPRISE platform, providing database and service configuration via web UI.
-
-**Installation:**
-```bash
-git clone https://github.com/alrigroup/alrios.git
-cd alrios
-
-# Initialize submodules
-git submodule update --init --recursive
-```
-
-**Repository:** https://github.com/alrigroup/arenterprise.web
-
----
-
-## DETROIT.WEB
-
-**Purpose:** Detroit Web Application  
-**Language:** HTML/CSS/JS  
-**Role:** Web application for industrial and enterprise use cases, providing web-based industrial control interface and system configuration.
-
-**Installation:**
-```bash
-git clone https://github.com/alrigroup/alrios.git
-cd alrios
-
-# Initialize submodules
-git submodule update --init --recursive
-```
-
-**Repository:** https://github.com/alrigroup/detroit.web
-
----
-
-## FOURTECH.WEB
-
-**Purpose:** FourTech Web Application  
-**Language:** HTML/CSS/JS  
-**Role:** Web application providing technical tools and interfaces for fourtech-related use cases, with data dashboard and system configuration.
-
-**Installation:**
-```bash
-git clone https://github.com/alrigroup/alrios.git
-cd alrios
-
-# Initialize submodules
-git submodule update --init --recursive
-```
-
-**Repository:** https://github.com/alrigroup/fourtech.web
-
----
-
 ## License Notice
 
-- **Public apps** (ARCDN, ARDB, ARWN, ARWS): Licensed under **ARGLP** (ALRI Group License Permissive)
-- **Private apps** (ARAPIAUTH, ARAUTH, ALRIGROUP.WEB, AR ENTERPRISE, AR ENTERPRISE.WEB, DETROIT.WEB, FOURTECH.WEB): Licensed under **ARGLR** (ALRI Group License Reserved)
-
-*Refer to each app's README for full license terms.*
+All public applications are licensed under **ARGLP** (ALRI Group License Permissive).  
+See each app's README for full license terms.
