@@ -12,18 +12,17 @@ This document lists the recommended applications to use with ALRIOS, their purpo
 
 **Installation:**
 ```bash
-# Clone the alrios repository
-git clone https://github.com/alrigroup/alrios.git
-cd alrios
-
-# Initialize submodules (includes arapiauth)
-git submodule update --init --recursive
+# Private repository - requires authorization
+git clone https://github.com/alrigroup/arapiauth.git
+cd arapiauth
 
 # Build
 armake build arapiauth
 ```
 
 **Repository:** https://github.com/alrigroup/arapiauth
+
+> ⚠️ Private - requires authorization from ALRI Group.
 
 ---
 
@@ -239,7 +238,7 @@ git submodule update --init --recursive
 
 ## License Notice
 
-- **Public apps** (ARAPIAUTH, ARCDN, ARDB, ARWN, ARWS): Licensed under **ARGLP** (ALRI Group License Permissive)
-- **Private apps** (ALRIGROUP.WEB, ARAUTH, AR ENTERPRISE, AR ENTERPRISE.WEB, DETROIT.WEB, FOURTECH.WEB): Licensed under **ARGLR** (ALRI Group License Reserved)
+- **Public apps** (ARCDN, ARDB, ARWN, ARWS): Licensed under **ARGLP** (ALRI Group License Permissive)
+- **Private apps** (ARAPIAUTH, ARAUTH, ALRIGROUP.WEB, AR ENTERPRISE, AR ENTERPRISE.WEB, DETROIT.WEB, FOURTECH.WEB): Licensed under **ARGLR** (ALRI Group License Reserved)
 
 *Refer to each app's README for full license terms.*

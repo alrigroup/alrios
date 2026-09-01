@@ -1,6 +1,3 @@
-[submodule "src/apps/arapiauth"]
-	path = src/apps/arapiauth
-	url = https://github.com/alrigroup/arapiauth.git
 [submodule "src/apps/arcdn"]
 	path = src/apps/arcdn
 	url = https://github.com/alrigroup/arcdn.git
