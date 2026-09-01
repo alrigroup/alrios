@@ -49,17 +49,7 @@ ALRIOS is a modular platform. Each component lives in its own repository:
 
 ### 🔒 Private Repositories
 
-| Repository | Description |
-|---|---|
-| **[arapiauth](https://github.com/alrigroup/arapiauth)** | OAuth2/OIDC authentication gateway |
-| **[arauth](https://github.com/alrigroup/arauth)** | Authentication & authorization service with vault, TOTP, and RBAC |
-| **[arenterprise](https://github.com/alrigroup/arenterprise)** | Enterprise platform with database, auth, and HTTP services |
-| **[arenterprise.web](https://github.com/alrigroup/arenterprise.web)** | Web interface for AR ENTERPRISE management console |
-| **[alrigroup.web](https://github.com/alrigroup/alrigroup.web)** | ALRI Group web applications and portals |
-| **[detroit.web](https://github.com/alrigroup/detroit.web)** | Detroit industrial web application |
-| **[fourtech.web](https://github.com/alrigroup/fourtech.web)** | FourTech web application and dashboard |
-
-> ⚠️ Private repositories require authorization from ALRI Group. Contact us at [alrigroup.com](https://alrigroup.com) for access.
+Additional enterprise applications and client portals are maintained in private repositories. Contact [alrigroup.com](https://alrigroup.com) for access.
 
 ---
 
