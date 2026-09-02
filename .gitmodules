@@ -10,3 +10,6 @@
 [submodule "src/apps/arws"]
 	path = src/apps/arws
 	url = https://github.com/alrigroup/arws.git
+[submodule "src/apps/ardcbot"]
+	path = src/apps/ardcbot
+	url = https://github.com/alrigroup/ardcbot.git
