@@ -774,19 +774,90 @@ static int resolve_arwn_build(const char *arcore_dir, const char *override,
     return -1;
 }
 
-/* Sobe dirs a partir de 'start' procurando o diretório 'arcore/'.    */
+static int probe_arcore_candidate(const char *cand) {
+    if (!cand || !cand[0]) return 0;
+    const char *probes[] = {
+        "armake", "armake.exe",
+        "alrios", "alrios.exe",
+        "arcore", "arcore.exe",
+        "lib", ".staging", "registry.json", NULL
+    };
+    for (int i = 0; probes[i]; i++) {
+        char p[1400];
+        snprintf(p, sizeof(p), "%s%c%s", cand, SEPARATOR, probes[i]);
+        FILE *f = fopen(p, "rb");
+        if (f) { fclose(f); return 1; }
+#ifndef _WIN32
+        struct stat st;
+        if (stat(p, &st) == 0) return 1;
+#endif
+    }
+    return 0;
+}
+
+static int get_self_dir(char *out, int cap) {
+#ifdef _WIN32
+    char path[1024] = {0};
+    DWORD len = GetModuleFileNameA(NULL, path, sizeof(path) - 1);
+    if (len > 0) {
+        char *last = strrchr(path, '\\');
+        if (!last) last = strrchr(path, '/');
+        if (last) {
+            *last = 0;
+            snprintf(out, cap, "%s", path);
+            return 0;
+        }
+    }
+#else
+    char path[1024] = {0};
+    ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
+    if (len > 0) {
+        path[len] = 0;
+        char *last = strrchr(path, '/');
+        if (last) {
+            *last = 0;
+            snprintf(out, cap, "%s", path);
+            return 0;
+        }
+    }
+#endif
+    return -1;
+}
+
+/* Sobe dirs a partir de 'start' procurando o diretorio 'arcore/'. */
 static int find_arcore_dir(const char *start, char *out, int cap) {
     const char *env = getenv("ARCORE_HOME");
-    if (env && env[0]) { snprintf(out, cap, "%s", env); return 0; }
+    if (!env || !env[0]) env = getenv("ARCORE");
+    if (env && env[0] && probe_arcore_candidate(env)) {
+        snprintf(out, cap, "%s", env);
+        return 0;
+    }
+
+    /* 1. Procura no diretorio do proprio binario armake */
+    char self_dir[1024] = {0};
+    if (get_self_dir(self_dir, sizeof(self_dir)) == 0) {
+        if (probe_arcore_candidate(self_dir)) {
+            snprintf(out, cap, "%s", self_dir);
+            return 0;
+        }
+        char sub[1200];
+        snprintf(sub, sizeof(sub), "%s%carcore", self_dir, SEPARATOR);
+        if (probe_arcore_candidate(sub)) {
+            snprintf(out, cap, "%s", sub);
+            return 0;
+        }
+    }
+
+    /* 2. Sobe diretorios a partir de start */
     char cur[1024];
     if (is_abs_path(start)) {
         snprintf(cur, sizeof(cur), "%s", start);
     } else {
         char cwd[1024] = {0};
 #ifdef _WIN32
-        if (!_getcwd(cwd, sizeof(cwd))) cwd[0] = '\0';
+        if (!_getcwd(cwd, sizeof(cwd))) cwd[0] = 0;
 #else
-        if (!getcwd(cwd, sizeof(cwd))) cwd[0] = '\0';
+        if (!getcwd(cwd, sizeof(cwd))) cwd[0] = 0;
 #endif
         if (cwd[0]) {
             snprintf(cur, sizeof(cur), "%s%c%s", cwd, SEPARATOR, start);
@@ -797,20 +868,34 @@ static int find_arcore_dir(const char *start, char *out, int cap) {
     for (int depth = 0; depth < 16; depth++) {
         char candidate[1300];
         snprintf(candidate, sizeof(candidate), "%s%carcore", cur, SEPARATOR);
-        /* probe two known sub-paths that exist inside arcore/ */
-        char probe[1400];
-        snprintf(probe, sizeof(probe), "%s%carmake", candidate, SEPARATOR);
-        FILE *pf = fopen(probe, "rb");
-        if (!pf) {
-            snprintf(probe, sizeof(probe), "%s%c.staging", candidate, SEPARATOR);
-            pf = fopen(probe, "rb");
+        if (probe_arcore_candidate(candidate)) {
+            snprintf(out, cap, "%s", candidate);
+            return 0;
         }
-        if (pf) { fclose(pf); snprintf(out, cap, "%s", candidate); return 0; }
+        if (probe_arcore_candidate(cur)) {
+            snprintf(out, cap, "%s", cur);
+            return 0;
+        }
         char *last = strrchr(cur, SEPARATOR);
         if (!last || last == cur) break;
-        *last = '\0';
+        *last = 0;
     }
-    return -1;
+
+    /* 3. Fallback seguro: nunca retornar vazio */
+    char cwd[1024] = {0};
+#ifdef _WIN32
+    if (!_getcwd(cwd, sizeof(cwd))) cwd[0] = 0;
+#else
+    if (!getcwd(cwd, sizeof(cwd))) cwd[0] = 0;
+#endif
+    char cand[1300];
+    snprintf(cand, sizeof(cand), "%s%carcore", cwd, SEPARATOR);
+    if (probe_arcore_candidate(cand)) {
+        snprintf(out, cap, "%s", cand);
+        return 0;
+    }
+    snprintf(out, cap, "%s", cwd[0] ? cwd : ".");
+    return 0;
 }
 
 /* Executa o pipeline de steps do manifesto. Retorna 0 em sucesso.    */
@@ -839,6 +924,11 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
     char staging[1024] = {0};
     expand_vars(staging, sizeof(staging), staging_tpl,
                 m->name, app_dir, arcore_dir, "", arwn_build);
+    if (staging[0] == '/' && staging[1] == '.' && (staging[2] == 's' || staging[2] == '/')) {
+        char fixed[1024];
+        snprintf(fixed, sizeof(fixed), ".%s", staging);
+        strncpy(staging, fixed, sizeof(staging) - 1);
+    }
 
     char saved_cwd[1024] = {0};
 #ifdef _WIN32

@@ -1,6 +1,6 @@
 name: Build & Release Sovereign .arapp (Web / Node.js)
 
-"on":
+on:
   push:
     branches: [ "main" ]
     tags: [ "v*" ]
@@ -14,51 +14,39 @@ jobs:
     name: Build Web .arapp & Publish Release
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout app repository
-        uses: actions/checkout@v4
-        with:
-          path: app
-
       - name: Checkout ALRIOS core toolchain
         uses: actions/checkout@v4
         with:
           repository: alrigroup/alrios
           path: alrios
-          ref: main
+          ref: beta-v0.2
+
+      - name: Checkout app repository
+        uses: actions/checkout@v4
+        with:
+          path: alrios/src/apps/${{ github.event.repository.name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install system dependencies & compile armake
+      - name: Install system dependencies & compile ALRIOS toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake gcc make libssl-dev pkg-config
           cd alrios
           cmake -S . -B build-tools -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-tools --target armake -j$(nproc)
-          chmod +x arcore/armake
-
-      - name: Build Web Application
-        run: |
-          cd app
-          if [ -f "package.json" ]; then
-            if [ -f "package-lock.json" ]; then
-              npm ci
-            else
-              npm install
-            fi
-            if npm run | grep -q "build"; then
-              npm run build
-            fi
-          fi
+          cmake --build build-tools --target arkernel armake arwn_build -j$(nproc)
+          chmod +x arcore/armake arcore/arcore arcore/arwn 2>/dev/null || true
 
       - name: Package into Sovereign .arapp
         run: |
-          APP_NAME=$(basename ${{ github.repository }})
+          APP_NAME="${{ github.event.repository.name }}"
           echo "==> Empacotando app web ${APP_NAME}..."
-          ./alrios/arcore/armake build "app" "${APP_NAME}.arapp"
+          cd alrios
+          ./arcore/armake build "src/apps/${APP_NAME}" "../${APP_NAME}.arapp"
+          cd ..
           ls -lh *.arapp
 
       - name: Publish Official GitHub Release

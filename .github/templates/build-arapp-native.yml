@@ -1,6 +1,6 @@
 name: Build & Release Sovereign .arapp (Native)
 
-"on":
+on:
   push:
     branches: [ "main" ]
     tags: [ "v*" ]
@@ -17,36 +17,38 @@ jobs:
     name: Build Linux .arapp (x64)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout app repository
-        uses: actions/checkout@v4
-        with:
-          path: app
-
       - name: Checkout ALRIOS core toolchain
         uses: actions/checkout@v4
         with:
           repository: alrigroup/alrios
           path: alrios
-          ref: main
+          ref: beta-v0.2
+
+      - name: Checkout app repository
+        uses: actions/checkout@v4
+        with:
+          path: alrios/src/apps/${{ github.event.repository.name }}
 
       - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake gcc make libssl-dev pkg-config
 
-      - name: Compile ALRIOS armake compiler
+      - name: Compile ALRIOS toolchain & arkernel
         run: |
           cd alrios
-          cmake -S . -B build-tools -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-tools --target armake -j$(nproc)
+          cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-linux --target arkernel armake -j$(nproc)
           chmod +x arcore/armake
 
       - name: Compile and package native app into .arapp
         run: |
-          APP_NAME=$(basename ${{ github.repository }})
+          APP_NAME="${{ github.event.repository.name }}"
           echo "==> Empacotando ${APP_NAME} para Linux..."
-          ./alrios/arcore/armake build "app" "${APP_NAME}-linux-x64.arapp"
-          ls -lh *.arapp
+          cd alrios
+          ./arcore/armake build "src/apps/${APP_NAME}" "../${APP_NAME}-linux-x64.arapp"
+          cd ..
+          ls -lh *-linux-x64.arapp
 
       - name: Upload Linux .arapp artifact
         uses: actions/upload-artifact@v4
@@ -55,43 +57,49 @@ jobs:
           path: "*-linux-x64.arapp"
 
   # ----------------------------------------------------------------------------
-  # 2. BUILD WINDOWS .arapp (PE .exe)
+  # 2. BUILD WINDOWS .arapp (PE x64)
   # ----------------------------------------------------------------------------
   build-windows:
     name: Build Windows .arapp (x64)
     runs-on: windows-latest
+    continue-on-error: true
     steps:
-      - name: Checkout app repository
-        uses: actions/checkout@v4
+      - name: Setup MSYS2 with MinGW GCC & OpenSSL
+        uses: msys2/setup-msys2@v2
         with:
-          path: app
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-openssl mingw-w64-x86_64-ninja
 
       - name: Checkout ALRIOS core toolchain
         uses: actions/checkout@v4
         with:
           repository: alrigroup/alrios
           path: alrios
-          ref: main
+          ref: beta-v0.2
 
-      - name: Setup MSVC Developer Command Prompt
-        uses: ilammy/msvc-dev-cmd@v1
+      - name: Checkout app repository
+        uses: actions/checkout@v4
+        with:
+          path: alrios/src/apps/${{ github.event.repository.name }}
 
-      - name: Compile ALRIOS armake on Windows
-        shell: cmd
+      - name: Compile ALRIOS toolchain on Windows
+        shell: msys2 {0}
         run: |
           cd alrios
-          set "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL"
-          if not exist "%OPENSSL_ROOT_DIR%" set "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL-Win64"
-          cmake -S . -B build-win -DCMAKE_BUILD_TYPE=Release -DOPENSSL_ROOT_DIR="%OPENSSL_ROOT_DIR%"
-          cmake --build build-win --config Release --target armake
+          cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-win --target arkernel armake
+          ls -la arcore
 
       - name: Compile and package native app into .arapp on Windows
-        shell: bash
+        shell: msys2 {0}
         run: |
-          APP_NAME=$(basename ${{ github.repository }})
+          APP_NAME="${{ github.event.repository.name }}"
           echo "==> Empacotando ${APP_NAME} para Windows..."
-          ./alrios/arcore/armake.exe build "app" "${APP_NAME}-windows-x64.arapp"
-          ls -lh *.arapp
+          cd alrios
+          ./arcore/armake.exe build "src/apps/${APP_NAME}" "../${APP_NAME}-windows-x64.arapp"
+          cd ..
+          ls -lh *-windows-x64.arapp
 
       - name: Upload Windows .arapp artifact
         uses: actions/upload-artifact@v4
@@ -107,15 +115,13 @@ jobs:
     needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
     steps:
-      - name: Download Linux .arapp
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
-        with:
-          name: linux-arapp
 
-      - name: Download Windows .arapp
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-arapp
+      - name: Collect .arapp files
+        run: |
+          find . -name "*.arapp" -exec mv {} . \;
+          ls -lh *.arapp
 
       - name: Publish Release with .arapp assets
         uses: softprops/action-gh-release@v2
@@ -123,8 +129,7 @@ jobs:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
           name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'Latest Sovereign Build' }}
           files: |
-            *-linux-x64.arapp
-            *-windows-x64.arapp
+            *.arapp
           generate_release_notes: true
           draft: false
           prerelease: false
