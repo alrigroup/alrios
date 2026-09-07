@@ -16,7 +16,8 @@ Release/
 *.dir/
 
 # Executables, Libraries & Binaries in arcore output directory
-arcore/
+arcore/*
+!arcore/registry.json
 arcore/.staging/
 arcore/apps/
 arcore/programfiles/

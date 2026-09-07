@@ -40,7 +40,7 @@
 #include <openssl/evp.h>
 
 #define ARPM_VERSION "1.0.0"
-#define DEFAULT_REGISTRY_URL "https://raw.githubusercontent.com/alrigroup/alrios/main/registry.json"
+#define DEFAULT_REGISTRY_URL "https://raw.githubusercontent.com/alrigroup/alrios/main/arcore/registry.json"
 
 /* ANSI Colors */
 #define CLR_RESET   "\033[0m"
@@ -448,7 +448,10 @@ static int read_manifest_info(const char *manifest_file, char *name_out, size_t 
 /* Registry resolution helper */
 static int resolve_registry_package(const char *app, char *url_out, size_t url_max, char *sha_out, size_t sha_max, char *ver_out, size_t ver_max) {
     char local_reg[1024];
-    snprintf(local_reg, sizeof(local_reg), "%s%cregistry.json", g_ctx.root_dir, SEPARATOR);
+    snprintf(local_reg, sizeof(local_reg), "%s%cregistry.json", g_ctx.arcore_dir, SEPARATOR);
+    if (!file_exists(local_reg)) {
+        snprintf(local_reg, sizeof(local_reg), "%s%cregistry.json", g_ctx.root_dir, SEPARATOR);
+    }
 
     const char *reg_path = file_exists(local_reg) ? local_reg : g_ctx.registry_cache;
 
@@ -982,7 +985,10 @@ static int cmd_search(const char *query) {
     printf("\n%s=== Catalogo de Aplicativos Disponiveis ===%s\n\n", CLR_CYAN, CLR_RESET);
 
     char local_reg[1024];
-    snprintf(local_reg, sizeof(local_reg), "%s%cregistry.json", g_ctx.root_dir, SEPARATOR);
+    snprintf(local_reg, sizeof(local_reg), "%s%cregistry.json", g_ctx.arcore_dir, SEPARATOR);
+    if (!file_exists(local_reg)) {
+        snprintf(local_reg, sizeof(local_reg), "%s%cregistry.json", g_ctx.root_dir, SEPARATOR);
+    }
     const char *reg_path = file_exists(local_reg) ? local_reg : g_ctx.registry_cache;
 
     if (!file_exists(reg_path)) {

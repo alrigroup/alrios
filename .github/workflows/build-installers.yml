@@ -82,7 +82,7 @@ jobs:
           cp run.sh "${BUNDLE_DIR}/" 2>/dev/null || true
           cp stop.sh "${BUNDLE_DIR}/" 2>/dev/null || true
           cp alrios.service "${BUNDLE_DIR}/" 2>/dev/null || true
-          cp registry.json "${BUNDLE_DIR}/" 2>/dev/null || true
+          cp arcore/registry.json "${BUNDLE_DIR}/arcore/" 2>/dev/null || true
           cp LICENSE "${BUNDLE_DIR}/" 2>/dev/null || true
           cp README.md "${BUNDLE_DIR}/" 2>/dev/null || true
           
@@ -174,7 +174,8 @@ jobs:
           done
           
           # Copiar scripts e documentos
-          cp install.bat run.bat stop.bat registry.json LICENSE README.md "${BUNDLE_DIR}/" 2>/dev/null || true
+          cp install.bat run.bat stop.bat LICENSE README.md "${BUNDLE_DIR}/" 2>/dev/null || true
+          cp arcore/registry.json "${BUNDLE_DIR}/arcore/" 2>/dev/null || true
           
           # Criar ZIP final via 7z nativo
           7z a -tzip alrios-windows-x64-installer.zip ./"${BUNDLE_DIR}"/*
