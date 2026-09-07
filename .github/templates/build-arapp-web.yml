@@ -20,7 +20,10 @@ jobs:
           repository: alrigroup/alrios
           path: alrios
           ref: beta-v0.2
-          submodules: recursive
+
+      - name: Checkout ARWN Web Runtime
+        run: |
+          git clone --depth 1 https://github.com/alrigroup/arwn.git alrios/src/apps/arwn
 
       - name: Checkout app repository
         uses: actions/checkout@v4

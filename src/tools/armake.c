@@ -956,6 +956,11 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
             char cmd_exp[AR_BUILD_STEP_CMD_MAX];
             expand_vars(cmd_exp, sizeof(cmd_exp), step->cmd,
                         m->name, app_dir, arcore_dir, staging, arwn_build);
+#ifdef _WIN32
+            if (strstr(cmd_exp, "-larkernel") && !strstr(cmd_exp, "-lws2_32")) {
+                strncat(cmd_exp, " -lws2_32", sizeof(cmd_exp) - strlen(cmd_exp) - 1);
+            }
+#endif
             char step_cwd[1024];
             if (step->cwd[0]) {
                 char cwd_exp[AR_BUILD_STEP_CWD_MAX];
