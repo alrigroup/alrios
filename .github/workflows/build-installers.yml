@@ -1,0 +1,226 @@
+name: Build & Package Installers (Multi-OS)
+
+"on":
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ============================================================================
+  # 1. LINUX BUILD & INSTALLER PACKAGING
+  # ============================================================================
+  build-linux:
+    name: Linux x64 Installer
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository & submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install system build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            gcc \
+            make \
+            libssl-dev \
+            libgtk-3-dev \
+            pkg-config \
+            nodejs \
+            npm
+
+      - name: Configure CMake (Release)
+        run: |
+          cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release
+
+      - name: Compile kernel, CLI, tools & installer
+        run: |
+          cmake --build build-linux --target arcore alrios armake arinstall -j$(nproc)
+          chmod +x arcore/arcore arcore/alrios arcore/armake arcore/arinstall 2>/dev/null || true
+          ln -sf alrios arcore/arpm
+          chmod +x arcore/arpm 2>/dev/null || true
+
+      - name: Package modular .arapp applications
+        run: |
+          mkdir -p arcore/apps
+          for appdir in src/apps/*/; do
+            if [ -d "$appdir" ]; then
+              appname=$(basename "$appdir")
+              echo "==> Empacotando app: ${appname}..."
+              ./arcore/armake build "$appdir" "arcore/apps/${appname}.arapp" || {
+                echo "[AVISO] Falha ao empacotar ${appname}, continuando..."
+              }
+            fi
+          done
+          echo "==> Apps gerados:"
+          ls -lh arcore/apps/
+
+      - name: Assemble Linux installer bundle
+        run: |
+          BUNDLE_DIR="alrios-linux-x64"
+          mkdir -p "${BUNDLE_DIR}/arcore"
+          
+          # Copiar binarios e bibliotecas
+          cp -r arcore/* "${BUNDLE_DIR}/arcore/"
+          
+          # Scripts de inicializacao e suporte
+          cp install.sh "${BUNDLE_DIR}/"
+          cp run.sh "${BUNDLE_DIR}/" 2>/dev/null || true
+          cp stop.sh "${BUNDLE_DIR}/" 2>/dev/null || true
+          cp alrios.service "${BUNDLE_DIR}/" 2>/dev/null || true
+          cp registry.json "${BUNDLE_DIR}/" 2>/dev/null || true
+          cp LICENSE "${BUNDLE_DIR}/" 2>/dev/null || true
+          cp README.md "${BUNDLE_DIR}/" 2>/dev/null || true
+          
+          # Garantir permissoes
+          chmod +x "${BUNDLE_DIR}/install.sh" "${BUNDLE_DIR}/run.sh" "${BUNDLE_DIR}/stop.sh" 2>/dev/null || true
+          chmod +x "${BUNDLE_DIR}/arcore/arcore" "${BUNDLE_DIR}/arcore/alrios" "${BUNDLE_DIR}/arcore/armake" "${BUNDLE_DIR}/arcore/arinstall" 2>/dev/null || true
+          
+          # Gerar arquivo tarball compactado
+          tar -czvf alrios-linux-x64-installer.tar.gz -C "${BUNDLE_DIR}" .
+
+      - name: Upload Linux Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: alrios-linux-x64-installer
+          path: alrios-linux-x64-installer.tar.gz
+          retention-days: 30
+
+  # ============================================================================
+  # 2. WINDOWS BUILD & INSTALLER PACKAGING
+  # ============================================================================
+  build-windows:
+    name: Windows x64 Installer
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository & submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Locate & Configure OpenSSL
+        shell: pwsh
+        run: |
+          $possiblePaths = @(
+            "C:\Program Files\OpenSSL",
+            "C:\Program Files\OpenSSL-Win64",
+            "C:\OpenSSL-Win64"
+          )
+          $sslPath = $null
+          foreach ($p in $possiblePaths) {
+            if (Test-Path $p) {
+              $sslPath = $p
+              break
+            }
+          }
+          if (-not $sslPath) {
+            Write-Host "Instalando OpenSSL via Chocolatey..."
+            choco install openssl.light -y
+            $sslPath = "C:\Program Files\OpenSSL"
+          }
+          Write-Host "OpenSSL localizado em: $sslPath"
+          echo "OPENSSL_ROOT_DIR=$sslPath" >> $env:GITHUB_ENV
+          echo "$sslPath\bin" >> $env:GITHUB_PATH
+
+      - name: Configure CMake (Release)
+        shell: cmd
+        run: |
+          cmake -S . -B build-win -DCMAKE_BUILD_TYPE=Release -DOPENSSL_ROOT_DIR="%OPENSSL_ROOT_DIR%"
+
+      - name: Compile kernel, CLI, tools & installer
+        shell: cmd
+        run: |
+          cmake --build build-win --config Release --target arcore alrios armake arinstall
+
+      - name: Package modular .arapp applications
+        shell: cmd
+        run: |
+          if not exist arcore\apps mkdir arcore\apps
+          for /d %%d in (src\apps\*) do (
+            echo ==> Empacotando app: %%~nxd
+            arcore\armake.exe build "%%d" "arcore\apps\%%~nxd.arapp"
+          )
+          dir arcore\apps
+
+      - name: Assemble Windows installer bundle
+        shell: pwsh
+        run: |
+          $bundle = "alrios-windows-x64"
+          New-Item -ItemType Directory -Force -Path "$bundle\arcore" | Out-Null
+          
+          # Copiar executaveis e arcore
+          Copy-Item -Path "arcore\*" -Destination "$bundle\arcore" -Recurse -Force
+          
+          # Copiar DLLs de runtime do OpenSSL
+          $sslBin = "$env:OPENSSL_ROOT_DIR\bin"
+          if (Test-Path $sslBin) {
+            Get-ChildItem -Path $sslBin -Filter "*.dll" | ForEach-Object {
+              Copy-Item -Path $_.FullName -Destination "$bundle\arcore\" -Force
+            }
+          }
+          
+          # Copiar scripts e documentos
+          Copy-Item -Path "install.bat" -Destination "$bundle\" -Force
+          if (Test-Path "run.bat") { Copy-Item -Path "run.bat" -Destination "$bundle\" -Force }
+          if (Test-Path "stop.bat") { Copy-Item -Path "stop.bat" -Destination "$bundle\" -Force }
+          if (Test-Path "registry.json") { Copy-Item -Path "registry.json" -Destination "$bundle\" -Force }
+          if (Test-Path "LICENSE") { Copy-Item -Path "LICENSE" -Destination "$bundle\" -Force }
+          if (Test-Path "README.md") { Copy-Item -Path "README.md" -Destination "$bundle\" -Force }
+          
+          # Criar ZIP final
+          Compress-Archive -Path "$bundle\*" -DestinationPath "alrios-windows-x64-installer.zip" -Force
+
+      - name: Upload Windows Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: alrios-windows-x64-installer
+          path: alrios-windows-x64-installer.zip
+          retention-days: 30
+
+  # ============================================================================
+  # 3. PUBLISH GITHUB RELEASE (Triggered on Tags v*)
+  # ============================================================================
+  release:
+    name: Publish Official Release
+    needs: [build-linux, build-windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: alrios-linux-x64-installer
+
+      - name: Download Windows installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: alrios-windows-x64-installer
+
+      - name: Create GitHub Release with Installers
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            alrios-linux-x64-installer.tar.gz
+            alrios-windows-x64-installer.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

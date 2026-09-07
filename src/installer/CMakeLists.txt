@@ -22,3 +22,9 @@ endif()
 if(WIN32)
     target_link_libraries(arinstall PRIVATE urlmon)
 endif()
+
+set_target_properties(arinstall PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore"
+)
