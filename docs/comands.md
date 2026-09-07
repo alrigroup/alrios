@@ -86,23 +86,23 @@ Manage remote and local applications with native lifecycle hooks:
 
 ```bash
 # List all installed packages and status
-./arpm list
-./alrios arpm list
+alrios arpm list
+./arcore/arpm list
 
 # Install pre-built package from registry or URL
-./arpm install <app> [--autostart] [--start]
+alrios arpm install <app> [--autostart] [--start]
 
 # Install & compile directly from remote git source
-./arpm install-src <git-url> [--autostart] [--start]
+alrios arpm install-src <git-url> [--autostart] [--start]
 
 # Update packages preserving user data
-./arpm update <app>
-./arpm update --all
+alrios arpm update <app>
+alrios arpm update --all
 
 # Uninstall package
-./arpm uninstall <app> [--purge]
+alrios arpm uninstall <app> [--purge]
 
 # Search registry catalogue
-./arpm search <query>
-./arpm info <app>
+alrios arpm search <query>
+alrios arpm info <app>
 ```

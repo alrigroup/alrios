@@ -36,3 +36,10 @@ set_target_properties(alrios PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore"
 )
+
+if(UNIX)
+    add_custom_command(TARGET alrios POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E create_symlink alrios "${CMAKE_SOURCE_DIR}/arcore/arpm"
+        COMMENT "Generating arcore/arpm symlink to alrios"
+    )
+endif()
