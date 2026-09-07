@@ -16,20 +16,23 @@ echo           ALRIOS — Instalador Automatizado para Windows
 echo ========================================================================
 echo.
 
-if exist "%OUT%\arinstall.exe" (
-    echo -^> Iniciando assistente de instalacao arinstall.exe...
-    start "" "%OUT%\arinstall.exe" %*
-) else (
-    echo -^> Verificando binarios do ecossistema...
-    if exist "%OUT%\alrios.exe" (
-        echo [OK] ALRIOS instalado com sucesso em %OUT%
-        echo.
-        echo Comandos rapidos:
-        echo   %OUT%\alrios.exe power on   (Inicia os microservicos)
-        echo   %OUT%\alrios.exe arpm list  (Lista aplicativos instalados)
-    ) else (
-        echo [ERRO] Binarios do ALRIOS nao encontrados na pasta arcore.
-    )
-    echo.
+echo -> [1/3] Verificando binarios do ecossistema em %OUT%...
+if not exist "%OUT%\alrios.exe" (
+    echo [ERRO] Binarios do ALRIOS nao encontrados na pasta arcore.
     pause
+    exit /b 1
 )
+
+echo -> [2/3] Registrando ALRIOS no PATH do Windows...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$userPath = [Environment]::GetEnvironmentVariable('Path', 'User'); if ($userPath -notlike '*%OUT%*') { [Environment]::SetEnvironmentVariable('Path', $userPath + ';%OUT%', 'User'); Write-Host '   ✓ PATH do usuario atualizado com sucesso.' } else { Write-Host '   ✓ ALRIOS ja esta presente no PATH.' }"
+
+echo -> [3/3] Finalizando instalacao...
+echo.
+echo ========================================================================
+echo  ✓ ALRIOS instalado com sucesso no Windows!
+echo    Abra um novo Prompt de Comando ou PowerShell e execute:
+echo    alrios power on
+echo    arpm list
+echo ========================================================================
+echo.
+pause
