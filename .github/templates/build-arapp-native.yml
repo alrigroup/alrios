@@ -115,6 +115,27 @@ jobs:
     needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout ALRIOS core toolchain
+        uses: actions/checkout@v4
+        with:
+          repository: alrigroup/alrios
+          path: alrios
+          ref: beta-v0.2
+
+      - name: Checkout app repository
+        uses: actions/checkout@v4
+        with:
+          path: alrios/src/apps/${{ github.event.repository.name }}
+
+      - name: Extract App Version from arappmake
+        id: meta
+        run: |
+          APP_VER=$(grep '"version"' alrios/src/apps/${{ github.event.repository.name }}/*.arappmake 2>/dev/null | head -n1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*//')
+          if [ -z "$APP_VER" ]; then APP_VER="0.0.2"; fi
+          echo "version=${APP_VER}" >> $GITHUB_OUTPUT
+          echo "tag=v${APP_VER}-beta" >> $GITHUB_OUTPUT
+          echo "title=v${APP_VER}-beta" >> $GITHUB_OUTPUT
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
 
@@ -126,13 +147,13 @@ jobs:
       - name: Publish Release with .arapp assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'Latest Sovereign Build' }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.meta.outputs.tag }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.meta.outputs.title }}
           files: |
             *.arapp
           generate_release_notes: true
           draft: false
-          prerelease: false
+          prerelease: true
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
