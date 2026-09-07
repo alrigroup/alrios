@@ -113,11 +113,10 @@ jobs:
           fetch-depth: 0
 
       - name: Initialize available submodules
-        shell: pwsh
+        shell: bash
         run: |
-          git submodule sync
-          git submodule update --init --recursive
-          if (-not $?) { Write-Host "Ignorando modulos privados indisponiveis..." }
+          git submodule sync || true
+          git submodule update --init --recursive || true
 
       - name: Setup MSVC Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1
@@ -127,79 +126,58 @@ jobs:
         with:
           node-version: 20
 
-      - name: Locate & Configure OpenSSL
-        shell: pwsh
+      - name: Locate OpenSSL & Build with CMake
+        shell: cmd
         run: |
-          $possiblePaths = @(
-            "C:\Program Files\OpenSSL",
-            "C:\Program Files\OpenSSL-Win64",
-            "C:\OpenSSL-Win64"
-          )
-          $sslPath = $null
-          foreach ($p in $possiblePaths) {
-            if (Test-Path $p) {
-              $sslPath = $p
-              break
-            }
-          }
-          if (-not $sslPath) {
-            Write-Host "Instalando OpenSSL via Chocolatey..."
+          set "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL"
+          if not exist "%OPENSSL_ROOT_DIR%" set "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL-Win64"
+          if not exist "%OPENSSL_ROOT_DIR%" (
             choco install openssl.light -y
-            $sslPath = "C:\Program Files\OpenSSL"
-          }
-          Write-Host "OpenSSL localizado em: $sslPath"
-          echo "OPENSSL_ROOT_DIR=$sslPath" >> $env:GITHUB_ENV
-          echo "$sslPath\bin" >> $env:GITHUB_PATH
-
-      - name: Configure CMake (Release)
-        shell: cmd
-        run: |
+            set "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL"
+          )
+          echo OpenSSL located at: %OPENSSL_ROOT_DIR%
           cmake -S . -B build-win -DCMAKE_BUILD_TYPE=Release -DOPENSSL_ROOT_DIR="%OPENSSL_ROOT_DIR%"
-
-      - name: Compile kernel, CLI, tools & installer
-        shell: cmd
-        run: |
           cmake --build build-win --config Release --target arcore alrios armake arinstall
 
       - name: Package modular .arapp applications
-        shell: cmd
+        shell: bash
         run: |
-          if not exist arcore\apps mkdir arcore\apps
-          for /d %%d in (src\apps\*) do (
-            if exist "%%d\%%~nxd.arappmake" (
-              echo ==> Empacotando app: %%~nxd
-              arcore\armake.exe build "%%d" "arcore\apps\%%~nxd.arapp"
-            )
-          )
-          dir arcore\apps
+          mkdir -p arcore/apps
+          for appdir in src/apps/*/; do
+            if [ -d "$appdir" ]; then
+              appname=$(basename "$appdir")
+              if [ -f "$appdir/${appname}.arappmake" ] || [ -f "$appdir/config.arwn" ] || [ -f "$appdir/CMakeLists.txt" ]; then
+                echo "==> Empacotando app: ${appname}..."
+                ./arcore/armake.exe build "$appdir" "arcore/apps/${appname}.arapp" || {
+                  echo "[AVISO] Falha ao empacotar ${appname}, continuando..."
+                }
+              fi
+            fi
+          done
+          echo "==> Apps gerados no Windows:"
+          ls -lh arcore/apps/
 
       - name: Assemble Windows installer bundle
-        shell: pwsh
+        shell: bash
         run: |
-          $bundle = "alrios-windows-x64"
-          New-Item -ItemType Directory -Force -Path "$bundle\arcore" | Out-Null
+          BUNDLE_DIR="alrios-windows-x64"
+          mkdir -p "${BUNDLE_DIR}/arcore"
           
           # Copiar executaveis e arcore
-          Copy-Item -Path "arcore\*" -Destination "$bundle\arcore" -Recurse -Force
+          cp -r arcore/* "${BUNDLE_DIR}/arcore/"
           
-          # Copiar DLLs de runtime do OpenSSL
-          $sslBin = "$env:OPENSSL_ROOT_DIR\bin"
-          if (Test-Path $sslBin) {
-            Get-ChildItem -Path $sslBin -Filter "*.dll" | ForEach-Object {
-              Copy-Item -Path $_.FullName -Destination "$bundle\arcore\" -Force
-            }
-          }
+          # Copiar DLLs do OpenSSL
+          for p in "C:/Program Files/OpenSSL/bin" "C:/Program Files/OpenSSL-Win64/bin"; do
+            if [ -d "$p" ]; then
+              cp "$p"/*.dll "${BUNDLE_DIR}/arcore/" 2>/dev/null || true
+            fi
+          done
           
           # Copiar scripts e documentos
-          Copy-Item -Path "install.bat" -Destination "$bundle\" -Force
-          if (Test-Path "run.bat") { Copy-Item -Path "run.bat" -Destination "$bundle\" -Force }
-          if (Test-Path "stop.bat") { Copy-Item -Path "stop.bat" -Destination "$bundle\" -Force }
-          if (Test-Path "registry.json") { Copy-Item -Path "registry.json" -Destination "$bundle\" -Force }
-          if (Test-Path "LICENSE") { Copy-Item -Path "LICENSE" -Destination "$bundle\" -Force }
-          if (Test-Path "README.md") { Copy-Item -Path "README.md" -Destination "$bundle\" -Force }
+          cp install.bat run.bat stop.bat registry.json LICENSE README.md "${BUNDLE_DIR}/" 2>/dev/null || true
           
-          # Criar ZIP final
-          Compress-Archive -Path "$bundle\*" -DestinationPath "alrios-windows-x64-installer.zip" -Force
+          # Criar ZIP final via 7z nativo
+          7z a -tzip alrios-windows-x64-installer.zip ./"${BUNDLE_DIR}"/*
 
       - name: Upload Windows Installer Artifact
         uses: actions/upload-artifact@v4
