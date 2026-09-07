@@ -13,21 +13,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifndef _WIN32
 #include <sys/stat.h>
-#endif
 #ifdef HAS_GTK3
 #include <gtk/gtk.h>
 #endif
 
 #ifdef _WIN32
 #include <direct.h>
+#include <io.h>
 #include <urlmon.h>
 #include <windows.h>
 #pragma comment(lib, "urlmon.lib")
 #define SEPARATOR '\\'
 #define mkdir_p_(p) _mkdir(p)
 #define strncasecmp _strnicmp
+#define popen _popen
+#define pclose _pclose
 #define dlopen(a, b) LoadLibraryA(a)
 #define dlsym(a, b) GetProcAddress((HMODULE)a, b)
 #define dlclose(a) FreeLibrary((HMODULE)a)
@@ -383,8 +384,12 @@ static int pack_runtime(const runtime_entry_t *rt, const char *staging_dir,
           continue;
         /* Recursively add all files under directory */
         char find_cmd[8192];
+#ifdef _WIN32
+        snprintf(find_cmd, sizeof(find_cmd), "dir /b /s /a:-d \"%s\" 2>nul", name_buf);
+#else
         snprintf(find_cmd, sizeof(find_cmd),
                  "find \"%s\" -type f -o -type l 2>/dev/null | sort", name_buf);
+#endif
         FILE *fp = popen(find_cmd, "r");
         if (fp) {
           char line[4096];
