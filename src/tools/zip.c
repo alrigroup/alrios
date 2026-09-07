@@ -371,10 +371,15 @@ zip_reader_t *zip_reader_open(const char *path) {
     }
     if (eocd_pos < 0) { free(buf); fclose(z->fp); free(z); return NULL; }
 
+    long eocd_file_offset = (filesize - search) + eocd_pos;
     unsigned int num_entries = read_le16(buf + eocd_pos + 8);
     unsigned int cd_size   = read_le32(buf + eocd_pos + 12);
     unsigned int cd_offset = read_le32(buf + eocd_pos + 16);
     free(buf);
+
+    long archive_base_offset = eocd_file_offset - (long)(cd_size + cd_offset);
+    if (archive_base_offset < 0) archive_base_offset = 0;
+    cd_offset += (unsigned int)archive_base_offset;
 
     z->entry_count = (int)num_entries;
     if (z->entry_count <= 0 || z->entry_count > 65535) {
@@ -402,7 +407,7 @@ zip_reader_t *zip_reader_open(const char *path) {
         z->crcs[i] = (int)read_le32(cd + 16);
         z->sizes_comp[i] = (int)read_le32(cd + 20);
         z->sizes_uncomp[i] = (int)read_le32(cd + 24);
-        z->offsets[i] = (long)read_le32(cd + 42);
+        z->offsets[i] = (long)read_le32(cd + 42) + archive_base_offset;
 
         if (name_len > 255) name_len = 255;
         char name[256] = {0};
