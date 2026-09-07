@@ -295,7 +295,11 @@ static int cmd_fullupdate(int argc, char **argv) {
     printf("\033[1;36m════════════════════════════════════════════════════════\033[0m\n\n");
 
     /* 1. Git Pull */
+    #ifdef _WIN32
+    if (!no_pull && GetFileAttributesA(".git") != INVALID_FILE_ATTRIBUTES) {
+#else
     if (!no_pull && access(".git", F_OK) == 0) {
+#endif
         printf("\033[1;34m[1/4]\033[0m Sincronizando com repositorio remoto (git pull origin main)...\n");
         int git_rc = system("git pull origin main");
         if (git_rc != 0) {

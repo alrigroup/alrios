@@ -495,6 +495,7 @@ int zip_reader_extract(zip_reader_t *z, int idx, const char *outdir) {
     }
     fclose(out);
 
+#ifndef _WIN32
     /* set executable bit for .exe files */
     size_t nlen = strlen(outpath);
     if (nlen >= 4 && (strcmp(outpath + nlen - 4, ".exe") == 0 ||
@@ -505,6 +506,7 @@ int zip_reader_extract(zip_reader_t *z, int idx, const char *outdir) {
     if (strstr(outpath, "/bin/") != NULL) {
         chmod(outpath, 0755);
     }
+#endif
 
     return 0;
 }

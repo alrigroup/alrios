@@ -20,7 +20,7 @@ else()
     message(STATUS "GTK3 not found — arinstall will be CLI-only (no GUI)")
 endif()
 if(WIN32)
-    target_link_libraries(arinstall PRIVATE urlmon)
+    target_link_libraries(arinstall PRIVATE urlmon ws2_32)
 endif()
 
 set_target_properties(arinstall PROPERTIES
