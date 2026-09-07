@@ -23,3 +23,7 @@ set_target_properties(arkernel PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore/lib"
     LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore/lib"
 )
+
+if(WIN32)
+    target_link_libraries(arkernel PUBLIC ws2_32)
+endif()

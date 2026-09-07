@@ -25,3 +25,7 @@ set_target_properties(arcore PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore"
     ENABLE_EXPORTS TRUE
 )
+
+if(WIN32)
+    target_link_libraries(arcore PRIVATE ws2_32)
+endif()

@@ -43,3 +43,7 @@ if(UNIX)
         COMMENT "Generating arcore/arpm symlink to alrios"
     )
 endif()
+
+if(WIN32)
+    target_link_libraries(alrios PRIVATE ws2_32)
+endif()
