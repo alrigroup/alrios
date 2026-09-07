@@ -1,0 +1,133 @@
+name: Build & Release Sovereign .arapp (Native)
+
+"on":
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # 1. BUILD LINUX .arapp (ELF)
+  # ----------------------------------------------------------------------------
+  build-linux:
+    name: Build Linux .arapp (x64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout app repository
+        uses: actions/checkout@v4
+        with:
+          path: app
+
+      - name: Checkout ALRIOS core toolchain
+        uses: actions/checkout@v4
+        with:
+          repository: alrigroup/alrios
+          path: alrios
+          ref: main
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake gcc make libssl-dev pkg-config
+
+      - name: Compile ALRIOS armake compiler
+        run: |
+          cd alrios
+          cmake -S . -B build-tools -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-tools --target armake -j$(nproc)
+          chmod +x arcore/armake
+
+      - name: Compile and package native app into .arapp
+        run: |
+          APP_NAME=$(basename ${{ github.repository }})
+          echo "==> Empacotando ${APP_NAME} para Linux..."
+          ./alrios/arcore/armake build "app" "${APP_NAME}-linux-x64.arapp"
+          ls -lh *.arapp
+
+      - name: Upload Linux .arapp artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arapp
+          path: "*-linux-x64.arapp"
+
+  # ----------------------------------------------------------------------------
+  # 2. BUILD WINDOWS .arapp (PE .exe)
+  # ----------------------------------------------------------------------------
+  build-windows:
+    name: Build Windows .arapp (x64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout app repository
+        uses: actions/checkout@v4
+        with:
+          path: app
+
+      - name: Checkout ALRIOS core toolchain
+        uses: actions/checkout@v4
+        with:
+          repository: alrigroup/alrios
+          path: alrios
+          ref: main
+
+      - name: Setup MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Compile ALRIOS armake on Windows
+        shell: cmd
+        run: |
+          cd alrios
+          set "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL"
+          if not exist "%OPENSSL_ROOT_DIR%" set "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL-Win64"
+          cmake -S . -B build-win -DCMAKE_BUILD_TYPE=Release -DOPENSSL_ROOT_DIR="%OPENSSL_ROOT_DIR%"
+          cmake --build build-win --config Release --target armake
+
+      - name: Compile and package native app into .arapp on Windows
+        shell: bash
+        run: |
+          APP_NAME=$(basename ${{ github.repository }})
+          echo "==> Empacotando ${APP_NAME} para Windows..."
+          ./alrios/arcore/armake.exe build "app" "${APP_NAME}-windows-x64.arapp"
+          ls -lh *.arapp
+
+      - name: Upload Windows .arapp artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-arapp
+          path: "*-windows-x64.arapp"
+
+  # ----------------------------------------------------------------------------
+  # 3. PUBLISH OFFICIAL GITHUB RELEASE
+  # ----------------------------------------------------------------------------
+  release:
+    name: Publish Official .arapp Release
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux .arapp
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-arapp
+
+      - name: Download Windows .arapp
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-arapp
+
+      - name: Publish Release with .arapp assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'Latest Sovereign Build' }}
+          files: |
+            *-linux-x64.arapp
+            *-windows-x64.arapp
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
