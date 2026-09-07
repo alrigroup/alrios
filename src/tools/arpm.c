@@ -197,28 +197,63 @@ static int calc_file_sha256(const char *path, char *out_hex) {
     return 0;
 }
 
-/* HTTP/HTTPS Downloader */
+/* HTTP/HTTPS Downloader com suporte a repositórios privados */
 static int download_file(const char *url, const char *dest, int show_progress) {
     if (show_progress) {
         printf("  %sBaixando:%s %s\n", CLR_CYAN, CLR_RESET, url);
     }
+    const char *token = getenv("ARPM_TOKEN");
+    if (!token || !token[0]) token = getenv("GITHUB_TOKEN");
+
+    char auth_header[256] = {0};
+    if (token && token[0]) {
+        snprintf(auth_header, sizeof(auth_header), "-H \"Authorization: token %s\" ", token);
+    }
+
 #ifdef _WIN32
-    HRESULT hr = URLDownloadToFileA(NULL, url, dest, 0, NULL);
-    if (SUCCEEDED(hr) && file_exists(dest) && file_size(dest) > 0) {
+    char cmd[2048];
+    snprintf(cmd, sizeof(cmd), "curl.exe -f -L %s-s -S -o \"%s\" \"%s\"", auth_header, dest, url);
+    if (system(cmd) == 0 && file_exists(dest) && file_size(dest) > 0) {
         return 0;
     }
-    char cmd[2048];
-    snprintf(cmd, sizeof(cmd), "curl.exe -f -L -s -S -o \"%s\" \"%s\"", dest, url);
-    return system(cmd);
 #else
     char cmd[2048];
-    snprintf(cmd, sizeof(cmd), "curl -f -L -s -S -o \"%s\" \"%s\"", dest, url);
-    int rc = system(cmd);
-    if (rc == 0 && file_exists(dest) && file_size(dest) > 0) {
+    snprintf(cmd, sizeof(cmd), "curl -f -L %s-s -S -o \"%s\" \"%s\"", auth_header, dest, url);
+    if (system(cmd) == 0 && file_exists(dest) && file_size(dest) > 0) {
         return 0;
     }
-    return -1;
 #endif
+
+    /* Fallback para repositórios privados usando GitHub CLI (gh) se disponível */
+    if (strstr(url, "github.com/")) {
+        char owner[128] = {0}, repo[128] = {0}, asset[256] = {0}, tag[64] = "latest";
+        const char *p = strstr(url, "github.com/");
+        if (p) {
+            p += 11;
+            const char *s1 = strchr(p, '/');
+            if (s1) {
+                size_t o_len = s1 - p;
+                if (o_len < sizeof(owner)) { strncpy(owner, p, o_len); owner[o_len] = 0; }
+                const char *s2 = strchr(s1 + 1, '/');
+                if (s2) {
+                    size_t r_len = s2 - s1 - 1;
+                    if (r_len < sizeof(repo)) { strncpy(repo, s1 + 1, r_len); repo[r_len] = 0; }
+                    const char *a = strrchr(url, '/');
+                    if (a) {
+                        strncpy(asset, a + 1, sizeof(asset) - 1);
+                        char gh_cmd[2048];
+                        snprintf(gh_cmd, sizeof(gh_cmd), "gh release download %s -R %s/%s -p \"%s\" -O \"%s\" --clobber",
+                                 tag, owner, repo, asset, dest);
+                        if (system(gh_cmd) == 0 && file_exists(dest) && file_size(dest) > 0) {
+                            return 0;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return -1;
 }
 
 /* IPC Communications with arcore daemon */
@@ -446,6 +481,22 @@ static int read_manifest_info(const char *manifest_file, char *name_out, size_t 
 }
 
 /* Registry resolution helper */
+static int parse_json_field(const char *pos, const char *key, char *out, size_t out_max) {
+    const char *k = strstr(pos, key);
+    if (!k) return -1;
+    const char *colon = strchr(k, ':');
+    if (!colon) return -1;
+    const char *q1 = strchr(colon, '"');
+    if (!q1) return -1;
+    const char *q2 = strchr(q1 + 1, '"');
+    if (!q2) return -1;
+    size_t len = (size_t)(q2 - q1 - 1);
+    if (len >= out_max) len = out_max - 1;
+    strncpy(out, q1 + 1, len);
+    out[len] = 0;
+    return 0;
+}
+
 static int resolve_registry_package(const char *app, char *url_out, size_t url_max, char *sha_out, size_t sha_max, char *ver_out, size_t ver_max) {
     char local_reg[1024];
     snprintf(local_reg, sizeof(local_reg), "%s%cregistry.json", g_ctx.arcore_dir, SEPARATOR);
@@ -475,42 +526,21 @@ static int resolve_registry_package(const char *app, char *url_out, size_t url_m
                 snprintf(search_key, sizeof(search_key), "\"%s\":", app);
                 char *pos = strstr(json, search_key);
                 if (pos) {
-                    char *u = strstr(pos, "\"download_url\":");
-                    if (!u) u = strstr(pos, "\"url\":");
-                    if (u) {
-                        char *q1 = strchr(u + 6, '"');
-                        if (q1) {
-                            char *q2 = strchr(q1 + 1, '"');
-                            if (q2 && (size_t)(q2 - q1) < url_max) {
-                                strncpy(url_out, q1 + 1, q2 - q1 - 1);
-                                url_out[q2 - q1 - 1] = '\0';
-                            }
+                    #ifdef _WIN32
+                    if (parse_json_field(pos, "\"download_url_windows\"", url_out, url_max) != 0) {
+                        if (parse_json_field(pos, "\"download_url\"", url_out, url_max) != 0) {
+                            parse_json_field(pos, "\"url\"", url_out, url_max);
                         }
                     }
-
-                    char *s = strstr(pos, "\"sha256\":");
-                    if (s) {
-                        char *q1 = strchr(s + 8, '"');
-                        if (q1) {
-                            char *q2 = strchr(q1 + 1, '"');
-                            if (q2 && (size_t)(q2 - q1) < sha_max) {
-                                strncpy(sha_out, q1 + 1, q2 - q1 - 1);
-                                sha_out[q2 - q1 - 1] = '\0';
-                            }
+#else
+                    if (parse_json_field(pos, "\"download_url_linux\"", url_out, url_max) != 0) {
+                        if (parse_json_field(pos, "\"download_url\"", url_out, url_max) != 0) {
+                            parse_json_field(pos, "\"url\"", url_out, url_max);
                         }
                     }
-
-                    char *v = strstr(pos, "\"version\":");
-                    if (v) {
-                        char *q1 = strchr(v + 9, '"');
-                        if (q1) {
-                            char *q2 = strchr(q1 + 1, '"');
-                            if (q2 && (size_t)(q2 - q1) < ver_max) {
-                                strncpy(ver_out, q1 + 1, q2 - q1 - 1);
-                                ver_out[q2 - q1 - 1] = '\0';
-                            }
-                        }
-                    }
+#endif
+                    parse_json_field(pos, "\"sha256\"", sha_out, sha_max);
+                    parse_json_field(pos, "\"version\"", ver_out, ver_max);
                     free(json);
                     fclose(f);
                     return (url_out[0] != '\0') ? 0 : -1;
