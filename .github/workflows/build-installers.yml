@@ -2,8 +2,8 @@ name: Build & Package Installers (Multi-OS)
 
 "on":
   push:
-    branches: [ "main" ]
-    tags: [ "v*" ]
+    branches: [ "main", "beta-v0.2", "beta*" ]
+    tags: [ "v*", "beta*" ]
   workflow_dispatch:
 
 permissions:
@@ -186,12 +186,12 @@ jobs:
           retention-days: 30
 
   # ============================================================================
-  # 3. PUBLISH GITHUB RELEASE (Triggered on Tags v*)
+  # 3. PUBLISH GITHUB RELEASE (Triggered on Tags or beta-v0.2 branch)
   # ============================================================================
   release:
     name: Publish Official Release
     needs: [build-linux, build-windows]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/beta-v0.2'
     runs-on: ubuntu-latest
     steps:
       - name: Download Linux installer artifact
@@ -207,11 +207,13 @@ jobs:
       - name: Create GitHub Release with Standalone Installers
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.2.0-beta' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'ALRIOS v0.2.0 Beta' }}
           files: |
             alrios-installer-linux-x64
             alrios-setup.exe
           generate_release_notes: true
           draft: false
-          prerelease: false
+          prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

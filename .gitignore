@@ -87,3 +87,8 @@ src/apps/arenterprise
 src/apps/arenterprise.web
 src/apps/detroit.web
 src/apps/fourtech.web
+
+# Standalone Installers
+alrios-installer-*
+alrios-setup*
+
