@@ -1,0 +1,107 @@
+{
+  "registry": "ALRIOS Official Package Registry",
+  "version": "1.0.0",
+  "updated_at": "2026-09-07T12:00:00Z",
+  "packages": {
+    "ardcbot": {
+      "name": "ardcbot",
+      "version": "1.0.0",
+      "runtime": "node",
+      "description": "Discord Bot Service integration for ALRIOS",
+      "author": "ALRIGROUP",
+      "url": "https://github.com/alrigroup/ardcbot/releases/latest/download/ardcbot.arapp",
+      "download_url": "https://github.com/alrigroup/ardcbot/releases/latest/download/ardcbot.arapp",
+      "src_url": "https://github.com/alrigroup/ardcbot.git"
+    },
+    "arauth": {
+      "name": "arauth",
+      "version": "1.0.0",
+      "runtime": "native",
+      "description": "Unified Sovereign Authentication & Token Service",
+      "author": "ALRIGROUP",
+      "url": "https://github.com/alrigroup/arauth/releases/latest/download/arauth.arapp",
+      "download_url": "https://github.com/alrigroup/arauth/releases/latest/download/arauth.arapp",
+      "src_url": "https://github.com/alrigroup/arauth.git"
+    },
+    "arws": {
+      "name": "arws",
+      "version": "1.0.0",
+      "runtime": "native",
+      "description": "HTTP/HTTPS Reverse Proxy, Load Balancer & Dynamic Gateway",
+      "author": "ALRIGROUP",
+      "url": "https://github.com/alrigroup/arws/releases/latest/download/arws.arapp",
+      "download_url": "https://github.com/alrigroup/arws/releases/latest/download/arws.arapp",
+      "src_url": "https://github.com/alrigroup/arws.git"
+    },
+    "ardb": {
+      "name": "ardb",
+      "version": "1.0.0",
+      "runtime": "native",
+      "description": "ALRI Sovereign Database Guardian with Audit Log Blockchain",
+      "author": "ALRIGROUP",
+      "url": "https://github.com/alrigroup/ardb/releases/latest/download/ardb.arapp",
+      "download_url": "https://github.com/alrigroup/ardb/releases/latest/download/ardb.arapp",
+      "src_url": "https://github.com/alrigroup/ardb.git"
+    },
+    "arcdn": {
+      "name": "arcdn",
+      "version": "1.0.0",
+      "runtime": "native",
+      "description": "Static Assets Distribution & Low-Latency Streaming Engine",
+      "author": "ALRIGROUP",
+      "url": "https://github.com/alrigroup/arcdn/releases/latest/download/arcdn.arapp",
+      "download_url": "https://github.com/alrigroup/arcdn/releases/latest/download/arcdn.arapp",
+      "src_url": "https://github.com/alrigroup/arcdn.git"
+    },
+    "arwn": {
+      "name": "arwn",
+      "version": "1.0.0",
+      "runtime": "native",
+      "description": "ALRI Web Native Runtime & High Performance .arweb Container Engine",
+      "author": "ALRIGROUP",
+      "url": "https://github.com/alrigroup/arwn/releases/latest/download/arwn.arapp",
+      "download_url": "https://github.com/alrigroup/arwn/releases/latest/download/arwn.arapp",
+      "src_url": "https://github.com/alrigroup/arwn.git"
+    },
+    "alrigroup.web": {
+      "name": "alrigroup.web",
+      "version": "1.0.0",
+      "runtime": "node",
+      "description": "ALRIGROUP Official Corporate Portal and Ecosystem Showcase",
+      "author": "ALRIGROUP",
+      "url": "https://github.com/alrigroup/alrigroup.web/releases/latest/download/alrigroup.web.arapp",
+      "download_url": "https://github.com/alrigroup/alrigroup.web/releases/latest/download/alrigroup.web.arapp",
+      "src_url": "https://github.com/alrigroup/alrigroup.web.git"
+    },
+    "arenterprise": {
+      "name": "arenterprise",
+      "version": "1.0.0",
+      "runtime": "native",
+      "description": "ALRI Enterprise Resource Management Core Service",
+      "author": "ALRIGROUP",
+      "url": "https://github.com/alrigroup/arenterprise/releases/latest/download/arenterprise.arapp",
+      "download_url": "https://github.com/alrigroup/arenterprise/releases/latest/download/arenterprise.arapp",
+      "src_url": "https://github.com/alrigroup/arenterprise.git"
+    },
+    "detroit.web": {
+      "name": "detroit.web",
+      "version": "1.0.0",
+      "runtime": "node",
+      "description": "Detroit Web Application Platform",
+      "author": "ALRIGROUP",
+      "url": "https://github.com/alrigroup/detroit.web/releases/latest/download/detroit.web.arapp",
+      "download_url": "https://github.com/alrigroup/detroit.web/releases/latest/download/detroit.web.arapp",
+      "src_url": "https://github.com/alrigroup/detroit.web.git"
+    },
+    "fourtech.web": {
+      "name": "fourtech.web",
+      "version": "1.0.0",
+      "runtime": "node",
+      "description": "FourTech Web Application Platform",
+      "author": "ALRIGROUP",
+      "url": "https://github.com/alrigroup/fourtech.web/releases/latest/download/fourtech.web.arapp",
+      "download_url": "https://github.com/alrigroup/fourtech.web/releases/latest/download/fourtech.web.arapp",
+      "src_url": "https://github.com/alrigroup/fourtech.web.git"
+    }
+  }
+}

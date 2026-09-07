@@ -8,6 +8,7 @@
 
 #include "ar_ipc.h"
 #include "aros_hal.h"
+#include "arpm.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -40,6 +41,7 @@ static void print_usage(void) {
     printf("  alrios power on|off|reload\n");
     printf("  alrios status              (alias: list)\n");
     printf("  alrios list\n");
+    printf("  alrios arpm <command>      (ALRIOS Package Manager: install, install-src, update, etc.)\n");
     printf("  alrios fullupdate [--no-pull] [--force]  (git pull + incremental app rebuild + reload)\n");
     printf("  alrios start <app>\n");
     printf("  alrios stop <app>\n");
@@ -447,7 +449,17 @@ static int cmd_build(int argc, char *argv[]) {
     return 0;
 }
 
+
+
+
 int main(int argc, char *argv[]) {
+    const char *prog = strrchr(argv[0], '/');
+    if (!prog) prog = strrchr(argv[0], '\\');
+    prog = prog ? prog + 1 : argv[0];
+    if (strcmp(prog, "arpm") == 0 || strcmp(prog, "arpm.exe") == 0) {
+        return cmd_arpm(argc, argv);
+    }
+
     if (argc < 2) {
         print_usage();
         return 0;
@@ -461,6 +473,9 @@ int main(int argc, char *argv[]) {
     }
 
     /* Comandos do Ciclo de Vida do SO (arcore 9600) */
+    if (strcmp(a1, "arpm") == 0 || strcmp(a1, "pkg") == 0)
+        return cmd_arpm(argc - 1, argv + 1);
+
     if (strcmp(a1, "status") == 0 || strcmp(a1, "list") == 0)
         return run_ctl(IPC_CTL_LIST, NULL);
 

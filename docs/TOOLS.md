@@ -68,3 +68,32 @@ alrios ardb audit verify        # Validate SHA-256 blockchain hash chain integri
 alrios update all
 alrios build -p <SRC> [-o <OUT>]
 ```
+
+---
+
+## 🚀 4. `arpm` — ALRIOS Package Manager
+
+Native package and application lifecycle manager for the ALRIOS ecosystem. Supports remote binary downloads, building from remote/local source (`.arappmake`), updates with data persistence, and safe uninstalls.
+
+```bash
+# Install pre-built .arapp from registry or URL
+arpm install <app-name> [--autostart] [--start] [--force]
+arpm install https://cdn.alrigroup.com/apps/app.arapp
+
+# Build and install directly from remote/local source (.arappmake)
+arpm install-src https://github.com/alrigroup/ardcbot.git [--autostart] [--start]
+arpm install-src github:alrigroup/ardcbot
+
+# Update applications (zero data-loss: storage/ is preserved)
+arpm update <app-name>
+arpm update --all
+
+# Safe uninstall
+arpm uninstall <app-name>            # Preserves arcore/storage/<app>
+arpm uninstall <app-name> --purge    # Wipes storage and persistent data
+
+# List and Search
+arpm list                            # Formatted table of installed packages and sizes
+arpm search <query>                  # Search remote registry catalogue
+arpm info <app-name>                 # Show package metadata
+```
