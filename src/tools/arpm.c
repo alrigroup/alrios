@@ -226,7 +226,7 @@ static int download_file(const char *url, const char *dest, int show_progress) {
 
     /* Fallback para repositórios privados usando GitHub CLI (gh) se disponível */
     if (strstr(url, "github.com/")) {
-        char owner[128] = {0}, repo[128] = {0}, asset[256] = {0}, tag[64] = "latest";
+        char owner[128] = {0}, repo[128] = {0}, asset[256] = {0}, tag[64] = {0};
         const char *p = strstr(url, "github.com/");
         if (p) {
             p += 11;
@@ -238,12 +238,26 @@ static int download_file(const char *url, const char *dest, int show_progress) {
                 if (s2) {
                     size_t r_len = s2 - s1 - 1;
                     if (r_len < sizeof(repo)) { strncpy(repo, s1 + 1, r_len); repo[r_len] = 0; }
+                    const char *rel_tag = strstr(url, "/releases/download/");
+                    if (rel_tag) {
+                        rel_tag += 19;
+                        const char *slash = strchr(rel_tag, '/');
+                        if (slash && (size_t)(slash - rel_tag) < sizeof(tag)) {
+                            strncpy(tag, rel_tag, slash - rel_tag);
+                            tag[slash - rel_tag] = 0;
+                        }
+                    }
                     const char *a = strrchr(url, '/');
                     if (a) {
                         strncpy(asset, a + 1, sizeof(asset) - 1);
                         char gh_cmd[2048];
-                        snprintf(gh_cmd, sizeof(gh_cmd), "gh release download %s -R %s/%s -p \"%s\" -O \"%s\" --clobber",
-                                 tag, owner, repo, asset, dest);
+                        if (tag[0] != '\0') {
+                            snprintf(gh_cmd, sizeof(gh_cmd), "gh release download %s -R %s/%s -p \"%s\" -O \"%s\" --clobber",
+                                     tag, owner, repo, asset, dest);
+                        } else {
+                            snprintf(gh_cmd, sizeof(gh_cmd), "gh release download -R %s/%s -p \"%s\" -O \"%s\" --clobber",
+                                     owner, repo, asset, dest);
+                        }
                         if (system(gh_cmd) == 0 && file_exists(dest) && file_size(dest) > 0) {
                             return 0;
                         }
