@@ -530,7 +530,7 @@ static int cmd_fullupdate(int argc, char **argv) {
 #endif
     printf("\033[1;34m[1/4]\033[0m Sincronizando com repositorio remoto (git "
            "pull origin main)...\n");
-    int git_rc = system("git pull origin main");
+    int git_rc = system("git pull");
     if (git_rc != 0) {
       printf("\033[1;33m[AVISO]\033[0m git pull retornou codigo %d "
              "(continuando com fontes locais)...\n\n",
