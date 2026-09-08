@@ -212,7 +212,16 @@ jobs:
           files: |
             alrios-installer-linux-x64
             alrios-setup.exe
-          generate_release_notes: true
+          generate_release_notes: false
+          append_body: false
+          body: |
+            ### ALRIOS Sovereign System v0.2.0 (Beta)
+
+            - Toolchain, Arkernel e instaladores únicos para Linux e Windows.
+            - Binários soberanos prontos para Linux x64 e Windows x64.
+            - Compatibilidade total com gerenciador nativo `arpm`.
+
+            **Full Changelog**: https://github.com/alrigroup/alrios/commits/v0.2.0-beta
           draft: false
           prerelease: false
           make_latest: true

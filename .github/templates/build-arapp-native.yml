@@ -130,7 +130,16 @@ jobs:
           name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.2.0-beta' }}
           files: |
             *.arapp
-          generate_release_notes: true
+          generate_release_notes: false
+          append_body: false
+          body: |
+            ### Sovereign Application Release
+
+            - Binários soberanos para Linux x64 e Windows x64 (.arapp).
+            - Pacote compilado e validado pela pipeline ALRIOS.
+            - Compatibilidade com gerenciador `arpm`.
+
+            **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.2.0-beta' }}
           draft: false
           prerelease: false
           make_latest: true
