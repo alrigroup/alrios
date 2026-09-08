@@ -20,10 +20,10 @@
 #include <pwd.h>
 #include <unistd.h>
 #else
+#include <windows.h>
 #include <direct.h>
 #include <process.h>
 #include <shellapi.h>
-#include <windows.h>
 #endif
 
 static void escalate_privileges(void) {
