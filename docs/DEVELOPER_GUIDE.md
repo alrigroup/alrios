@@ -81,7 +81,7 @@ The manifest MUST begin with the exact magic string `ALRIGROUP@APPMAKE` followed
 ALRIGROUP@APPMAKE
 {
   "name": "my-service",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "type": "app",
   "runtime": "native",
   "executable": "my_service_bin",
