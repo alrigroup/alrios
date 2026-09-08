@@ -191,7 +191,7 @@ jobs:
   release:
     name: Publish Official Release
     needs: [build-linux, build-windows]
-    if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/beta-v0.2.0' || github.ref == 'refs/heads/beta-v0.2' || github.ref == 'refs/heads/beta-versao'
+    if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/beta-v0.2.0' || github.ref == 'refs/heads/beta-v0.2' || github.ref == 'refs/heads/beta-v0.2.01'
     runs-on: ubuntu-latest
     steps:
       - name: Download Linux installer artifact
@@ -207,8 +207,8 @@ jobs:
       - name: Create GitHub Release with Standalone Installers
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.ref == 'refs/heads/beta-versao' && 'v0.2.01-beta' || 'v0.2.0-beta') }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.ref == 'refs/heads/beta-versao' && 'ALRIOS v0.2.01 Beta' || 'ALRIOS v0.2.0 Beta') }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.ref == 'refs/heads/beta-v0.2.01' && 'v0.2.01-beta' || 'v0.2.0-beta') }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.ref == 'refs/heads/beta-v0.2.01' && 'ALRIOS v0.2.01 Beta' || 'ALRIOS v0.2.0 Beta') }}
           files: |
             alrios-installer-linux-x64
             alrios-setup.exe
