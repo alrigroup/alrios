@@ -76,7 +76,9 @@
       "description": "Discord Bot Service integration for ALRIOS",
       "author": "ALRIGROUP",
       "download_url": "https://github.com/alrigroup/ardcbot/releases/latest/download/ardcbot.arapp",
-      "src_url": "https://github.com/alrigroup/ardcbot.git"
+      "src_url": "https://github.com/alrigroup/ardcbot.git",
+      "download_url_linux": "https://github.com/alrigroup/ardcbot/releases/latest/download/ardcbot-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/ardcbot/releases/latest/download/ardcbot-windows-x64.arapp"
     },
     "alrigroup.web": {
       "name": "alrigroup.web",
@@ -85,7 +87,9 @@
       "description": "ALRIGROUP Official Corporate Portal and Ecosystem Showcase (Liquid Glass)",
       "author": "ALRIGROUP",
       "download_url": "https://github.com/alrigroup/alrigroup.web/releases/latest/download/alrigroup.web.arapp",
-      "src_url": "https://github.com/alrigroup/alrigroup.web.git"
+      "src_url": "https://github.com/alrigroup/alrigroup.web.git",
+      "download_url_linux": "https://github.com/alrigroup/alrigroup.web/releases/latest/download/alrigroup.web-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/alrigroup.web/releases/latest/download/alrigroup.web-windows-x64.arapp"
     },
     "detroit.web": {
       "name": "detroit.web",
@@ -94,7 +98,9 @@
       "description": "Detroit Web Application Platform",
       "author": "ALRIGROUP",
       "download_url": "https://github.com/alrigroup/detroit.web/releases/latest/download/detroit.web.arapp",
-      "src_url": "https://github.com/alrigroup/detroit.web.git"
+      "src_url": "https://github.com/alrigroup/detroit.web.git",
+      "download_url_linux": "https://github.com/alrigroup/detroit.web/releases/latest/download/detroit.web-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/detroit.web/releases/latest/download/detroit.web-windows-x64.arapp"
     },
     "fourtech.web": {
       "name": "fourtech.web",
@@ -103,7 +109,9 @@
       "description": "FourTech Web Application Platform",
       "author": "ALRIGROUP",
       "download_url": "https://github.com/alrigroup/fourtech.web/releases/latest/download/fourtech.web.arapp",
-      "src_url": "https://github.com/alrigroup/fourtech.web.git"
+      "src_url": "https://github.com/alrigroup/fourtech.web.git",
+      "download_url_linux": "https://github.com/alrigroup/fourtech.web/releases/latest/download/fourtech.web-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/fourtech.web/releases/latest/download/fourtech.web-windows-x64.arapp"
     },
     "arenterprise.web": {
       "name": "arenterprise.web",
@@ -112,7 +120,9 @@
       "description": "ALRI Enterprise Web Portal and Management Dashboard",
       "author": "ALRIGROUP",
       "download_url": "https://github.com/alrigroup/arenterprise.web/releases/latest/download/arenterprise.web.arapp",
-      "src_url": "https://github.com/alrigroup/arenterprise.web.git"
+      "src_url": "https://github.com/alrigroup/arenterprise.web.git",
+      "download_url_linux": "https://github.com/alrigroup/arenterprise.web/releases/latest/download/arenterprise.web-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/arenterprise.web/releases/latest/download/arenterprise.web-windows-x64.arapp"
     }
   }
 }

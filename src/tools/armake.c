@@ -957,7 +957,7 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
             expand_vars(cmd_exp, sizeof(cmd_exp), step->cmd,
                         m->name, app_dir, arcore_dir, staging, arwn_build);
 #ifdef _WIN32
-            if (strstr(cmd_exp, "-larkernel") && !strstr(cmd_exp, "-lws2_32")) {
+            if (!strstr(cmd_exp, "-lws2_32") && (strstr(cmd_exp, "-larkernel") || strstr(cmd_exp, "-lssl") || strstr(cmd_exp, "-lcrypto") || strstr(cmd_exp, "gcc ") || strstr(cmd_exp, "cc "))) {
                 strncat(cmd_exp, " -lws2_32", sizeof(cmd_exp) - strlen(cmd_exp) - 1);
             }
 #endif

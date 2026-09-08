@@ -51,6 +51,8 @@ jobs:
           cd alrios
           ./arcore/armake build "src/apps/${APP_NAME}" "../${APP_NAME}.arapp"
           cd ..
+          cp "${APP_NAME}.arapp" "${APP_NAME}-linux-x64.arapp"
+          cp "${APP_NAME}.arapp" "${APP_NAME}-windows-x64.arapp"
           ls -lh *.arapp
 
       - name: Publish Official GitHub Release
