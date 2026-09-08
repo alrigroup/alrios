@@ -14,10 +14,12 @@
 #include <stdlib.h>
 #include <string.h>
 #ifdef _WIN32
-#include <direct.h>
 #include <windows.h>
+#include <direct.h>
 #else
 #include <unistd.h>
+#include <dirent.h>
+#include <sys/stat.h>
 #endif
 
 static void get_base_dir(char *buf, int size) {
@@ -40,31 +42,12 @@ static void get_base_dir(char *buf, int size) {
 #endif
 }
 
-static void print_usage(void) {
-  printf("ALRIOS CLI v0.2.0\n\n");
-  printf("Usage:\n");
-  printf("  alrios power on|off|reload\n");
-  printf("  alrios status              (alias: list)\n");
-  printf("  alrios list\n");
-  printf("  alrios arpm <command>      (ALRIOS Package Manager: install, "
-         "install-src, update, etc.)\n");
-  printf("  alrios fullupdate [--no-pull] [--force]  (git pull + incremental "
-         "app rebuild + reload)\n");
-  printf("  alrios start <app>\n");
-  printf("  alrios stop <app>\n");
-  printf("  alrios restart <app>\n");
-  printf("  alrios start add|del <app>   (manage autostart.cfg)\n");
-  printf("  alrios arws help             (gateway, routes, load balancer "
-         "pools)\n");
-  printf("  alrios ardb help             (sovereign DB, tokens, SQL firewall, "
-         "audit)\n");
-  printf("  alrios arwn help             (web native runtime & .arweb "
-         "containers)\n");
-  printf("  alrios cdn help              (static assets & streaming engine)\n");
-  printf("  alrios update all|alrios|armake|arinstall\n");
-  printf("  alrios build -p <SRC> [-o <OUT>]   (compile app -> arcore/apps)\n");
-  printf(
-      "  alrios refresh                   (reload app list without restart)\n");
+static int file_exists(const char *path) {
+#ifdef _WIN32
+  return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES;
+#else
+  return access(path, F_OK) == 0;
+#endif
 }
 
 static int ctl_connect(void) {
@@ -75,8 +58,178 @@ static int admin_connect(void) {
   return ar_ipc_client_connect("127.0.0.1", AR_IPC_DEFAULT_PORT);
 }
 
-/* Send one frame to fd and print the response. Returns 0 on IPC_RESPONSE,
-   1 on IPC_ERROR, -1 on connection failure. */
+static void get_apps_dir(char *buf, int size) {
+  get_base_dir(buf, size);
+#ifdef _WIN32
+  strncat(buf, "\\apps", size - strlen(buf) - 1);
+#else
+  strncat(buf, "/apps", size - strlen(buf) - 1);
+#endif
+}
+
+typedef struct {
+  const char *name;
+  const char *desc;
+  const char *cmds;
+} KnownAppInfo;
+
+static const KnownAppInfo g_known_apps[] = {
+  {"arws", "Gateway HTTP/HTTPS, Reverse Proxy e Load Balancer", "routes, status, cfg reload, upstream list, maintenance, ping"},
+  {"arauth", "Motor Soberano de Identidade e Autenticacao Bancaria", "status, login, user add, user passwd, session verify, audit verify"},
+  {"ardb", "Guardiao de Banco de Dados Soberano e Firewall SQL", "status, auth login, user add, app add, group create, audit verify"},
+  {"arcdn", "Motor de Distribuicao Estatica e Streaming de Midia", "status, routes, list, add <path> <file>, del <path>, ping"},
+  {"arenterprise", "ALRI Enterprise Suite Daemon e Integracao Corporativa", "status, ping"},
+  {"arwn", "Runtime Nativo Web e Servidor de Containers .arweb", "status, routes, ping"},
+  {"ardcbot", "Bot de Integracao Discord e Automacao da Comunidade", "status, plugins, reload, ping"},
+  {"detroit.web", "Portal e Aplicacao Web Detroit City Roleplay", "status, routes, ping"},
+  {"fourtech.web", "Plataforma Institucional FourTech", "status, routes, ping"},
+  {"alrigroup.web", "Portal Oficial ALRI GROUP", "status, routes, ping"},
+  {"omniroute", "Roteador de Modelos de Inteligencia Artificial", "status, models, routes, ping"},
+  {NULL, NULL, NULL}
+};
+
+static int is_app_installed(const char *app) {
+  char apps_dir[1024];
+  get_apps_dir(apps_dir, sizeof(apps_dir));
+  char path[1024];
+#ifdef _WIN32
+  snprintf(path, sizeof(path), "%s\\%s.arapp", apps_dir, app);
+  if (file_exists(path)) return 1;
+  snprintf(path, sizeof(path), "%s\\%s", apps_dir, app);
+  if (file_exists(path)) return 1;
+  snprintf(path, sizeof(path), "src\\apps\\%s", app);
+  if (file_exists(path)) return 1;
+#else
+  snprintf(path, sizeof(path), "%s/%s.arapp", apps_dir, app);
+  if (file_exists(path)) return 1;
+  snprintf(path, sizeof(path), "%s/%s", apps_dir, app);
+  if (file_exists(path)) return 1;
+  snprintf(path, sizeof(path), "src/apps/%s", app);
+  if (file_exists(path)) return 1;
+#endif
+  return 0;
+}
+
+static void print_installed_apps(void) {
+  char apps_dir[1024];
+  get_apps_dir(apps_dir, sizeof(apps_dir));
+
+  char installed_names[64][64];
+  int installed_count = 0;
+
+#ifdef _WIN32
+  char pattern[1024];
+  snprintf(pattern, sizeof(pattern), "%s\\*", apps_dir);
+  WIN32_FIND_DATAA ffd;
+  HANDLE hFind = FindFirstFileA(pattern, &ffd);
+  if (hFind != INVALID_HANDLE_VALUE) {
+    do {
+      if (strcmp(ffd.cFileName, ".") == 0 || strcmp(ffd.cFileName, "..") == 0) continue;
+      char name[64];
+      strncpy(name, ffd.cFileName, sizeof(name) - 1);
+      name[sizeof(name) - 1] = '\0';
+      char *dot = strstr(name, ".arapp");
+      if (dot && strcmp(dot, ".arapp") == 0) *dot = '\0';
+      else if (strstr(name, ".hash") != NULL) continue;
+
+      int exists = 0;
+      for (int i = 0; i < installed_count; i++) {
+        if (strcmp(installed_names[i], name) == 0) { exists = 1; break; }
+      }
+      if (!exists && installed_count < 64) {
+        strncpy(installed_names[installed_count++], name, 63);
+      }
+    } while (FindNextFileA(hFind, &ffd) != 0);
+    FindClose(hFind);
+  }
+#else
+  DIR *d = opendir(apps_dir);
+  if (d) {
+    struct dirent *entry;
+    while ((entry = readdir(d)) != NULL) {
+      if (entry->d_name[0] == '.') continue;
+      char name[64];
+      strncpy(name, entry->d_name, sizeof(name) - 1);
+      name[sizeof(name) - 1] = '\0';
+      char *dot = strstr(name, ".arapp");
+      if (dot && strcmp(dot, ".arapp") == 0) *dot = '\0';
+      else if (strstr(name, ".hash") != NULL) continue;
+
+      int exists = 0;
+      for (int i = 0; i < installed_count; i++) {
+        if (strcmp(installed_names[i], name) == 0) { exists = 1; break; }
+      }
+      if (!exists && installed_count < 64) {
+        strncpy(installed_names[installed_count++], name, 63);
+      }
+    }
+    closedir(d);
+  }
+#endif
+
+  printf("Aplicativos Instalados & Comandos Dinamicos:\n");
+  printf("  alrios <app> [comando]           (executa comando no aplicativo via gateway)\n\n");
+
+  if (installed_count == 0) {
+    printf("  (Nenhum aplicativo instalado em %s. Use 'alrios arpm install <app>' para instalar)\n", apps_dir);
+    return;
+  }
+
+  for (int i = 0; i < installed_count; i++) {
+    const char *aname = installed_names[i];
+    const char *desc = "Aplicativo Soberano ALRIOS";
+    const char *cmds = "status, ping, help";
+
+    for (int k = 0; g_known_apps[k].name != NULL; k++) {
+      if (strcmp(g_known_apps[k].name, aname) == 0) {
+        desc = g_known_apps[k].desc;
+        cmds = g_known_apps[k].cmds;
+        break;
+      }
+    }
+
+    char status_buf[64] = "OFFLINE";
+    int fd = ctl_connect();
+    if (fd >= 0) {
+      ar_socket_set_recv_timeout(fd, 300);
+      if (ar_ipc_send_frame(fd, IPC_CTL_STATUS, aname, (uint32_t)strlen(aname) + 1) == 0) {
+        unsigned char buf[64];
+        int rtype;
+        uint32_t rlen = sizeof(buf);
+        if (ar_ipc_recv_frame(fd, &rtype, buf, &rlen) == 0 && rtype == IPC_RESPONSE) {
+          buf[rlen < sizeof(buf) ? rlen : sizeof(buf) - 1] = '\0';
+          strncpy(status_buf, (char *)buf, sizeof(status_buf) - 1);
+        }
+      }
+      ar_socket_close(fd);
+    }
+
+    const char *status_color = strcmp(status_buf, "RUNNING") == 0 ? "\033[1;32m" : "\033[1;33m";
+    printf("  \033[1;36m• %s\033[0m [%s%s\033[0m]\n", aname, status_color, status_buf);
+    printf("    %s\n", desc);
+    printf("    \033[0;37mComandos:\033[0m %s\n\n", cmds);
+  }
+  printf("  (Dica: use 'alrios <app> help' para ver o manual completo de qualquer app)\n");
+}
+
+static void print_usage(void) {
+  printf("ALRIOS CLI v0.2.01\n\n");
+  printf("Uso:\n");
+  printf("  alrios power on|off|reload       (gerencia ciclo de vida do kernel arcore)\n");
+  printf("  alrios status                    (alias: list - status dos daemons)\n");
+  printf("  alrios list                      (lista processos e daemons do kernel)\n");
+  printf("  alrios start <app>               (inicia um aplicativo)\n");
+  printf("  alrios stop <app>                (interrompe um aplicativo)\n");
+  printf("  alrios restart <app>             (reinicia um aplicativo)\n");
+  printf("  alrios start add|del <app>       (configura inicializacao automatica)\n");
+  printf("  alrios arpm <comando>            (gerenciador de pacotes soberanos .arapp)\n");
+  printf("  alrios fullupdate [--force]      (rebuild incremental de apps e reload)\n");
+  printf("  alrios update <alvo>             (alvo: all|alrios|armake|arinstall)\n");
+  printf("  alrios build -p <SRC> [-o <OUT>] (compila diretorio de app -> .arapp)\n");
+  printf("  alrios refresh                   (atualiza lista de apps sem reiniciar)\n\n");
+  print_installed_apps();
+}
+
 static int send_and_print(int fd, int type, const char *payload) {
   uint32_t plen = payload ? (uint32_t)strlen(payload) : 0;
   if (ar_ipc_send_frame(fd, type, payload, plen) < 0)
@@ -273,14 +426,39 @@ static int cmd_autostart_del(const char *app) {
 static int cmd_app_query(const char *app, const char *cmd) {
   int fd = admin_connect();
   if (fd < 0) {
-    printf("ARWS Gateway unavailable (9500)\n");
+    printf("\033[1;33m[INFO]\033[0m ARWS Gateway indisponivel (canal IPC 9500 inativo).\n");
+    printf("Para iniciar o ecossistema ALRIOS: alrios power on\n");
+    printf("Para iniciar o aplicativo: alrios start %s\n", app);
     return 1;
   }
   char payload[AR_IPC_BUF_SIZE];
   snprintf(payload, sizeof(payload), "%s\n%s", app, cmd);
-  int rc = send_and_print(fd, IPC_QUERY, payload);
+
+  uint32_t plen = (uint32_t)strlen(payload);
+  if (ar_ipc_send_frame(fd, IPC_QUERY, payload, plen) < 0) {
+    ar_socket_close(fd);
+    return 1;
+  }
+
+  ar_socket_set_recv_timeout(fd, 10000);
+  unsigned char buf[AR_IPC_BUF_SIZE];
+  int rtype;
+  uint32_t rlen = sizeof(buf);
+  if (ar_ipc_recv_frame(fd, &rtype, buf, &rlen) < 0) {
+    ar_socket_close(fd);
+    return 1;
+  }
+  buf[rlen < sizeof(buf) ? rlen : sizeof(buf) - 1] = '\0';
   ar_socket_close(fd);
-  return (rc < 0) ? 1 : rc;
+
+  if (strstr((char *)buf, "target not found") != NULL) {
+    printf("\033[1;33m[INFO]\033[0m O aplicativo '%s' esta instalado mas nao esta em execucao.\n", app);
+    printf("Inicie com: alrios start %s\n", app);
+    return 0;
+  }
+
+  printf("%s\n", buf);
+  return (rtype == IPC_RESPONSE || rtype == IPC_QUERY_RESP || rtype == IPC_ACK) ? 0 : 1;
 }
 
 static int cmd_app_query_args(const char *app, int argc, char *argv[]) {
@@ -555,7 +733,7 @@ int main(int argc, char *argv[]) {
 
   if (strcmp(a1, "version") == 0 || strcmp(a1, "--version") == 0 ||
       strcmp(a1, "-v") == 0) {
-    printf("ALRIOS CLI v0.2.0\n");
+    printf("ALRIOS CLI v0.2.01\n");
     return 0;
   }
 
@@ -636,6 +814,17 @@ int main(int argc, char *argv[]) {
   /* Universal dynamic routing for apps (IPC 9500).
      The target application owns and serves its own command catalogue and help!
    */
-  const char *target_app = (strcmp(a1, "auth") == 0) ? "arauth" : a1;
+  const char *target_app = a1;
+  if (strcmp(a1, "auth") == 0) target_app = "arauth";
+  else if (strcmp(a1, "cdn") == 0) target_app = "arcdn";
+  else if (strcmp(a1, "db") == 0) target_app = "ardb";
+  else if (strcmp(a1, "ws") == 0) target_app = "arws";
+
+  if (!is_app_installed(target_app)) {
+    printf("\033[1;31m[ERRO]\033[0m O aplicativo '%s' nao esta instalado no sistema.\n", target_app);
+    printf("Dica: use 'alrios arpm search %s' ou 'alrios arpm install %s' para instalar.\n", target_app, target_app);
+    return 1;
+  }
+
   return cmd_app_query_args(target_app, argc, argv);
 }

@@ -191,7 +191,7 @@ jobs:
   release:
     name: Publish Official Release
     needs: [build-linux, build-windows]
-    if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/beta-v0.2.0' || github.ref == 'refs/heads/beta-v0.2'
+    if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/beta-v0.2.0' || github.ref == 'refs/heads/beta-v0.2' || github.ref == 'refs/heads/beta-versao'
     runs-on: ubuntu-latest
     steps:
       - name: Download Linux installer artifact
@@ -207,21 +207,22 @@ jobs:
       - name: Create GitHub Release with Standalone Installers
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.2.0-beta' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'ALRIOS v0.2.0 Beta' }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.ref == 'refs/heads/beta-versao' && 'v0.2.01-beta' || 'v0.2.0-beta') }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.ref == 'refs/heads/beta-versao' && 'ALRIOS v0.2.01 Beta' || 'ALRIOS v0.2.0 Beta') }}
           files: |
             alrios-installer-linux-x64
             alrios-setup.exe
           generate_release_notes: false
           append_body: false
           body: |
-            ### ALRIOS Sovereign System v0.2.0 (Beta)
+            ### ALRIOS Sovereign System v0.2.01 (Beta)
 
+            - CLI com sistema de registro e descoberta dinâmica de comandos por aplicativo.
             - Toolchain, Arkernel e instaladores únicos para Linux e Windows.
             - Binários soberanos prontos para Linux x64 e Windows x64.
             - Compatibilidade total com gerenciador nativo `arpm`.
 
-            **Full Changelog**: https://github.com/alrigroup/alrios/commits/v0.2.0-beta
+            **Full Changelog**: https://github.com/alrigroup/alrios/commits/v0.2.01-beta
           draft: false
           prerelease: false
           make_latest: true
