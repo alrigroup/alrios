@@ -104,6 +104,15 @@
       "author": "ALRIGROUP",
       "download_url": "https://github.com/alrigroup/fourtech.web/releases/latest/download/fourtech.web.arapp",
       "src_url": "https://github.com/alrigroup/fourtech.web.git"
+    },
+    "arenterprise.web": {
+      "name": "arenterprise.web",
+      "version": "0.2.0",
+      "runtime": "node",
+      "description": "ALRI Enterprise Web Portal and Management Dashboard",
+      "author": "ALRIGROUP",
+      "download_url": "https://github.com/alrigroup/arenterprise.web/releases/latest/download/arenterprise.web.arapp",
+      "src_url": "https://github.com/alrigroup/arenterprise.web.git"
     }
   }
 }
