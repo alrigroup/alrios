@@ -2,7 +2,7 @@ name: Build & Release Sovereign .arapp (Native)
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "beta-v0.2.0", "beta*" ]
     tags: [ "v*" ]
   workflow_dispatch:
 
@@ -22,7 +22,7 @@ jobs:
         with:
           repository: alrigroup/alrios
           path: alrios
-          ref: beta-v0.2
+          ref: beta-v0.2.0
 
       - name: Checkout app repository
         uses: actions/checkout@v4
@@ -76,7 +76,7 @@ jobs:
         with:
           repository: alrigroup/alrios
           path: alrios
-          ref: beta-v0.2
+          ref: beta-v0.2.0
 
       - name: Checkout app repository
         uses: actions/checkout@v4
@@ -132,7 +132,7 @@ jobs:
             *.arapp
           generate_release_notes: true
           draft: false
-          prerelease: true
+          prerelease: false
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

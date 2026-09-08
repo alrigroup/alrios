@@ -2,7 +2,7 @@ name: Build & Package Installers (Multi-OS)
 
 "on":
   push:
-    branches: [ "main", "beta-v0.2", "beta*" ]
+    branches: [ "main", "beta-v0.2.0", "beta-v0.2", "beta*" ]
     tags: [ "v*", "beta*" ]
   workflow_dispatch:
 
@@ -191,7 +191,7 @@ jobs:
   release:
     name: Publish Official Release
     needs: [build-linux, build-windows]
-    if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/beta-v0.2'
+    if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/beta-v0.2.0' || github.ref == 'refs/heads/beta-v0.2'
     runs-on: ubuntu-latest
     steps:
       - name: Download Linux installer artifact
