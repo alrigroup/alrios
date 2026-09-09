@@ -11,7 +11,7 @@
 2. [arcore - Master Service Daemon & Supervisor](#2-arcore--master-service-daemon--supervisor)
 3. [ARWS - High-Performance Reverse Proxy, Gateway & WAF](#3-arws--high-performance-reverse-proxy-gateway--waf)
 4. [ARDB - Sovereign Data Guardian & SQL Engine Proxy](#4-ardb--sovereign-data-guardian--sql-engine-proxy)
-5. [ARWN - ALRI Web Native Framework & `.arweb` Containers](#5-arwn--alri-web-native-framework--arweb-containers)
+5. [ARWE - ALRI Web Engine (ARWE) & `.arweb` Containers](#5-arwe--alri-web-native-framework--arweb-containers)
 6. [ARCDN - High-Throughput Edge & Media Server](#6-arcdn--high-throughput-edge--media-server)
 7. [Developer Toolchain & CLI](#7-developer-toolchain--cli)
 8. [Security Matrix & Cryptographic Layer](#8-security-matrix--cryptographic-layer)
@@ -129,18 +129,18 @@ The **`arcore`** (`src/ALRIOS/core/`) is the system orchestrator.
 
 ---
 
-## 5. ARWN - ALRI Web Native Framework & `.arweb` Containers
+## 5. ARWE - ALRI Web Engine (ARWE) & `.arweb` Containers
 
-**ARWN** (`src/apps/arwn/`) is the packaging and delivery architecture for web applications with zero runtime disk access.
+**ARWE** (`src/apps/arwe/`) is the packaging and delivery architecture for web applications with zero runtime disk access.
 
 ### 5.1 Binary `.arweb` Container
 - **Zero Disk Lookups**: All resources (HTML, CSS, JS, WASM) are mounted into a single binary in-memory RAM structure.
 - **Section Table with CRC32**: 48-byte per-section integrity validation against data corruption.
-- **Memory-Range Delivery**: The ARWN server serves payloads directly from shared memory pointers.
+- **Memory-Range Delivery**: The ARWE server serves payloads directly from shared memory pointers.
 
 ### 5.2 Native WebAssembly (WASM) Engines
 - **Micro-Engines in C / C++ / Rust / Go**: Support for WASM-compiled code execution with isolated linear memory.
-- **Bidirectional JS <-> WASM Calls**: Modules automatically loaded through the `arwn-bridge.js` bridge.
+- **Bidirectional JS <-> WASM Calls**: Modules automatically loaded through the `arwe-engine.js` bridge.
 
 ### 5.3 Intellectual Property Obfuscation
 - **Base64 VM Container**: JavaScript encapsulation within protected self-executing interpreters when `obfuscate=yes` is configured.

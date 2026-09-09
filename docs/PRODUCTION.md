@@ -24,7 +24,7 @@ Compiled executables and `.arapp` packages will be placed in `arcore/`:
 - `arcore/arcore` (Main daemon)
 - `arcore/alrios` (CLI control tool)
 - `arcore/armake` (Package manager)
-- `arcore/apps/*.arapp` (Application bundles: `arws`, `arcdn`, `ardb`, `arwn`)
+- `arcore/apps/*.arapp` (Application bundles: `arws`, `arcdn`, `ardb`, `arwe`)
 
 ---
 

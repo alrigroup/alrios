@@ -42,7 +42,7 @@ armake build ardb
 
 ---
 
-## ARWN
+## ARWE
 
 **Purpose:** Web Native Compiler & Runtime  
 **Language:** C  
@@ -54,10 +54,10 @@ armake build ardb
 git clone https://github.com/alrigroup/alrios.git
 cd alrios
 git submodule update --init --recursive
-armake build arwn
+armake build arwe
 ```
 
-**Repository:** https://github.com/alrigroup/arwn
+**Repository:** https://github.com/alrigroup/arwe
 
 ---
 

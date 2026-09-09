@@ -10,7 +10,7 @@ Developed and maintained by **[ALRIGROUP](https://alrigroup.com/)**.
 1. [Core Philosophy & Operating Concept](#1-core-philosophy--operating-concept)
 2. [Global Architecture Overview](#2-global-architecture-overview)
 3. [Native Application Specifications (`.arapp`)](#3-native-application-specifications-arapp)
-4. [ALRI Web Native (ARWN & `.arweb` Containers)](#4-alri-web-native-arwn--arweb-containers)
+4. [ALRI Web Engine (ARWE & `.arweb` Containers)](#4-alri-web-native-arwe--arweb-containers)
 5. [Routing, Gateway & Proxy (`ARWS`)](#5-routing-gateway--proxy-arws)
 6. [MANDATORY Rules & Standards for Developers](#6-mandatory-rules--standards-for-developers)
 7. [Step-by-Step Tutorial: Building a Complete App from Scratch](#7-step-by-step-tutorial-building-a-complete-app-from-scratch)
@@ -46,7 +46,7 @@ Developed and maintained by **[ALRIGROUP](https://alrigroup.com/)**.
     ┌────────────────────────────────┼────────────────────────────────┐
     │                                │                                │
 ┌───▼────────────────────────┐ ┌─────▼──────────────────────┐ ┌───────▼──────────────────────┐
-│ Legacy / SPA Native Apps   │ │ ARWN Native Web Framework  │ │ Static Delivery System       │
+│ Legacy / SPA Native Apps   │ │ ARWE Native Web Framework  │ │ Static Delivery System       │
 │ - (Custom SPA apps)       │ │ - test_ecosystem.web(3055) │ │ - arcdn (3005)               │
 │                            │ │   ├── c_engine.arweb (WASM)│ │   ├── Assets, Media, Videos  │
 │   (Vite + React + C Serve) │ │   ├── cpp_engine.arweb     │ │   └── Zero-Copy Sendfile     │
@@ -67,7 +67,7 @@ src/apps/my_app.web/
 ├── my_app.web.arappmake   # Application manifest (ALRIGROUP@APPMAKE)
 ├── CMakeLists.txt         # Build rules for CMake
 ├── my_app_server.c        # Native server logic (C / POSIX / HAL)
-├── config.arwn            # (Optional) ARWN Multi-Unit configuration
+├── config.arwe            # (Optional) ARWE Multi-Unit configuration
 └── web/                   # Frontend assets & components
     ├── main.arhtml        # Mandatory standard entrypoint
     ├── main.js            # JavaScript frontend logic
@@ -101,14 +101,14 @@ ALRIGROUP@APPMAKE
 
 ---
 
-## 4. ALRI Web Native (ARWN & `.arweb` Containers)
+## 4. ALRI Web Engine (ARWE & `.arweb` Containers)
 
-ARWN is the modern standard for web apps in ALRIOS. It transforms frontend and WASM backend code into binary `.arweb` containers.
+ARWE is the modern standard for web apps in ALRIOS. It transforms frontend and WASM backend code into binary `.arweb` containers.
 
 ### Binary Layout (`.arweb`)
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ Magic Header: 0x4E575241 ('ARWN') | Version | Sections  │
+│ Magic Header: 0x4E575241 ('ARWE') | Version | Sections  │
 ├──────────────────────────────────────────────────────────┤
 │ Section Table (48 Bytes per Section):                    │
 │   - Name (32 Bytes NULL-terminated)                      │
@@ -124,7 +124,7 @@ ARWN is the modern standard for web apps in ALRIOS. It transforms frontend and W
 └──────────────────────────────────────────────────────────┘
 ```
 
-### Configuration Format (`config.arwn`)
+### Configuration Format (`config.arwe`)
 ```ini
 [app]
 name=my-app
@@ -198,14 +198,14 @@ When provisioning your application in ARDB:
 When contributing to or developing for ALRIOS, you **MUST** strictly adhere to the following rules:
 
 ### 1. File Naming Standard ("MAIN" Convention)
-All frontend assets in an ARWN unit must be strictly isolated into separate files:
+All frontend assets in an ARWE unit must be strictly isolated into separate files:
 - ❌ **NEVER** write inline `<style>` or `<script>` tags inside HTML.
 - ✅ Entrypoint HTML must always be named **`main.arhtml`**.
 - ✅ Main JavaScript must always be named **`main.js`**.
 - ✅ Main Stylesheet must always be named **`main.css`**.
 
 ### 2. IP Protection & Obfuscation
-- When `obfuscate=yes` is set in `config.arwn`, the compilation toolchain wraps JavaScript into a self-executing Base64 Virtual Machine payload.
+- When `obfuscate=yes` is set in `config.arwe`, the compilation toolchain wraps JavaScript into a self-executing Base64 Virtual Machine payload.
 - All files automatically receive the **Official ALRI GROUP Free Use Header** alongside the developer's **Custom Copyright**.
 
 ### 3. Concurrency & Non-Blocking I/O
@@ -293,7 +293,7 @@ if (document.readyState === 'loading') {
 }
 ```
 
-### Step 4: Write `config.arwn`
+### Step 4: Write `config.arwe`
 ```ini
 [app]
 name=analytics
@@ -342,7 +342,7 @@ cmake -B build -S . && cmake --build build
 | **`arws`** | 8080 / 443 | Native C / Multi-Shard Cache | Central Reverse Proxy & Load Balancer |
 | **`ardb`** | 5432 | Native C / PGWire | Sovereign Database Engine |
 | **`arcdn`** | 3005 | Native C / Sendfile | Static Asset & Media Streaming Server |
-| **`arwn`** | varies | Native C / ARWN | Web Native Compiler & Runtime |
+| **`arwe`** | varies | Native C / ARWE | Web Native Compiler & Runtime |
 
 ---
 

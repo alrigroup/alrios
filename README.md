@@ -37,7 +37,7 @@ This repository contains:
 └─────────────────┘       └───────────┬──────────────┬──────────────┬────────────┘
                                       │              │              │
                    ┌──────────────────▼──┐    ┌──────▼───────┐ ┌────▼────────────┐
-                   │ ARDB Database       │    │ ARCDN        │ │ ARWN Web Native │
+                   │ ARDB Database       │    │ ARCDN        │ │ ARWE (ALRI Web Engine) │
                    │ PGWire + HTTP Engine│    │ Static CDN   │ │ High-Perf Engine│
                    └─────────────────────┘    └──────────────┘ └─────────────────┘
 ```
@@ -51,89 +51,89 @@ ALRIOS provides **single-executable standalone installers** for both Linux and W
 
 ### 🪟 Windows (x64)
 
-Baixe o executável oficial direto da aba [Releases](https://github.com/alrigroup/alrios/releases):
-1. Execute **`alrios-setup.exe`** com 2 cliques para abrir o assistente gráfico nativo (Win32), ou execute pelo terminal:
+Download the official executable from the [Releases](https://github.com/alrigroup/alrios/releases) page:
+1. Run **`alrios-setup.exe`** to open the native graphical installer (Win32), or run in terminal:
    ```cmd
    alrios-setup.exe --cli -y
    ```
-2. **Local de Instalação**:
-   - Administrador: `C:\Program Files\ALRIOS\`
-   - Usuário padrão: `%LOCALAPPDATA%\Programs\ALRIOS\`
-3. **Pronto!** O instalador registra o ALRIOS no `PATH` do Windows automaticamente. Abra qualquer CMD ou PowerShell e digite `alrios` ou `arpm`.
+2. **Installation Directory**:
+   - Administrator: `C:\Program Files\ALRIOS\`
+   - Standard user: `%LOCALAPPDATA%\Programs\ALRIOS\`
+3. **Ready!** The installer automatically registers ALRIOS in the Windows `PATH`. Open any CMD or PowerShell and run `alrios` or `arpm`.
 
 ### 🐧 Linux (x64)
 
-Baixe o executável oficial direto da aba [Releases](https://github.com/alrigroup/alrios/releases):
+Download the official executable from the [Releases](https://github.com/alrigroup/alrios/releases) page:
 ```bash
-# 1. Dar permissão de execução
+# 1. Grant execution permission
 chmod +x alrios-installer-linux-x64
 
-# 2. Executar instalador (Abre interface gráfica GTK3 ou CLI interativa)
+# 2. Run installer (Opens native GTK3 graphical wizard or interactive CLI)
 ./alrios-installer-linux-x64
 
-# Ou executar de forma rápida e silenciosa:
+# Or run non-interactively in quiet mode:
 ./alrios-installer-linux-x64 --cli -y
 ```
-- **Local de Instalação**: `/opt/alrios/` (com sudo) ou `~/.local/share/alrios/` (usuário comum).
-- **Comandos Globais no PATH**: Cria os links simbólicos automaticamente em `/usr/local/bin` (`alrios`, `arpm`, `arcore`, `armake`).
+- **Installation Path**: `/opt/alrios/` (with sudo) or `~/.local/share/alrios/` (unprivileged user).
+- **Global PATH Commands**: Creates symbolic links in `/usr/local/bin` (`alrios`, `arpm`, `arcore`, `armake`).
 
 ---
 
-## 💻 Comandos Principais
+## 💻 Essential Commands
 
-Após a instalação, os seguintes comandos globais estão prontos para uso no seu terminal:
+Once installed, the following commands are available globally in your terminal:
 
 ```bash
-# Inicializar o ecossistema e microservicos
+# Initialize the daemon supervisor and autostart microservices
 alrios power on
 
-# Verificar status de todos os serviços em execução
+# Inspect daemon health and active process table
 alrios status
 
-# Gerenciar pacotes e aplicativos do ecossistema
-arpm list                    # Lista aplicativos instalados
-arpm search <termo>          # Pesquisa no catálogo oficial (arcore/registry.json)
-arpm install <app>           # Baixa e instala um pacote .arapp
-arpm update --all            # Atualiza todos os aplicativos
+# Manage modular packages via ARPM
+arpm list                    # List installed applications
+arpm search <query>          # Search official registry (arcore/registry.json)
+arpm install <app>           # Download and install a pre-built .arapp bundle
+arpm update --all            # Update all applications preserving user storage
 
-# Empacotar novo aplicativo em .arapp soberano
-armake build src/apps/meuapp arcore/apps/meuapp.arapp
+# Build application package (.arapp)
+armake build <app_dir> arcore/apps/<app_name>.arapp
 
-# Desligar todos os serviços
+# Graceful shutdown of all services
 alrios power off
 ```
 
 ---
 
-## 📦 Ecossistema Modular de Aplicativos
+## 📦 Modular Application Ecosystem
 
-Todos os pacotes oficiais são catalogados em [`arcore/registry.json`](arcore/registry.json):
+All official applications are decoupled into independent repositories and cataloged in [`arcore/registry.json`](arcore/registry.json):
 
-| Repositório / Pacote | Descrição |
+| Repository / Package | Description |
 |---|---|
-| **[arws](https://github.com/alrigroup/arws)** | Gateway reverso de alta performance, proxy e balanceador de carga HTTP/HTTPS |
-| **[ardb](https://github.com/alrigroup/ardb)** | Banco de dados nativo linear de alta velocidade com suporte a PGWire |
-| **[arcdn](https://github.com/alrigroup/arcdn)** | Servidor de assets estáticos e engine de streaming de baixa latência |
-| **[arwn](https://github.com/alrigroup/arwn)** | Engine nativa de containers web `.arweb` e runtime Web Native |
-| **[arauth](https://github.com/alrigroup/arauth)** | Serviço unificado de autenticação soberana e cofres de tokens |
-| **[ardcbot](https://github.com/alrigroup/ardcbot)** | Integração oficial com Discord Bot Service |
+| **[arws](https://github.com/alrigroup/arws)** | High-performance Layer 7 reverse proxy, gateway & load balancer |
+| **[ardb](https://github.com/alrigroup/ardb)** | Sovereign linear database engine with PGWire v3.0 protocol and AST SQL firewall |
+| **[arcdn](https://github.com/alrigroup/arcdn)** | Zero-copy static file delivery, HTTP 206 media streaming & edge asset server |
+| **[arwe](https://github.com/alrigroup/arwe)** | In-memory `.arweb` container runtime, bundler & WebAssembly engine |
+| **[arauth](https://github.com/alrigroup/arauth)** | Sovereign cryptographic identity vault, PBKDF2/Argon2id & session authority |
+| **[ardcbot](https://github.com/alrigroup/ardcbot)** | Official Discord automation bot with sandboxed microkernel plugin runtime |
 
 ---
 
-## 🛠️ Compilação a partir do Código-Fonte (Desenvolvedores)
+## 🛠️ Building from Source
 
-Se você deseja clonar o repositório e compilar localmente:
+To clone and compile the core platform locally:
 
 ### Linux
 ```bash
-# Dependências do sistema
+# System dependencies
 sudo apt update && sudo apt install -y cmake gcc make libssl-dev libgtk-3-dev pkg-config nodejs npm
 
-# Compilação
+# Compilation
 cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release
 cmake --build build-linux --target arcore alrios armake arinstall -j$(nproc)
 
-# Executar instalador local
+# Execute local installation
 ./install.sh
 ```
 

@@ -36,16 +36,16 @@
       "download_url": "https://github.com/alrigroup/arcdn/releases/latest/download/arcdn-linux-x64.arapp",
       "src_url": "https://github.com/alrigroup/arcdn.git"
     },
-    "arwn": {
-      "name": "arwn",
+    "arwe": {
+      "name": "arwe",
       "version": "0.2.0",
       "runtime": "native",
-      "description": "ALRI Web Native Runtime & High Performance .arweb Container Engine",
+      "description": "ALRI Web Engine Runtime & High Performance .arweb Container Engine",
       "author": "ALRIGROUP",
-      "download_url_linux": "https://github.com/alrigroup/arwn/releases/latest/download/arwn-linux-x64.arapp",
-      "download_url_windows": "https://github.com/alrigroup/arwn/releases/latest/download/arwn-windows-x64.arapp",
-      "download_url": "https://github.com/alrigroup/arwn/releases/latest/download/arwn-linux-x64.arapp",
-      "src_url": "https://github.com/alrigroup/arwn.git"
+      "download_url_linux": "https://github.com/alrigroup/arwe/releases/latest/download/arwe-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/arwe/releases/latest/download/arwe-windows-x64.arapp",
+      "download_url": "https://github.com/alrigroup/arwe/releases/latest/download/arwe-linux-x64.arapp",
+      "src_url": "https://github.com/alrigroup/arwe.git"
     },
     "arauth": {
       "name": "arauth",

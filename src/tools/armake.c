@@ -725,14 +725,14 @@ static int is_platform(const char *target, const char *name) {
 /* ------------------------------------------------------------------ */
 
 /* Expande variáveis simples em 'tpl' -> 'out':
-   $APP_NAME, $APP_DIR, $ARCORE, $STAGING, $ARWN_BUILD                  */
+   $APP_NAME, $APP_DIR, $ARCORE, $STAGING, $ARWE_BUILD                  */
 static void expand_vars(char *out, int cap,
                         const char *tpl,
                         const char *app_name,
                         const char *app_dir,
                         const char *arcore_dir,
                         const char *staging,
-                        const char *arwn_build) {
+                        const char *arwe_build) {
     int wi = 0;
     const char *p = tpl;
     while (*p && wi < cap - 1) {
@@ -743,7 +743,8 @@ static void expand_vars(char *out, int cap,
         else if (strncmp(p, "APP_DIR",  7) == 0) { sub = app_dir;    p += 7; }
         else if (strncmp(p, "ARCORE",   6) == 0) { sub = arcore_dir; p += 6; }
         else if (strncmp(p, "STAGING",  7) == 0) { sub = staging;    p += 7; }
-        else if (strncmp(p, "ARWN_BUILD", 10) == 0) { sub = arwn_build; p += 10; }
+        else if (strncmp(p, "ARWE_BUILD", 10) == 0) { sub = arwe_build; p += 10; }
+        else if (strncmp(p, "ARWE_BUILD", 10) == 0) { sub = arwe_build; p += 10; }
         else { out[wi++] = '$'; continue; }
         if (sub) {
             int sl = (int)strlen(sub);
@@ -755,9 +756,9 @@ static void expand_vars(char *out, int cap,
     out[wi] = '\0';
 }
 
-/* Resolve o path do binário arwn_build. Usa --arwn-build, senão
-   <arcore>/.staging/arwn/arwn_build. Retorna 0 em sucesso.         */
-static int resolve_arwn_build(const char *arcore_dir, const char *override,
+/* Resolve o path do binário arwe_build. Usa --arwe-build, senão
+   <arcore>/.staging/arwe/arwe_build. Retorna 0 em sucesso.         */
+static int resolve_arwe_build(const char *arcore_dir, const char *override,
                               char *out, int cap) {
     if (override && override[0]) {
         snprintf(out, cap, "%s", override);
@@ -765,9 +766,11 @@ static int resolve_arwn_build(const char *arcore_dir, const char *override,
     }
     if (arcore_dir[0]) {
 #ifdef _WIN32
-        snprintf(out, cap, "%s\\.staging\\arwn\\arwn_build.exe", arcore_dir);
+        snprintf(out, cap, "%s\\.staging\\arwe\\arwe_build.exe", arcore_dir);
 #else
-        snprintf(out, cap, "%s/.staging/arwn/arwn_build", arcore_dir);
+        snprintf(out, cap, "%s/.staging/arwe/arwe_build", arcore_dir);
+        if (access(out, 0) != 0)
+            snprintf(out, cap, "%s/.staging/arwe/arwe_build", arcore_dir);
 #endif
         return 0;
     }
@@ -902,7 +905,7 @@ static int find_arcore_dir(const char *start, char *out, int cap) {
 static int run_build_steps_from_manifest(ar_app_manifest_t *m,
                                          const char *app_dir,
                                          const char *staging_override,
-                                         const char *arwn_build_override) {
+                                         const char *arwe_build_override) {
     int has_steps  = (m->build.step_count > 0);
     int has_legacy = (m->build.command[0] != '\0');
     if (!has_steps && !has_legacy) return 0;
@@ -910,8 +913,8 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
     char arcore_dir[1024] = {0};
     find_arcore_dir(app_dir, arcore_dir, sizeof(arcore_dir));
 
-    char arwn_build[1024] = {0};
-    resolve_arwn_build(arcore_dir, arwn_build_override, arwn_build, sizeof(arwn_build));
+    char arwe_build[1024] = {0};
+    resolve_arwe_build(arcore_dir, arwe_build_override, arwe_build, sizeof(arwe_build));
 
     char staging_tpl[AR_BUILD_STAGING_MAX];
     if (staging_override && staging_override[0]) {
@@ -923,7 +926,7 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
     }
     char staging[1024] = {0};
     expand_vars(staging, sizeof(staging), staging_tpl,
-                m->name, app_dir, arcore_dir, "", arwn_build);
+                m->name, app_dir, arcore_dir, "", arwe_build);
     if (staging[0] == '/' && staging[1] == '.' && (staging[2] == 's' || staging[2] == '/')) {
         char fixed[1024];
         snprintf(fixed, sizeof(fixed), ".%s", staging);
@@ -955,7 +958,7 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
             ar_build_step_t *step = &m->build.steps[i];
             char cmd_exp[AR_BUILD_STEP_CMD_MAX];
             expand_vars(cmd_exp, sizeof(cmd_exp), step->cmd,
-                        m->name, app_dir, arcore_dir, staging, arwn_build);
+                        m->name, app_dir, arcore_dir, staging, arwe_build);
 #ifdef _WIN32
             if (!strstr(cmd_exp, "-lws2_32") && (strstr(cmd_exp, "-larkernel") || strstr(cmd_exp, "-lssl") || strstr(cmd_exp, "-lcrypto") || strstr(cmd_exp, "gcc ") || strstr(cmd_exp, "cc "))) {
                 strncat(cmd_exp, " -lws2_32", sizeof(cmd_exp) - strlen(cmd_exp) - 1);
@@ -965,7 +968,7 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
             if (step->cwd[0]) {
                 char cwd_exp[AR_BUILD_STEP_CWD_MAX];
                 expand_vars(cwd_exp, sizeof(cwd_exp), step->cwd,
-                            m->name, app_dir, arcore_dir, staging, arwn_build);
+                            m->name, app_dir, arcore_dir, staging, arwe_build);
                 snprintf(step_cwd, sizeof(step_cwd), "%s%c%s",
                          app_dir, SEPARATOR, cwd_exp);
             } else {
@@ -1028,7 +1031,7 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
     for (int i = 0; i < m->build.cleanup_count; i++) {
         char path_exp[1024];
         expand_vars(path_exp, sizeof(path_exp), m->build.cleanup[i],
-                    m->name, app_dir, arcore_dir, staging, arwn_build);
+                    m->name, app_dir, arcore_dir, staging, arwe_build);
         char full_path[1300];
         if (path_exp[0] == '/'
 #ifdef _WIN32
@@ -1092,35 +1095,47 @@ static int find_static_src(const char *app_dir, const char *file,
     return -1;
 }
 
-/* True se o manifesto usa ARWN (build.steps referencia $ARWN_BUILD ou
-   empacota config.arwn). Apps ARWN-native têm o entry = cópia de
-   arwn_build; apps nativos (ex: cdn compilado por cc) não.          */
-static int manifest_is_arwn(ar_app_manifest_t *m) {
+/* True se o manifesto usa ARWE (build.steps referencia $ARWE_BUILD ou
+   empacota config.arwe). Apps ARWE-native têm o entry = cópia de
+   arwe_build; apps nativos (ex: cdn compilado por cc) não.          */
+static int manifest_is_arwe(ar_app_manifest_t *m) {
     if (!m) return 0;
     for (int i = 0; i < m->build.step_count; i++) {
-        if (strstr(m->build.steps[i].cmd, "ARWN_BUILD") != NULL) return 1;
+        if (strstr(m->build.steps[i].cmd, "ARWE_BUILD") != NULL ||
+            strstr(m->build.steps[i].cmd, "ARWE_BUILD") != NULL) return 1;
     }
     for (int i = 0; i < m->file_count; i++) {
-        if (strcmp(m->files[i], "config.arwn") == 0) return 1;
+        if (strcmp(m->files[i], "config.arwe") == 0 ||
+            strcmp(m->files[i], "config.arwe") == 0) return 1;
+    }
+    return 0;
+}
+static int legacy_manifest_is_arwe_unused(ar_app_manifest_t *m) {
+    if (!m) return 0;
+    for (int i = 0; i < m->build.step_count; i++) {
+        if (strstr(m->build.steps[i].cmd, "ARWE_BUILD") != NULL) return 1;
+    }
+    for (int i = 0; i < m->file_count; i++) {
+        if (strcmp(m->files[i], "config.arwe") == 0) return 1;
     }
     return 0;
 }
 
 /* Popula o staging com os arquivos estáticos do manifesto que ainda
    não existem lá (copiados do app_dir). O binário de entrada, se
-   apontado via --arwn-build e o app for ARWN-native, é SEMPRE copiado
-   para o staging (sempre reflete o arwn_build atual, mesmo em
-   rebuilds). Apps não-ARWN (ex: cdn compilado por cc) NÃO recebem a
+   apontado via --arwe-build e o app for ARWE-native, é SEMPRE copiado
+   para o staging (sempre reflete o arwe_build atual, mesmo em
+   rebuilds). Apps não-ARWE (ex: cdn compilado por cc) NÃO recebem a
    cópia, preservando o binário produzido pelo build.steps.          */
 static void prepare_staging(ar_app_manifest_t *m,
                             const char *app_dir,
                             const char *staging,
-                            const char *arwn_build) {
+                            const char *arwe_build) {
     if (!staging || !staging[0]) return;
     mkdir_p(staging);
 
-    /* 1) Copia o binário de entrada (platform entry) do arwn_build */
-    if (arwn_build && arwn_build[0] && manifest_is_arwn(m)) {
+    /* 1) Copia o binário de entrada (platform entry) do arwe_build */
+    if (arwe_build && arwe_build[0] && manifest_is_arwe(m)) {
         char entry[AR_ENTRY_MAX] = {0};
         char platform[32] = {0};
         ar_platform_detect(platform, sizeof(platform));
@@ -1130,10 +1145,10 @@ static void prepare_staging(ar_app_manifest_t *m,
             char dst[1300];
             snprintf(dst, sizeof(dst), "%s%c%s", staging, SEPARATOR, entry);
             normalize_path(dst);
-            if (copy_file_into(arwn_build, dst) == 0)
+            if (copy_file_into(arwe_build, dst) == 0)
                 printf("[STAGING] binário de entrada: %s\n", dst);
             else
-                printf("[AVISO] nao foi possivel copiar %s para %s\n", arwn_build, dst);
+                printf("[AVISO] nao foi possivel copiar %s para %s\n", arwe_build, dst);
         }
     }
 
@@ -1219,7 +1234,7 @@ static int cmd_build(int argc, char **argv) {
     const char *dir = ".";
     const char *output_arg = NULL;
     const char *staging_override = NULL;
-    const char *arwn_build_override = NULL;
+    const char *arwe_build_override = NULL;
     char target[32] = {0};
     int universal = 0;
     int force_build = 0;
@@ -1234,8 +1249,8 @@ static int cmd_build(int argc, char **argv) {
             force_build = 1;
         } else if (strcmp(argv[i], "--staging") == 0 && i + 1 < argc) {
             staging_override = argv[++i];
-        } else if (strcmp(argv[i], "--arwn-build") == 0 && i + 1 < argc) {
-            arwn_build_override = argv[++i];
+        } else if (strcmp(argv[i], "--arwe-build") == 0 && i + 1 < argc) {
+            arwe_build_override = argv[++i];
         } else if (argv[i][0] == '-') {
             printf("[ERRO] Opcao desconhecida: %s\n", argv[i]);
             return 1;
@@ -1311,7 +1326,7 @@ static int cmd_build(int argc, char **argv) {
         g_snap = NULL;
         snap_dir(app_dir_buf, "", &g_snap, &g_snap_count);
 
-        if (run_build_steps_from_manifest(&m, app_dir_buf, staging_override, arwn_build_override) != 0) {
+        if (run_build_steps_from_manifest(&m, app_dir_buf, staging_override, arwe_build_override) != 0) {
             cleanup_and_report();
             return 1;
         }
@@ -1385,8 +1400,8 @@ static int cmd_build(int argc, char **argv) {
         char arcore_buf[1024] = {0};
         find_arcore_dir(app_dir_buf2, arcore_buf, sizeof(arcore_buf));
 
-        char arwn_build_buf[1024] = {0};
-        resolve_arwn_build(arcore_buf, arwn_build_override, arwn_build_buf, sizeof(arwn_build_buf));
+        char arwe_build_buf[1024] = {0};
+        resolve_arwe_build(arcore_buf, arwe_build_override, arwe_build_buf, sizeof(arwe_build_buf));
 
         char stg_tpl[AR_BUILD_STAGING_MAX];
         if (staging_override && staging_override[0])
@@ -1397,10 +1412,10 @@ static int cmd_build(int argc, char **argv) {
             snprintf(stg_tpl, sizeof(stg_tpl), "$ARCORE/.staging/$APP_NAME");
         char staging_resolved[1024] = {0};
         expand_vars(staging_resolved, sizeof(staging_resolved), stg_tpl,
-                    m.name, app_dir_buf2, arcore_buf, "", arwn_build_buf);
+                    m.name, app_dir_buf2, arcore_buf, "", arwe_build_buf);
 
         /* Prepara o staging com o binário de entrada + arquivos estáticos */
-        prepare_staging(&m, app_dir_buf2, staging_resolved, arwn_build_buf);
+        prepare_staging(&m, app_dir_buf2, staging_resolved, arwe_build_buf);
 
         /* Verifica se o primeiro file do manifesto existe no staging */
         int staging_ok = 0;

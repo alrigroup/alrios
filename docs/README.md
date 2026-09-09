@@ -17,8 +17,8 @@ Developed and maintained by **[ALRIGROUP](https://alrigroup.com/)**.
 └─────────────────┘       └───────────┬──────────────┬──────────────┬──────────────┘
                                       │              │              │
                    ┌──────────────────▼──┐    ┌──────▼───────┐ ┌────▼─────────────┐
-                   │ arwn web apps       │    │ arcdn        │ │ ardb             │
-                   │ (React SPA + ARWN)  │    │ Static CDN   │ │ Database Engine  │
+                   │ arwe web apps       │    │ arcdn        │ │ ardb             │
+                   │ (React SPA + ARWE)  │    │ Static CDN   │ │ Database Engine  │
                    └─────────────────────┘    └──────────────┘ └──────────────────┘
 ```
 

@@ -58,7 +58,7 @@ jobs:
           for appdir in src/apps/*/; do
             if [ -d "$appdir" ]; then
               appname=$(basename "$appdir")
-              if [ -f "$appdir/${appname}.arappmake" ] || [ -f "$appdir/config.arwn" ] || [ -f "$appdir/CMakeLists.txt" ]; then
+              if [ -f "$appdir/${appname}.arappmake" ] || [ -f "$appdir/config.arwe" ] || [ -f "$appdir/CMakeLists.txt" ]; then
                 echo "==> Empacotando app: ${appname}..."
                 ./arcore/armake build "$appdir" "arcore/apps/${appname}.arapp" || {
                   echo "[AVISO] Falha ao empacotar ${appname}, continuando..."
@@ -141,7 +141,7 @@ jobs:
           for appdir in src/apps/*/; do
             if [ -d "$appdir" ]; then
               appname=$(basename "$appdir")
-              if [ -f "$appdir/${appname}.arappmake" ] || [ -f "$appdir/config.arwn" ] || [ -f "$appdir/CMakeLists.txt" ]; then
+              if [ -f "$appdir/${appname}.arappmake" ] || [ -f "$appdir/config.arwe" ] || [ -f "$appdir/CMakeLists.txt" ]; then
                 echo "==> Empacotando app: ${appname}..."
                 ./arcore/armake.exe build "$appdir" "arcore/apps/${appname}.arapp" || {
                   echo "[AVISO] Falha ao empacotar ${appname}, continuando..."
