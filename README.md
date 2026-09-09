@@ -155,7 +155,10 @@ Documentação aprofundada na pasta **[`/docs`](docs/README.md)**:
 
 ---
 
-## ⚖️ Licença
+## 🏢 Governança & Licença
 
-Desenvolvido e mantido por **[ALRI Group](https://alrigroup.com/)**.  
-Distribuído sob os termos da licença **ARGLP (ALRI GROUP LICENSE PERMISSIVE)**. Consulte o arquivo [LICENSE](LICENSE) para termos completos.
+- **Engenharia & Arquitetura**: **[ALRI Development](https://alrigroup.com/)** *(Divisão de Sistemas e Engenharia)*
+- **Holding Controladora**: **[ALRI Group](https://alrigroup.com/)** *(Proprietária dos Ativos e Licenças)*
+- **Licenciamento**: Distribuído sob os termos da licença **ARGLP (ALRI GROUP LICENSE PERMISSIVE - Versão 2)**. Consulte o arquivo [LICENSE](LICENSE) para termos completos.
+
+<p align="center">© 2026 ALRI Group e suas afiliadas. Desenvolvido e mantido pela ALRI Development.</p>

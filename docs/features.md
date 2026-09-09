@@ -1,7 +1,7 @@
 # ALRIOS - Complete Features Catalog & Technical Specification
 
 **Official Technical Specification and Feature Catalog for ALRIOS (ALRI Operating System).**  
-*Developed by ALRIGROUP - High-Performance Systems Engineering.*
+*Engineered by ALRI Development — Governed by ALRI Group.*
 
 ---
 

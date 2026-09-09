@@ -71,8 +71,11 @@ build.bat
 
 ---
 
-## Credits & License
+## 🏢 Credits & Governance
 
-- **Developed by:** **[ALRIGROUP](https://alrigroup.com/)**
+- **Engineering & Architecture:** **[ALRI Development](https://alrigroup.com/)** *(Systems & Core Runtime Division)*
+- **Holding & Asset Management:** **[ALRI Group](https://alrigroup.com/)** *(Parent Holding Company)*
 - **Official Website:** [https://alrigroup.com/](https://alrigroup.com/)
 - **License:** Governed by **ARGLP (ALRI GROUP LICENSE PERMISSIVE - Version 2)**. See [LICENSE](../LICENSE) for full terms.
+
+<p align="center">© 2026 ALRI Group and its affiliates. Engineered by ALRI Development.</p>
