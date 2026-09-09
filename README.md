@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/alrigroup/.github/main/alrigroup.svg" width="140" alt="ALRIGROUP" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://cdn.alrigroup.com/ALRIDEV-SF-W.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://cdn.alrigroup.com/ALRIDEV-SF-B.png">
+    <img alt="ALRI Development Logo" src="https://cdn.alrigroup.com/ALRIDEV-SF-W.png" width="300">
+  </picture>
 </p>
 
 <h1 align="center">ALRIOS</h1>
@@ -142,23 +146,30 @@ install.bat
 
 ---
 
-## 📚 Documentação Técnica
+## 📚 Technical Documentation
 
-Documentação aprofundada na pasta **[`/docs`](docs/README.md)**:
+In-depth technical architecture and operational specifications in **[`/docs`](docs/README.md)**:
 
-- 🏆 **[Catálogo Completo de Recursos](docs/features.md)**
-- 📘 **[Visão Geral do Sistema](docs/README.md)**
-- 📙 **[Guia do Desenvolvedor & IPC](docs/DEVELOPER_GUIDE.md)**
-- 📕 **[Guia de Produção](docs/PRODUCTION.md)**
-- 🟢 **[Requisitos de Sistema](docs/REQUIREMENTS.md)**
-- 📓 **[Referência de Comandos CLI](docs/comands.md)**
+- 🏆 **[Complete Features Catalog](docs/features.md)**
+- 📘 **[Architecture Overview](docs/README.md)**
+- 📙 **[Developer Guide & IPC](docs/DEVELOPER_GUIDE.md)**
+- 📕 **[Production & Deployment Guide](docs/PRODUCTION.md)**
+- 🟢 **[System Requirements](docs/REQUIREMENTS.md)**
+- 📓 **[CLI Command Reference](docs/comands.md)**
 
 ---
 
-## 🏢 Governança & Licença
+## 🏢 Credits & Governance
 
-- **Engenharia & Arquitetura**: **[ALRI Development](https://alrigroup.com/)** *(Divisão de Sistemas e Engenharia)*
-- **Holding Controladora**: **[ALRI Group](https://alrigroup.com/)** *(Proprietária dos Ativos e Licenças)*
-- **Licenciamento**: Distribuído sob os termos da licença **ARGLP (ALRI GROUP LICENSE PERMISSIVE - Versão 2)**. Consulte o arquivo [LICENSE](LICENSE) para termos completos.
+- **Engineering & Architecture**: **[ALRI Development](https://alrigroup.com/)** *(Systems & Core Runtime Division)*
+- **Holding & Asset Management**: **[ALRI Group](https://alrigroup.com/)** *(Parent Holding & License Proprietor)*
+- **Licensing**: Governed by the **ARGLP (ALRI GROUP LICENSE PERMISSIVE - Version 2)**. See [LICENSE](LICENSE) for full terms.
 
-<p align="center">© 2026 ALRI Group e suas afiliadas. Desenvolvido e mantido pela ALRI Development.</p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://cdn.alrigroup.com/ARD-SF-W.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://cdn.alrigroup.com/ARD-SF-B.png">
+    <img alt="ARD Seal" src="https://cdn.alrigroup.com/ARD-SF-W.png" width="80">
+  </picture><br>
+  <sub>© 2026 ALRI Group and its affiliates. Engineered and maintained by ALRI Development.</sub>
+</p>
