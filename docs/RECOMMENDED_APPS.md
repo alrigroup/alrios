@@ -44,7 +44,7 @@ armake build ardb
 
 ## ARWE
 
-**Purpose:** Web Native Compiler & Runtime  
+**Purpose:** In-Memory Container Runtime & WASM Engine  
 **Language:** C  
 **License:** ARGLP  
 **Description:** Compiler, bundler, and runtime for building web applications as native ALRIOS apps. Compiles `.arhtml` templates and JavaScript into optimized `.arweb` binary packages.

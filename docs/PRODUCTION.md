@@ -1,6 +1,6 @@
 # Operations and Production Guide — ALRIOS / arcore
 
-Production deployment manual for Linux Debian 13 / Ubuntu servers, SSL/HTTPS configuration, and systemd service management.
+Production deployment manual for Linux Debian 13 / Ubuntu servers, systemd daemon management, and high-concurrency runtime operations.
 
 ---
 
@@ -13,64 +13,69 @@ Production deployment manual for Linux Debian 13 / Ubuntu servers, SSL/HTTPS con
 
 ---
 
-## 🛠️ 2. Server Compilation
+## 🛠️ 2. Kernel & Tools Compilation
 
 ```bash
-# Complete build (Kernel + Tools + Apps)
+# Complete build of ALRIOS kernel supervisor and developer tools
 bash build_linux.sh
 ```
 
-Compiled executables and `.arapp` packages will be placed in `arcore/`:
-- `arcore/arcore` (Main daemon)
-- `arcore/alrios` (CLI control tool)
-- `arcore/armake` (Package manager)
-- `arcore/apps/*.arapp` (Application bundles: `arws`, `arcdn`, `ardb`, `arwe`)
+Compiled binaries are placed in `arcore/`:
+- `arcore/arcore` (Master supervisor daemon)
+- `arcore/alrios` (Unified CLI control tool)
+- `arcore/armake` (Modular application packager)
+- `arcore/arpm` (Package manager)
 
 ---
 
-## ⚙️ 3. Production Configuration (`arws.cfg`)
+## ⚙️ 3. Production Supervisor Deployment
 
-Configuration file: `arcore/storage/arws/arws.cfg`
+The `arcore` daemon orchestrates the lifecycle of all modular application packages (`.arapp`).
 
-```ini
-mode=production
-global_mode=production
-port=443
-bind=0.0.0.0
+```bash
+# Start supervisor in background
+./alrios power on
+
+# Verify active status and process table
+./alrios status
+
+# Graceful shutdown
+./alrios power off
 ```
 
 ---
 
-## 🔒 4. SSL Certificate Setup (HTTPS)
+## 🚀 4. Systemd Service Integration
 
-### Let's Encrypt Certificates (Production)
+To run the ALRIOS supervisor as a persistent system-level daemon:
+
 ```bash
-sudo apt install certbot -y
-sudo certbot certonly --standalone -d yourdomain.com
-
-mkdir -p arcore/storage/arws/certs
-sudo cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem arcore/storage/arws/certs/cert.pem
-sudo cp /etc/letsencrypt/live/yourdomain.com/privkey.pem arcore/storage/arws/certs/key.pem
-sudo chown $USER:$USER arcore/storage/arws/certs/*.pem
-```
-
----
-
-## 🚀 5. Execution & Systemd Service
-
-### Start Manually (in background):
-```bash
-./arcore/alrios power on
-```
-
-### Install System Service (systemd):
-```bash
+# 1. Install service unit to systemd
 sudo cp alrios.service /etc/systemd/system/
+
+# 2. Reload daemon registry and enable autostart on boot
 sudo systemctl daemon-reload
 sudo systemctl enable --now alrios
+
+# 3. Check service health
+sudo systemctl status alrios
 ```
 
-### Check Service Status:
+---
+
+## 🔒 5. Resource Limits & System Hardening
+
+For high-concurrency operations (supporting up to 65,536 concurrent connections):
+
 ```bash
-./arcore/alrios status
+# Increase system-wide open file descriptor limit
+sudo sysctl -w fs.file-max=2097152
+
+# Configure security limits (/etc/security/limits.conf)
+# * soft nofile 65536
+# * hard nofile 65536
 ```
+
+---
+
+*Engineered by ALRI Development. Governed by ALRI GROUP © 2026 — All rights reserved.*

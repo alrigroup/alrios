@@ -46,7 +46,7 @@ Developed and maintained by **[ALRIGROUP](https://alrigroup.com/)**.
     ┌────────────────────────────────┼────────────────────────────────┐
     │                                │                                │
 ┌───▼────────────────────────┐ ┌─────▼──────────────────────┐ ┌───────▼──────────────────────┐
-│ Legacy / SPA Native Apps   │ │ ARWE Native Web Framework  │ │ Static Delivery System       │
+│ Legacy / SPA Native Apps   │ │ ARWE Web Engine Framework  │ │ Static Delivery System       │
 │ - (Custom SPA apps)       │ │ - test_ecosystem.web(3055) │ │ - arcdn (3005)               │
 │                            │ │   ├── c_engine.arweb (WASM)│ │   ├── Assets, Media, Videos  │
 │   (Vite + React + C Serve) │ │   ├── cpp_engine.arweb     │ │   └── Zero-Copy Sendfile     │
@@ -342,7 +342,7 @@ cmake -B build -S . && cmake --build build
 | **`arws`** | 8080 / 443 | Native C / Multi-Shard Cache | Central Reverse Proxy & Load Balancer |
 | **`ardb`** | 5432 | Native C / PGWire | Sovereign Database Engine |
 | **`arcdn`** | 3005 | Native C / Sendfile | Static Asset & Media Streaming Server |
-| **`arwe`** | varies | Native C / ARWE | Web Native Compiler & Runtime |
+| **`arwe`** | varies | Native C / ARWE | In-Memory Container Runtime & WASM Engine |
 
 ---
 

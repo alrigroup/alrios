@@ -35,11 +35,8 @@ if %ERRORLEVEL% neq 0 (
 if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
 echo === Build All ===
-cmake --build "%BUILD%" --config Release
+cmake --build "%BUILD%" --config Release --target arcore alrios armake
 if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
-
-echo === Removing node_modules from SPA sources ===
-for /d %%d in ("%ROOT%\src\apps\*.web\web\node_modules") do if exist "%%d" rmdir /s /q "%%d"
 
 echo === Cleaning build residue in src (armake cleanup) ===
 if exist "%OUT%\armake.exe" (

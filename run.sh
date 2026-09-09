@@ -1,57 +1,35 @@
-#!/bin/bash
-# Copyright (c) ALRIGROUP and its affiliates.
+#!/usr/bin/env bash
+# Copyright (c) 2026 ALRIGROUP and its affiliates.
+# Engineered and maintained by ALRI Development.
 #
-# This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
-# found in the LICENSE file in the root directory of this source tree
-# and at: https://github.com/alrigroup/licenses/tree/main
-DIR="$(cd "$(dirname "$0")" && pwd)"
+# This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE
+# found in the LICENSE file in the root directory of this source tree.
+set -euo pipefail
 
-# Always kill old processes and free ports dynamically before starting
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Always stop old instances before bootstrapping
 "$DIR/stop.sh"
 
-cd "$DIR/arcore" || { echo "arcore/ not found"; exit 1; }
+cd "$DIR/arcore" || { echo "[ERROR] arcore directory not found"; exit 1; }
 
-# Auto-generate self-signed SSL certs if missing
-if [ ! -f storage/arws/certs/cert.pem ] || [ ! -f storage/arws/certs/key.pem ]; then
-    echo "=== Auto-generating SSL certificates (storage/arws/certs/) ==="
-    mkdir -p storage/arws/certs
-    if command -v openssl &>/dev/null; then
-        openssl req -x509 -newkey rsa:2048 -keyout storage/arws/certs/key.pem -out storage/arws/certs/cert.pem -days 365 -nodes -subj "/CN=localhost" 2>/dev/null || true
-    fi
+if [ ! -x "./arcore" ]; then
+    echo "[ERROR] arcore binary not found. Please compile first via: bash build_linux.sh"
+    exit 1
 fi
 
-# Check if any privileged port (<1024) is in use or configured
-NEEDS_ROOT=0
-if grep -qE '^port=(80|443)$' storage/arws/arws.cfg 2>/dev/null; then
-    NEEDS_ROOT=1
-fi
-if [ "$MODE" = "production" ] || grep -q '^mode=production$' storage/arws/arws.cfg 2>/dev/null; then
-    if ! grep -qE '^port=(8080|[1-9][0-9]{4,})$' storage/arws/arws.cfg 2>/dev/null; then
-        NEEDS_ROOT=1
-    fi
-fi
-
-if [ $NEEDS_ROOT -eq 1 ] && [ "$(id -u)" -ne 0 ]; then
-    echo "Root privileges required to bind to privileged ports (80/443)."
-    exec sudo -E ARWS_STAY_ROOT=1 "$0" "$@"
-fi
-
-export ARWS_STAY_ROOT=1
+echo "=== Starting ALRIOS Supervisor Daemon (arcore) ==="
 
 ./arcore "$@" &
-ARWS_PID=$!
+ARCORE_PID=$!
 
-# When started via sudo (root), hand generated files back to the invoking
-# user: configs (arws.cfg), runtimes, extracted apps and staging. Without
-# this the deployment account cannot edit arws.cfg or install runtimes
-# (files created by the root arcore process).
-if [ "$(id -u)" -eq 0 ] && [ -n "$SUDO_UID" ] && [ -n "$SUDO_GID" ]; then
-    for i in $(seq 1 20); do
-        sleep 1
-        kill -0 "$ARWS_PID" 2>/dev/null || break
+# Hand ownership back to invoking sudo user if executed via sudo
+if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_UID:-}" ] && [ -n "${SUDO_GID:-}" ]; then
+    for i in $(seq 1 10); do
+        sleep 0.5
+        kill -0 "$ARCORE_PID" 2>/dev/null || break
     done
     chown -R "$SUDO_UID:$SUDO_GID" storage programfiles run apps system .staging etc 2>/dev/null || true
-    echo "ALRIOS: ownership of runtime dirs handed back to ${SUDO_USER:-user}"
 fi
 
-wait "$ARWS_PID"
+wait "$ARCORE_PID"
