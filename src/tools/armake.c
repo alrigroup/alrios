@@ -855,6 +855,22 @@ static int get_self_dir(char *out, int cap) {
     return -1;
 }
 
+/* Encodes and sanitizes paths passed into command line shells (prevents CWE-78) */
+static void encode_shell_path(const char *in, char *out, size_t out_cap) {
+    if (!in || out_cap == 0) {
+        if (out && out_cap > 0) out[0] = '\0';
+        return;
+    }
+    size_t j = 0;
+    for (size_t i = 0; in[i] && j < out_cap - 1; i++) {
+        char c = in[i];
+        if (isalnum((unsigned char)c) || c == '/' || c == '\\' || c == '.' || c == '_' || c == '-' || c == ':') {
+            out[j++] = c;
+        }
+    }
+    out[j] = '\0';
+}
+
 /* Validates that path from environment variables contains only safe filesystem characters */
 static int is_safe_env_path(const char *path) {
     if (!path || !path[0]) return 0;
@@ -869,11 +885,15 @@ static int is_safe_env_path(const char *path) {
 
 /* Sobe dirs a partir de 'start' procurando o diretorio 'arcore/'. */
 static int find_arcore_dir(const char *start, char *out, int cap) {
+    char safe_env[1024] = {0};
     const char *env = getenv("ARCORE_HOME");
     if (!env || !env[0]) env = getenv("ARCORE");
-    if (env && env[0] && is_safe_env_path(env) && probe_arcore_candidate(env)) {
-        snprintf(out, cap, "%s", env);
-        return 0;
+    if (env && env[0] && is_safe_env_path(env)) {
+        encode_shell_path(env, safe_env, sizeof(safe_env));
+        if (safe_env[0] && probe_arcore_candidate(safe_env)) {
+            snprintf(out, cap, "%s", safe_env);
+            return 0;
+        }
     }
 
     /* 1. Procura no diretorio do proprio binario armake */
@@ -956,6 +976,13 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
     char arwe_build[1024] = {0};
     resolve_arwe_build(arcore_dir, arwe_build_override, arwe_build, sizeof(arwe_build));
 
+    char safe_arcore[1024] = {0}, safe_arwe[1024] = {0};
+    char safe_app[128] = {0}, safe_appdir[1024] = {0};
+    encode_shell_path(arcore_dir, safe_arcore, sizeof(safe_arcore));
+    encode_shell_path(arwe_build, safe_arwe, sizeof(safe_arwe));
+    encode_shell_path(m->name, safe_app, sizeof(safe_app));
+    encode_shell_path(app_dir, safe_appdir, sizeof(safe_appdir));
+
     char staging_tpl[AR_BUILD_STAGING_MAX];
     if (staging_override && staging_override[0]) {
         snprintf(staging_tpl, sizeof(staging_tpl), "%s", staging_override);
@@ -966,12 +993,15 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
     }
     char staging[1024] = {0};
     expand_vars(staging, sizeof(staging), staging_tpl,
-                m->name, app_dir, arcore_dir, "", arwe_build);
+                safe_app, safe_appdir, safe_arcore, "", safe_arwe);
     if (staging[0] == '/' && staging[1] == '.' && (staging[2] == 's' || staging[2] == '/')) {
         char fixed[1024];
         snprintf(fixed, sizeof(fixed), ".%s", staging);
         strncpy(staging, fixed, sizeof(staging) - 1);
     }
+
+    char safe_staging[1024] = {0};
+    encode_shell_path(staging, safe_staging, sizeof(safe_staging));
 
     char saved_cwd[1024] = {0};
 #ifdef _WIN32
@@ -991,7 +1021,7 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
             ar_build_step_t *step = &m->build.steps[i];
             char cmd_exp[AR_BUILD_STEP_CMD_MAX];
             expand_vars(cmd_exp, sizeof(cmd_exp), step->cmd,
-                        m->name, app_dir, arcore_dir, staging, arwe_build);
+                        safe_app, safe_appdir, safe_arcore, safe_staging, safe_arwe);
 #ifdef _WIN32
             if (!strstr(cmd_exp, "-lws2_32") && (strstr(cmd_exp, "-larkernel") || strstr(cmd_exp, "-lssl") || strstr(cmd_exp, "-lcrypto") || strstr(cmd_exp, "gcc ") || strstr(cmd_exp, "cc "))) {
                 strncat(cmd_exp, " -lws2_32", sizeof(cmd_exp) - strlen(cmd_exp) - 1);
