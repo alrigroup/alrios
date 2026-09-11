@@ -214,7 +214,7 @@ static void print_installed_apps(void) {
 }
 
 static void print_usage(void) {
-  printf("ALRIOS CLI v0.2.01\n\n");
+  printf("ALRIOS CLI v0.2.02\n\n");
   printf("Uso:\n");
   printf("  alrios power on|off|reload       (gerencia ciclo de vida do kernel arcore)\n");
   printf("  alrios status                    (alias: list - status dos daemons)\n");
@@ -734,7 +734,7 @@ int main(int argc, char *argv[]) {
 
   if (strcmp(a1, "version") == 0 || strcmp(a1, "--version") == 0 ||
       strcmp(a1, "-v") == 0) {
-    printf("ALRIOS CLI v0.2.01\n");
+    printf("ALRIOS CLI v0.2.02\n");
     return 0;
   }
 

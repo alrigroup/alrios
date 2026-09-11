@@ -142,7 +142,7 @@ static void print_banner(void) {
   alri_printf("  " CYN BLD
               "╔═══════════════════════════════════════════════╗\n" RST);
   alri_printf("  " CYN BLD "║" RST "         " CYN "ALRI OS " RST
-              "v0.2.01                 " CYN BLD "║\n" RST);
+              "v0.2.02                 " CYN BLD "║\n" RST);
   alri_printf("  " CYN BLD "║" RST "     " GRN BLD
               "⚡ Virtual Machine Booting..." RST "       " CYN BLD "║\n" RST);
   alri_printf("  " CYN BLD
