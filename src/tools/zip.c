@@ -498,20 +498,17 @@ int zip_reader_extract(zip_reader_t *z, int idx, const char *outdir) {
         fwrite(data, 1, chunk, out);
         remaining -= chunk;
     }
-    fclose(out);
-
 #ifndef _WIN32
-    /* set executable bit for .exe files */
+    /* Set executable bit directly on the open file descriptor BEFORE fclose()
+       to eliminate Time-of-Check Time-of-Use (TOCTOU) race conditions (CWE-367) */
     size_t nlen = strlen(outpath);
-    if (nlen >= 4 && (strcmp(outpath + nlen - 4, ".exe") == 0 ||
-                      strcmp(outpath + nlen - 4, ".bin") == 0)) {
-        chmod(outpath, 0755);
-    }
-    /* runtime binaries live under bin/ — make them executable */
-    if (strstr(outpath, "/bin/") != NULL) {
-        chmod(outpath, 0755);
+    if ((nlen >= 4 && (strcmp(outpath + nlen - 4, ".exe") == 0 ||
+                       strcmp(outpath + nlen - 4, ".bin") == 0)) ||
+        strstr(outpath, "/bin/") != NULL) {
+        fchmod(fileno(out), 0755);
     }
 #endif
+    fclose(out);
 
     return 0;
 }

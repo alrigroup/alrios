@@ -75,20 +75,62 @@ static int file_exists(const char *path) {
 #endif
 }
 
+/* Safe process execution helper without invoking an OS shell (prevents CWE-78) */
+static int safe_run_process(const char *prog, char *const argv[]) {
+#ifdef _WIN32
+    STARTUPINFOA si = { sizeof(si) };
+    PROCESS_INFORMATION pi = { 0 };
+    char cmdline[4096] = { 0 };
+    for (int i = 0; argv[i]; i++) {
+        if (i > 0) strncat(cmdline, " ", sizeof(cmdline) - strlen(cmdline) - 1);
+        strncat(cmdline, "\"", sizeof(cmdline) - strlen(cmdline) - 1);
+        strncat(cmdline, argv[i], sizeof(cmdline) - strlen(cmdline) - 1);
+        strncat(cmdline, "\"", sizeof(cmdline) - strlen(cmdline) - 1);
+    }
+    if (!CreateProcessA(NULL, cmdline, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+        return -1;
+    }
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD code = 0;
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return (code == 0) ? 0 : -1;
+#else
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        execvp(prog, argv);
+        _exit(127);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    return (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? 0 : -1;
+#endif
+}
+
+static int is_safe_url(const char *url) {
+    if (!url) return 0;
+    if (strncmp(url, "http://", 7) != 0 && strncmp(url, "https://", 8) != 0) return 0;
+    for (const char *p = url; *p; p++) {
+        if (*p == ';' || *p == '&' || *p == '|' || *p == '`' || *p == '$' ||
+            *p == '\n' || *p == '\r' || *p == '"' || *p == '\'')
+            return 0;
+    }
+    return 1;
+}
+
 static int download_file(const char *url, const char *dest) {
+    if (!is_safe_url(url)) return -1;
 #ifdef _WIN32
     HRESULT hr = URLDownloadToFileA(NULL, url, dest, 0, NULL);
     return SUCCEEDED(hr) ? 0 : -1;
 #else
-    char cmd[4096];
-    if (system("which curl >/dev/null 2>&1") == 0) {
-        snprintf(cmd, sizeof(cmd), "curl -fsSL \"%s\" -o \"%s\"", url, dest);
-    } else if (system("which wget >/dev/null 2>&1") == 0) {
-        snprintf(cmd, sizeof(cmd), "wget -q \"%s\" -O \"%s\"", url, dest);
-    } else {
-        return -1;
-    }
-    return system(cmd) == 0 ? 0 : -1;
+    char *const curl_argv[] = {"curl", "-fsSL", (char *)url, "-o", (char *)dest, NULL};
+    if (safe_run_process("curl", curl_argv) == 0) return 0;
+
+    char *const wget_argv[] = {"wget", "-q", (char *)url, "-O", (char *)dest, NULL};
+    return safe_run_process("wget", wget_argv);
 #endif
 }
 
@@ -108,13 +150,13 @@ static int extract_zip_to_dir(const char *zip_path, const char *dest_dir) {
 static void copy_dir_recursive(const char *src, const char *dst) {
     mkdir_p(dst);
 #ifdef _WIN32
-    char cmd[4096];
-    snprintf(cmd, sizeof(cmd), "xcopy /E /I /Y /Q \"%s\" \"%s\" >nul 2>nul", src, dst);
-    system(cmd);
+    char *const xcopy_argv[] = {"xcopy", "/E", "/I", "/Y", "/Q", (char *)src, (char *)dst, NULL};
+    safe_run_process("xcopy", xcopy_argv);
 #else
-    char cmd[4096];
-    snprintf(cmd, sizeof(cmd), "cp -rP \"%s/.\" \"%s/\" 2>/dev/null || true", src, dst);
-    system(cmd);
+    char src_dot[2048];
+    snprintf(src_dot, sizeof(src_dot), "%s/.", src);
+    char *const cp_argv[] = {"cp", "-rP", src_dot, (char *)dst, NULL};
+    safe_run_process("cp", cp_argv);
 #endif
 }
 
@@ -180,9 +222,8 @@ int installer_check_tool_exists(const char *tool_name) {
     char found_path[MAX_PATH];
     return SearchPathA(NULL, exe_name, NULL, MAX_PATH, found_path, NULL) > 0 ? 1 : 0;
 #else
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "which %s >/dev/null 2>&1", tool_name);
-    return (system(cmd) == 0) ? 1 : 0;
+    char *const which_argv[] = {"which", (char *)tool_name, NULL};
+    return (safe_run_process("which", which_argv) == 0) ? 1 : 0;
 #endif
 }
 
@@ -237,20 +278,20 @@ int installer_extract_payload(const installer_config_t *cfg, const installer_cal
 #ifdef _WIN32
             extract_zip_to_dir(zip_file, cfg->dest_dir);
 #else
-            char untar[2048];
-            snprintf(untar, sizeof(untar), "tar -xzf \"%s\" -C \"%s\"", zip_file, cfg->dest_dir);
-            system(untar);
+            char *const tar_argv[] = {"tar", "-xzf", (char *)zip_file, "-C", (char *)cfg->dest_dir, NULL};
+            safe_run_process("tar", tar_argv);
 #endif
         }
     }
 
-    /* Ajustar permissoes de execucao no Linux */
+    /* Ajustar permissoes de execucao no Linux via syscall nativa chmod() */
 #ifndef _WIN32
-    char chmod_cmd[2048];
-    snprintf(chmod_cmd, sizeof(chmod_cmd),
-             "chmod +x \"%s/arcore/alrios\" \"%s/arcore/arcore\" \"%s/arcore/armake\" \"%s/arcore/arinstall\" 2>/dev/null || true",
-             cfg->dest_dir, cfg->dest_dir, cfg->dest_dir, cfg->dest_dir);
-    system(chmod_cmd);
+    const char *bins[] = {"alrios", "arcore", "armake", "arinstall", NULL};
+    for (int i = 0; bins[i]; i++) {
+        char bin_path[2048];
+        snprintf(bin_path, sizeof(bin_path), "%s/arcore/%s", cfg->dest_dir, bins[i]);
+        chmod(bin_path, 0755);
+    }
 #endif
 
     log_msg(cb, user_data, "✓ Arquivos base do ALRIOS instalados com sucesso.\n");
@@ -332,18 +373,16 @@ int installer_register_path(const char *dest_dir, const installer_callbacks_t *c
         }
     }
 
-    /* Criar links simbolicos */
-    char cmd[4096];
-    snprintf(cmd, sizeof(cmd),
-             "ln -sf \"%s/arcore/alrios\" \"%s/alrios\" && "
-             "ln -sf \"%s/arcore/alrios\" \"%s/arpm\" && "
-             "ln -sf \"%s/arcore/arcore\" \"%s/arcore\" && "
-             "ln -sf \"%s/arcore/armake\" \"%s/armake\" 2>/dev/null || true",
-             dest_dir, bin_dir,
-             dest_dir, bin_dir,
-             dest_dir, bin_dir,
-             dest_dir, bin_dir);
-    system(cmd);
+    /* Criar links simbolicos usando chamadas de sistema nativas C (unlink/symlink) */
+    const char *bins[] = {"alrios", "arpm", "arcore", "armake", NULL};
+    const char *targets[] = {"alrios", "alrios", "arcore", "armake", NULL};
+    for (int i = 0; bins[i]; i++) {
+        char link_path[2048], target_path[2048];
+        snprintf(link_path, sizeof(link_path), "%s/%s", bin_dir, bins[i]);
+        snprintf(target_path, sizeof(target_path), "%s/arcore/%s", dest_dir, targets[i]);
+        unlink(link_path);
+        symlink(target_path, link_path);
+    }
     log_msg(cb, user_data, "✓ Comandos vinculados com sucesso em %s (alrios, arpm, arcore, armake)\n", bin_dir);
 #endif
 
@@ -406,12 +445,18 @@ int installer_provision_gcc(const char *dest_dir, const installer_callbacks_t *c
 #else
     if (geteuid() == 0) {
         log_msg(cb, user_data, "   Instalando compilador GCC via gerenciador de pacotes do sistema...\n");
-        if (system("which apt-get >/dev/null 2>&1") == 0) {
-            system("DEBIAN_FRONTEND=noninteractive apt-get update -qq && apt-get install -y -qq build-essential gcc make >/dev/null 2>&1");
-        } else if (system("which pacman >/dev/null 2>&1") == 0) {
-            system("pacman -Sy --noconfirm base-devel gcc make >/dev/null 2>&1");
-        } else if (system("which dnf >/dev/null 2>&1") == 0) {
-            system("dnf install -y gcc make >/dev/null 2>&1");
+        char *const which_apt[] = {"which", "apt-get", NULL};
+        char *const which_pac[] = {"which", "pacman", NULL};
+        char *const which_dnf[] = {"which", "dnf", NULL};
+        if (safe_run_process("which", which_apt) == 0) {
+            char *const apt_argv[] = {"apt-get", "install", "-y", "-qq", "build-essential", "gcc", "make", NULL};
+            safe_run_process("apt-get", apt_argv);
+        } else if (safe_run_process("which", which_pac) == 0) {
+            char *const pac_argv[] = {"pacman", "-Sy", "--noconfirm", "base-devel", "gcc", "make", NULL};
+            safe_run_process("pacman", pac_argv);
+        } else if (safe_run_process("which", which_dnf) == 0) {
+            char *const dnf_argv[] = {"dnf", "install", "-y", "gcc", "make", NULL};
+            safe_run_process("dnf", dnf_argv);
         }
         if (installer_check_tool_exists("gcc")) {
             log_msg(cb, user_data, "✓ GCC instalado com sucesso via gerenciador nativo.\n");
@@ -463,13 +508,11 @@ void installer_cleanup(const char *dest_dir) {
     char staging[1024];
     snprintf(staging, sizeof(staging), "%s%c.staging", dest_dir, AR_PATH_SEP);
 #ifdef _WIN32
-    char cmd[4096];
-    snprintf(cmd, sizeof(cmd), "rmdir /S /Q \"%s\" >nul 2>nul", staging);
-    system(cmd);
+    char *const rmdir_argv[] = {"cmd.exe", "/c", "rmdir", "/S", "/Q", staging, NULL};
+    safe_run_process("cmd.exe", rmdir_argv);
 #else
-    char cmd[4096];
-    snprintf(cmd, sizeof(cmd), "rm -rf \"%s\" 2>/dev/null || true", staging);
-    system(cmd);
+    char *const rm_argv[] = {"rm", "-rf", staging, NULL};
+    safe_run_process("rm", rm_argv);
 #endif
 }
 

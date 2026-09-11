@@ -724,6 +724,16 @@ static int is_platform(const char *target, const char *name) {
 /* Build steps engine                                                   */
 /* ------------------------------------------------------------------ */
 
+static int validate_build_command_security(const char *cmd) {
+    if (!cmd || cmd[0] == '\0') return -1;
+    for (const char *p = cmd; *p; p++) {
+        if (*p == '\n' || *p == '\r' || (unsigned char)*p < 0x20) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
 /* Expande variáveis simples em 'tpl' -> 'out':
    $APP_NAME, $APP_DIR, $ARCORE, $STAGING, $ARWE_BUILD                  */
 static void expand_vars(char *out, int cap,
@@ -744,7 +754,7 @@ static void expand_vars(char *out, int cap,
         else if (strncmp(p, "ARCORE",   6) == 0) { sub = arcore_dir; p += 6; }
         else if (strncmp(p, "STAGING",  7) == 0) { sub = staging;    p += 7; }
         else if (strncmp(p, "ARWE_BUILD", 10) == 0) { sub = arwe_build; p += 10; }
-        else if (strncmp(p, "ARWE_BUILD", 10) == 0) { sub = arwe_build; p += 10; }
+        else if (strncmp(p, "ARWN_BUILD", 10) == 0) { sub = arwe_build; p += 10; }
         else { out[wi++] = '$'; continue; }
         if (sub) {
             int sl = (int)strlen(sub);
@@ -936,19 +946,12 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
     char saved_cwd[1024] = {0};
 #ifdef _WIN32
     if (!_getcwd(saved_cwd, sizeof(saved_cwd))) saved_cwd[0] = '\0';
-    if (staging[0]) {
-        char mk[1100];
-        snprintf(mk, sizeof(mk), "if not exist \"%s\" mkdir \"%s\"", staging, staging);
-        system(mk);
-    }
 #else
     if (!getcwd(saved_cwd, sizeof(saved_cwd))) saved_cwd[0] = '\0';
-    if (staging[0]) {
-        char mk[1100];
-        snprintf(mk, sizeof(mk), "mkdir -p \"%s\"", staging);
-        system(mk);
-    }
 #endif
+    if (staging[0]) {
+        mkdir_p(staging);
+    }
 
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
@@ -989,6 +992,10 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
                     chdir(saved_cwd);
 #endif
                 }
+                return 1;
+            }
+            if (validate_build_command_security(cmd_exp) != 0) {
+                printf("[ERRO] step '%s': comando com caracteres invalidos de controle\n", step->name);
                 return 1;
             }
             int ret = system(cmd_exp);

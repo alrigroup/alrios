@@ -100,15 +100,76 @@ static void mkdir_p(const char *dir) {
     mkdir_p_(tmp);
 }
 
+/* Safe process execution helper without invoking an OS shell (prevents CWE-78) */
+static int safe_run_cmd(const char *prog, char *const argv[]) {
+#ifdef _WIN32
+    STARTUPINFOA si = { sizeof(si) };
+    PROCESS_INFORMATION pi = { 0 };
+    char cmdline[4096] = { 0 };
+    for (int i = 0; argv[i]; i++) {
+        if (i > 0) strncat(cmdline, " ", sizeof(cmdline) - strlen(cmdline) - 1);
+        strncat(cmdline, "\"", sizeof(cmdline) - strlen(cmdline) - 1);
+        strncat(cmdline, argv[i], sizeof(cmdline) - strlen(cmdline) - 1);
+        strncat(cmdline, "\"", sizeof(cmdline) - strlen(cmdline) - 1);
+    }
+    if (!CreateProcessA(NULL, cmdline, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+        return -1;
+    }
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD code = 0;
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return (code == 0) ? 0 : -1;
+#else
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        execvp(prog, argv);
+        _exit(127);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    return (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? 0 : -1;
+#endif
+}
+
+static int copy_file_native(const char *src, const char *dst) {
+    FILE *in = fopen(src, "rb");
+    if (!in) return -1;
+    FILE *out = fopen(dst, "wb");
+    if (!out) { fclose(in); return -1; }
+    char buf[8192];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+        if (fwrite(buf, 1, n, out) != n) {
+            fclose(in);
+            fclose(out);
+            return -1;
+        }
+    }
+    fclose(in);
+    fclose(out);
+    return 0;
+}
+
+static int is_safe_param(const char *s) {
+    if (!s) return 0;
+    for (const char *p = s; *p; p++) {
+        if (*p == ';' || *p == '&' || *p == '|' || *p == '`' || *p == '$' ||
+            *p == '\n' || *p == '\r' || *p == '"' || *p == '\'')
+            return 0;
+    }
+    return 1;
+}
+
 static void remove_recursive(const char *path) {
 #ifdef _WIN32
-    char cmd[1200];
-    snprintf(cmd, sizeof(cmd), "rmdir /S /Q \"%s\" >nul 2>nul", path);
-    system(cmd);
+    char *const rmdir_argv[] = {"cmd.exe", "/c", "rmdir", "/S", "/Q", (char *)path, NULL};
+    safe_run_cmd("cmd.exe", rmdir_argv);
 #else
-    char cmd[1200];
-    snprintf(cmd, sizeof(cmd), "rm -rf \"%s\"", path);
-    (void)system(cmd);
+    char *const rm_argv[] = {"rm", "-rf", (char *)path, NULL};
+    safe_run_cmd("rm", rm_argv);
 #endif
 }
 
@@ -197,8 +258,9 @@ static int calc_file_sha256(const char *path, char *out_hex) {
     return 0;
 }
 
-/* HTTP/HTTPS Downloader com suporte a repositórios privados */
+/* HTTP/HTTPS Downloader com suporte a repositórios privados (CWE-78 Immune) */
 static int download_file(const char *url, const char *dest, int show_progress) {
+    if (!is_safe_param(url) || !is_safe_param(dest)) return -1;
     if (show_progress) {
         printf("  %sBaixando:%s %s\n", CLR_CYAN, CLR_RESET, url);
     }
@@ -206,23 +268,22 @@ static int download_file(const char *url, const char *dest, int show_progress) {
     if (!token || !token[0]) token = getenv("GITHUB_TOKEN");
 
     char auth_header[256] = {0};
-    if (token && token[0]) {
-        snprintf(auth_header, sizeof(auth_header), "-H \"Authorization: token %s\" ", token);
+    if (token && token[0] && is_safe_param(token)) {
+        snprintf(auth_header, sizeof(auth_header), "Authorization: token %s", token);
     }
 
-#ifdef _WIN32
-    char cmd[2048];
-    snprintf(cmd, sizeof(cmd), "curl.exe -f -L %s-s -S -o \"%s\" \"%s\"", auth_header, dest, url);
-    if (system(cmd) == 0 && file_exists(dest) && file_size(dest) > 0) {
-        return 0;
+    /* Execute curl via safe_run_cmd without shell invocation */
+    if (auth_header[0]) {
+        char *const curl_argv[] = {"curl", "-f", "-L", "-H", auth_header, "-s", "-S", "-o", (char *)dest, (char *)url, NULL};
+        if (safe_run_cmd("curl", curl_argv) == 0 && file_exists(dest) && file_size(dest) > 0) {
+            return 0;
+        }
+    } else {
+        char *const curl_argv[] = {"curl", "-f", "-L", "-s", "-S", "-o", (char *)dest, (char *)url, NULL};
+        if (safe_run_cmd("curl", curl_argv) == 0 && file_exists(dest) && file_size(dest) > 0) {
+            return 0;
+        }
     }
-#else
-    char cmd[2048];
-    snprintf(cmd, sizeof(cmd), "curl -f -L %s-s -S -o \"%s\" \"%s\"", auth_header, dest, url);
-    if (system(cmd) == 0 && file_exists(dest) && file_size(dest) > 0) {
-        return 0;
-    }
-#endif
 
     /* Fallback para repositórios privados usando GitHub CLI (gh) se disponível */
     if (strstr(url, "github.com/")) {
@@ -250,16 +311,20 @@ static int download_file(const char *url, const char *dest, int show_progress) {
                     const char *a = strrchr(url, '/');
                     if (a) {
                         strncpy(asset, a + 1, sizeof(asset) - 1);
-                        char gh_cmd[2048];
-                        if (tag[0] != '\0') {
-                            snprintf(gh_cmd, sizeof(gh_cmd), "gh release download %s -R %s/%s -p \"%s\" -O \"%s\" --clobber",
-                                     tag, owner, repo, asset, dest);
-                        } else {
-                            snprintf(gh_cmd, sizeof(gh_cmd), "gh release download -R %s/%s -p \"%s\" -O \"%s\" --clobber",
-                                     owner, repo, asset, dest);
-                        }
-                        if (system(gh_cmd) == 0 && file_exists(dest) && file_size(dest) > 0) {
-                            return 0;
+                        char repo_spec[256];
+                        snprintf(repo_spec, sizeof(repo_spec), "%s/%s", owner, repo);
+                        if (is_safe_param(owner) && is_safe_param(repo) && is_safe_param(asset)) {
+                            if (tag[0] != '\0' && is_safe_param(tag)) {
+                                char *const gh_argv[] = {"gh", "release", "download", tag, "-R", repo_spec, "-p", asset, "-O", (char *)dest, "--clobber", NULL};
+                                if (safe_run_cmd("gh", gh_argv) == 0 && file_exists(dest) && file_size(dest) > 0) {
+                                    return 0;
+                                }
+                            } else {
+                                char *const gh_argv[] = {"gh", "release", "download", "-R", repo_spec, "-p", asset, "-O", (char *)dest, "--clobber", NULL};
+                                if (safe_run_cmd("gh", gh_argv) == 0 && file_exists(dest) && file_size(dest) > 0) {
+                                    return 0;
+                                }
+                            }
                         }
                     }
                 }
@@ -702,14 +767,7 @@ static int cmd_install(int argc, char **argv) {
     remove(final_arapp);
 #endif
     if (local_tmp == target) {
-        /* Copy local file */
-        char cmd[2048];
-#ifdef _WIN32
-        snprintf(cmd, sizeof(cmd), "copy /Y \"%s\" \"%s\" >nul", local_tmp, final_arapp);
-#else
-        snprintf(cmd, sizeof(cmd), "cp -f \"%s\" \"%s\"", local_tmp, final_arapp);
-#endif
-        (void)system(cmd);
+        copy_file_native(local_tmp, final_arapp);
     } else {
         rename(local_tmp, final_arapp);
     }
@@ -797,9 +855,8 @@ static int cmd_install_src(int argc, char **argv) {
         remove_recursive(build_dir);
 
         printf("-> Clonando codigo-fonte remoto:\n   %s%s%s...\n", CLR_CYAN, clone_url, CLR_RESET);
-        char cmd[2048];
-        snprintf(cmd, sizeof(cmd), "git clone --depth 1 \"%s\" \"%s\"", clone_url, build_dir);
-        if (system(cmd) != 0) {
+        char *const git_argv[] = {"git", "clone", "--depth", "1", (char *)clone_url, (char *)build_dir, NULL};
+        if (!is_safe_param(clone_url) || safe_run_cmd("git", git_argv) != 0) {
             printf("%s[ERRO]%s Falha ao clonar repositorio git: %s\n", CLR_RED, CLR_RESET, clone_url);
             remove_recursive(build_dir);
             return 1;
@@ -823,9 +880,8 @@ static int cmd_install_src(int argc, char **argv) {
     }
 
     printf("-> Compilando e empacotando aplicativo '%s' (v%s) via armake...\n", app_name, version);
-    char cmd_build[2048];
-    snprintf(cmd_build, sizeof(cmd_build), "\"%s\" buildapp -s \"%s\" -o apps", g_ctx.armake_bin, build_dir);
-    if (system(cmd_build) != 0) {
+    char *const armake_argv[] = {(char *)g_ctx.armake_bin, "buildapp", "-s", (char *)build_dir, "-o", "apps", NULL};
+    if (safe_run_cmd(g_ctx.armake_bin, armake_argv) != 0) {
         printf("%s[ERRO]%s Falha na compilacao/empacotamento via armake!\n", CLR_RED, CLR_RESET);
         if (strcmp(clone_url, "local") != 0) remove_recursive(build_dir);
         return 1;
