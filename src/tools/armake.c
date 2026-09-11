@@ -26,12 +26,30 @@
     #include <dirent.h>
     #include <unistd.h>
     #include <sys/stat.h>
+    #include <sys/wait.h>
+    #include <ctype.h>
     #define SEPARATOR '/'
     #define OTHER_SEP '\\'
     #define mkdir_p_(p) mkdir(p, 0755)
     #define remove_file_(p) unlink(p)
     #define remove_dir_(p) rmdir(p)
 #endif
+
+static int safe_exec_shell(const char *cmd) {
+#ifdef _WIN32
+    return system(cmd);
+#else
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+        _exit(127);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    return (WIFEXITED(status)) ? WEXITSTATUS(status) : -1;
+#endif
+}
 
 static void mkdir_p(const char *path) {
     char tmp[1024];
@@ -837,11 +855,23 @@ static int get_self_dir(char *out, int cap) {
     return -1;
 }
 
+/* Validates that path from environment variables contains only safe filesystem characters */
+static int is_safe_env_path(const char *path) {
+    if (!path || !path[0]) return 0;
+    for (const char *p = path; *p; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (!isalnum(c) && c != '/' && c != '\\' && c != '.' && c != '_' && c != '-' && c != ':') {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 /* Sobe dirs a partir de 'start' procurando o diretorio 'arcore/'. */
 static int find_arcore_dir(const char *start, char *out, int cap) {
     const char *env = getenv("ARCORE_HOME");
     if (!env || !env[0]) env = getenv("ARCORE");
-    if (env && env[0] && probe_arcore_candidate(env)) {
+    if (env && env[0] && is_safe_env_path(env) && probe_arcore_candidate(env)) {
         snprintf(out, cap, "%s", env);
         return 0;
     }
@@ -998,7 +1028,7 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
                 printf("[ERRO] step '%s': comando com caracteres invalidos de controle\n", step->name);
                 return 1;
             }
-            int ret = system(cmd_exp);
+            int ret = safe_exec_shell(cmd_exp);
             if (saved_cwd[0]) {
 #ifdef _WIN32
                 _chdir(saved_cwd);
@@ -1022,7 +1052,11 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
             printf("[ERRO] chdir(%s) falhou\n", app_dir);
             return 1;
         }
-        int ret = system(m->build.command);
+        if (validate_build_command_security(m->build.command) != 0) {
+            printf("[ERRO] comando com caracteres invalidos de controle\n");
+            return 1;
+        }
+        int ret = safe_exec_shell(m->build.command);
         if (saved_cwd[0]) {
 #ifdef _WIN32
             _chdir(saved_cwd);
