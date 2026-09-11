@@ -27,3 +27,26 @@ set_target_properties(arkernel PROPERTIES
 if(WIN32)
     target_link_libraries(arkernel PUBLIC ws2_32)
 endif()
+
+add_custom_command(TARGET arkernel POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/arcore/include"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/os/include/aros_hal.h"
+        "${CMAKE_SOURCE_DIR}/arcore/include/aros_hal.h"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/ar_ipc.h"
+        "${CMAKE_SOURCE_DIR}/arcore/include/ar_ipc.h"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/ar_kernel.h"
+        "${CMAKE_SOURCE_DIR}/arcore/include/ar_kernel.h"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/ar_svc.h"
+        "${CMAKE_SOURCE_DIR}/arcore/include/ar_svc.h"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/src/ALRIOS/core/log.h"
+        "${CMAKE_SOURCE_DIR}/arcore/include/log.h"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/src/ALRIOS/core/arapp_parser.h"
+        "${CMAKE_SOURCE_DIR}/arcore/include/arapp_parser.h"
+    COMMENT "Installing ALRIOS kernel SDK headers into arcore/include"
+)
