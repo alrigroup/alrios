@@ -215,7 +215,9 @@ jobs:
           generate_release_notes: false
           append_body: false
           body: |
-            ### ALRIOS Sovereign System v0.2.01 (Beta)
+            ### ALRIOS Sovereign System v0.2.02 (Beta)
+
+            - Instalação inteligente com persistência universal de PATH e links em /usr/local/bin.
 
             - CLI com sistema de registro e descoberta dinâmica de comandos por aplicativo.
             - Toolchain, Arkernel e instaladores únicos para Linux e Windows.

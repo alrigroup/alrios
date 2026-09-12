@@ -343,6 +343,10 @@ int installer_register_path(const char *dest_dir, const installer_callbacks_t *c
     int is_root = (geteuid() == 0);
     const char *bin_dir = is_root ? "/usr/local/bin" : NULL;
 
+    if (!bin_dir && access("/usr/local/bin", W_OK) == 0) {
+        bin_dir = "/usr/local/bin";
+    }
+
     if (!bin_dir) {
         const char *home = getenv("HOME");
         static char user_bin[1024];
@@ -352,22 +356,33 @@ int installer_register_path(const char *dest_dir, const installer_callbacks_t *c
 
         /* Exportar PATH nos perfis de shell se nao estiver presente */
         char check_path[1024];
-        snprintf(check_path, sizeof(check_path), "%s/.local/bin", home);
+        snprintf(check_path, sizeof(check_path), "%s/.local/bin", home ? home : "");
         const char *env_path = getenv("PATH");
         if (!env_path || strstr(env_path, check_path) == NULL) {
-            char pfile[1024];
-            snprintf(pfile, sizeof(pfile), "%s/.bashrc", home);
-            FILE *f = fopen(pfile, "a");
-            if (f) {
-                fprintf(f, "\n# ALRIOS Sovereign System Path\nexport PATH=\"$HOME/.local/bin:$PATH\"\n");
-                fclose(f);
-            }
-            snprintf(pfile, sizeof(pfile), "%s/.zshrc", home);
-            if (file_exists(pfile)) {
-                f = fopen(pfile, "a");
-                if (f) {
-                    fprintf(f, "\n# ALRIOS Sovereign System Path\nexport PATH=\"$HOME/.local/bin:$PATH\"\n");
-                    fclose(f);
+            const char *profiles[] = {".bashrc", ".profile", ".bash_profile", ".zshrc", NULL};
+            for (int p = 0; profiles[p]; p++) {
+                char pfile[1024];
+                snprintf(pfile, sizeof(pfile), "%s/%s", home ? home : "/tmp", profiles[p]);
+                if (p == 0 || p == 1 || file_exists(pfile)) {
+                    int already_has_path = 0;
+                    FILE *rf = fopen(pfile, "r");
+                    if (rf) {
+                        char line[1024];
+                        while (fgets(line, sizeof(line), rf)) {
+                            if (strstr(line, ".local/bin") != NULL) {
+                                already_has_path = 1;
+                                break;
+                            }
+                        }
+                        fclose(rf);
+                    }
+                    if (!already_has_path) {
+                        FILE *f = fopen(pfile, "a");
+                        if (f) {
+                            fprintf(f, "\n# ALRIOS Sovereign System Path\nexport PATH=\"$HOME/.local/bin:$PATH\"\n");
+                            fclose(f);
+                        }
+                    }
                 }
             }
         }
@@ -384,6 +399,18 @@ int installer_register_path(const char *dest_dir, const installer_callbacks_t *c
         symlink(target_path, link_path);
     }
     log_msg(cb, user_data, "✓ Comandos vinculados com sucesso em %s (alrios, arpm, arcore, armake)\n", bin_dir);
+
+    /* Se vinculou em ~/.local/bin mas /usr/local/bin tambem tiver permissao, vincula la como fallback global */
+    if (strcmp(bin_dir, "/usr/local/bin") != 0 && access("/usr/local/bin", W_OK) == 0) {
+        for (int i = 0; bins[i]; i++) {
+            char sys_link[2048], target_path[2048];
+            snprintf(sys_link, sizeof(sys_link), "/usr/local/bin/%s", bins[i]);
+            snprintf(target_path, sizeof(target_path), "%s/arcore/%s", dest_dir, targets[i]);
+            unlink(sys_link);
+            symlink(target_path, sys_link);
+        }
+        log_msg(cb, user_data, "✓ Links globais adicionais criados em /usr/local/bin\n");
+    }
 #endif
 
     return 0;
@@ -563,10 +590,27 @@ int installer_run(const installer_config_t *cfg, const installer_callbacks_t *cb
     update_progress(cb, user_data, 5, total_steps, 100, "Concluindo instalacao");
     installer_cleanup(cfg->dest_dir);
 
+#ifndef _WIN32
     log_msg(cb, user_data, "\n========================================================\n");
-    log_msg(cb, user_data, " ✓ Instalacao do ALRIOS concluida com sucesso!\n");
-    log_msg(cb, user_data, "   Execute 'alrios power on' para inicializar.\n");
+    log_msg(cb, user_data, " ✓ Instalacao do ALRIOS concluida com sucesso!\n\n");
+    if (access("/usr/local/bin/alrios", X_OK) == 0) {
+        log_msg(cb, user_data, "   Os comandos estao disponiveis globalmente no sistema (/usr/local/bin).\n");
+        log_msg(cb, user_data, "   Execute agora mesmo:\n");
+        log_msg(cb, user_data, "   $ alrios power on\n");
+    } else {
+        log_msg(cb, user_data, "   [IMPORTANTE] Para usar imediatamente nesta sessao de terminal:\n");
+        log_msg(cb, user_data, "   $ source ~/.bashrc   (ou source ~/.zshrc se usar Zsh)\n\n");
+        log_msg(cb, user_data, "   Depois execute para inicializar o sistema soberano:\n");
+        log_msg(cb, user_data, "   $ alrios power on\n");
+    }
     log_msg(cb, user_data, "========================================================\n");
+#else
+    log_msg(cb, user_data, "\n========================================================\n");
+    log_msg(cb, user_data, " ✓ Instalacao do ALRIOS concluida com sucesso!\n\n");
+    log_msg(cb, user_data, "   Abra um novo Prompt de Comando ou PowerShell e execute:\n");
+    log_msg(cb, user_data, "   alrios power on\n");
+    log_msg(cb, user_data, "========================================================\n");
+#endif
 
     if (cb && cb->on_complete) {
         cb->on_complete(1, "ALRIOS instalado com sucesso no sistema!", user_data);
