@@ -1,11 +1,11 @@
 {
   "registry": "ALRIOS Official Package Registry",
-  "version": "0.2.02",
+  "version": "0.2.03",
   "updated_at": "2026-09-07T20:00:00Z",
   "packages": {
     "arws": {
       "name": "arws",
-      "version": "0.2.02",
+      "version": "0.2.03",
       "runtime": "native",
       "description": "HTTP/HTTPS Reverse Proxy, Load Balancer & Dynamic Gateway",
       "author": "ALRIGROUP",
@@ -16,7 +16,7 @@
     },
     "ardb": {
       "name": "ardb",
-      "version": "0.2.02",
+      "version": "0.2.03",
       "runtime": "native",
       "description": "ALRI Sovereign Database Guardian with Audit Log Blockchain",
       "author": "ALRIGROUP",
@@ -27,7 +27,7 @@
     },
     "arcdn": {
       "name": "arcdn",
-      "version": "0.2.02",
+      "version": "0.2.03",
       "runtime": "native",
       "description": "Static Assets Distribution & Low-Latency Streaming Engine",
       "author": "ALRIGROUP",
@@ -38,7 +38,7 @@
     },
     "arwe": {
       "name": "arwe",
-      "version": "0.2.02",
+      "version": "0.2.03",
       "runtime": "native",
       "description": "ALRI Web Engine Runtime & High Performance .arweb Container Engine",
       "author": "ALRIGROUP",
@@ -49,7 +49,7 @@
     },
     "arauth": {
       "name": "arauth",
-      "version": "0.2.02",
+      "version": "0.2.03",
       "runtime": "native",
       "description": "Unified Sovereign Authentication & Token Service",
       "author": "ALRIGROUP",
@@ -60,7 +60,7 @@
     },
     "arenterprise": {
       "name": "arenterprise",
-      "version": "0.2.02",
+      "version": "0.2.03",
       "runtime": "native",
       "description": "ALRI Enterprise Resource Management Core Service",
       "author": "ALRIGROUP",
@@ -71,7 +71,7 @@
     },
     "ardcbot": {
       "name": "ardcbot",
-      "version": "0.2.02",
+      "version": "0.2.03",
       "runtime": "node",
       "description": "Discord Bot Service integration for ALRIOS",
       "author": "ALRIGROUP",
@@ -82,7 +82,7 @@
     },
     "alrigroup.web": {
       "name": "alrigroup.web",
-      "version": "0.2.02",
+      "version": "0.2.03",
       "runtime": "node",
       "description": "ALRIGROUP Official Corporate Portal and Ecosystem Showcase (Liquid Glass)",
       "author": "ALRIGROUP",
@@ -93,7 +93,7 @@
     },
     "detroit.web": {
       "name": "detroit.web",
-      "version": "0.2.02",
+      "version": "0.2.03",
       "runtime": "node",
       "description": "Detroit Web Application Platform",
       "author": "ALRIGROUP",
@@ -104,7 +104,7 @@
     },
     "fourtech.web": {
       "name": "fourtech.web",
-      "version": "0.2.02",
+      "version": "0.2.03",
       "runtime": "node",
       "description": "FourTech Web Application Platform",
       "author": "ALRIGROUP",
@@ -115,7 +115,7 @@
     },
     "arenterprise.web": {
       "name": "arenterprise.web",
-      "version": "0.2.02",
+      "version": "0.2.03",
       "runtime": "node",
       "description": "ALRI Enterprise Web Portal and Management Dashboard",
       "author": "ALRIGROUP",
