@@ -19,7 +19,7 @@ jobs:
         with:
           repository: alrigroup/alrios
           path: alrios
-          ref: beta-v0.2.0
+          ref: beta-v0.2.03
 
       - name: Checkout ARWE Web Runtime
         run: |
@@ -41,8 +41,11 @@ jobs:
           sudo apt-get install -y build-essential cmake gcc make libssl-dev pkg-config
           cd alrios
           cmake -S . -B build-tools -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-tools --target arkernel armake arwe_build -j$(nproc)
-          chmod +x arcore/armake arcore/arcore arcore/arwe 2>/dev/null || true
+          cmake --build build-tools --target arkernel armake -j$(nproc)
+          chmod +x arcore/armake arcore/arcore 2>/dev/null || true
+          ./arcore/armake build src/apps/arwe
+          chmod +x arcore/.staging/arwe/arwe_build 2>/dev/null || true
+          cp arcore/.staging/arwe/arwe_build arcore/arwe 2>/dev/null || true
 
       - name: Package into Sovereign .arapp
         run: |
