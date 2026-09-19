@@ -40,7 +40,7 @@
 #include <openssl/evp.h>
 
 #define ARPM_VERSION "0.2.03"
-#define DEFAULT_REGISTRY_URL "https://raw.githubusercontent.com/alrigroup/alrios/main/arcore/registry.json"
+#define DEFAULT_REGISTRY_URL "https://raw.githubusercontent.com/alrigroup/alrios/beta-v0.2.03/arcore/registry.json"
 
 /* ANSI Colors */
 #define CLR_RESET   "\033[0m"
@@ -585,8 +585,9 @@ static int resolve_registry_package(const char *app, char *url_out, size_t url_m
 
     const char *reg_path = file_exists(local_reg) ? local_reg : g_ctx.registry_cache;
 
-    if (!file_exists(reg_path)) {
-        download_file(DEFAULT_REGISTRY_URL, g_ctx.registry_cache, 0);
+    /* Refresh the remote registry first; retain the bundled registry as an offline fallback. */
+    if (download_file(DEFAULT_REGISTRY_URL, g_ctx.registry_cache, 0) == 0 &&
+        file_exists(g_ctx.registry_cache) && file_size(g_ctx.registry_cache) > 0) {
         reg_path = g_ctx.registry_cache;
     }
 
@@ -639,6 +640,22 @@ static int resolve_registry_package(const char *app, char *url_out, size_t url_m
 /* ========================================================================= */
 /* COMMANDS                                                                  */
 /* ========================================================================= */
+
+static void normalize_package_name(const char *input, char *output, size_t output_size) {
+    if (!output || output_size == 0) return;
+    output[0] = '\0';
+    if (!input) return;
+    snprintf(output, output_size, "%s", input);
+    const char *suffixes[] = {"-linux-x64", "-linux-arm64", "-windows-x64", NULL};
+    for (int i = 0; suffixes[i]; i++) {
+        size_t name_len = strlen(output);
+        size_t suffix_len = strlen(suffixes[i]);
+        if (name_len > suffix_len && strcmp(output + name_len - suffix_len, suffixes[i]) == 0) {
+            output[name_len - suffix_len] = '\0';
+            return;
+        }
+    }
+}
 
 /* arpm install <target> [flags] */
 static int cmd_install(int argc, char **argv) {
@@ -710,8 +727,11 @@ static int cmd_install(int argc, char **argv) {
                          "https://github.com/%s/releases/download/%s/%s.arapp", repo_path, tag, repo_name);
             }
         } else {
-            /* Simple package name (ardcbot) */
-            strncpy(app_name, target, sizeof(app_name) - 1);
+            /* Simple package name; platform suffixes identify assets, not package repositories. */
+            normalize_package_name(target, app_name, sizeof(app_name));
+            if (strcmp(app_name, target) != 0) {
+                printf("  %s[INFO]%s Nome normalizado: '%s' -> '%s'.\n", CLR_BLUE, CLR_RESET, target, app_name);
+            }
             if (resolve_registry_package(app_name, download_url_buf, sizeof(download_url_buf),
                                          expected_sha, sizeof(expected_sha), version, sizeof(version)) != 0) {
                 printf("%s[ERRO]%s Pacote '%s' nao encontrado no registry.\n", CLR_RED, CLR_RESET, app_name);
@@ -724,8 +744,14 @@ static int cmd_install(int argc, char **argv) {
         /* Download to staging */
         snprintf(local_tmp, sizeof(local_tmp), "%s%c%s.arapp.download", g_ctx.staging_dir, SEPARATOR, app_name);
         printf("-> Baixando pacote '%s'...\n", app_name);
+        remove(local_tmp);
         if (download_file(download_url_buf, local_tmp, 1) != 0) {
             printf("%s[ERRO]%s Falha no download do pacote a partir de: %s\n", CLR_RED, CLR_RESET, download_url_buf);
+            remove(local_tmp);
+            return 1;
+        }
+        if (!file_exists(local_tmp) || file_size(local_tmp) <= 0) {
+            printf("%s[ERRO]%s Download nao produziu um pacote valido. Instalacao cancelada.\n", CLR_RED, CLR_RESET);
             remove(local_tmp);
             return 1;
         }
@@ -741,7 +767,11 @@ static int cmd_install(int argc, char **argv) {
 
     /* Verify SHA256 if expected */
     char actual_sha[128] = {0};
-    calc_file_sha256(local_tmp, actual_sha);
+    if (calc_file_sha256(local_tmp, actual_sha) != 0 || actual_sha[0] == '\0') {
+        printf("%s[ERRO]%s Nao foi possivel calcular o checksum SHA-256 do pacote.\n", CLR_RED, CLR_RESET);
+        if (local_tmp != target) remove(local_tmp);
+        return 1;
+    }
     if (expected_sha[0] && strcasecmp(expected_sha, actual_sha) != 0) {
         printf("%s[ERRO]%s Divergencia de checksum SHA-256!\n  Esperado: %s\n  Obtido:   %s\n",
                CLR_RED, CLR_RESET, expected_sha, actual_sha);

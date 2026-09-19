@@ -207,8 +207,8 @@ jobs:
       - name: Create GitHub Release with Standalone Installers
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.ref == 'refs/heads/beta-v0.2.03' && 'v0.2.03-beta' || 'v0.2.0-beta') }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.ref == 'refs/heads/beta-v0.2.03' && 'ALRIOS v0.2.03 Beta' || 'ALRIOS v0.2.0 Beta') }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.ref == 'refs/heads/beta-v0.2.03' && format('v0.2.03-prototype.{0}', github.run_number) || format('v0.2.0-prototype.{0}', github.run_number)) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.ref == 'refs/heads/beta-v0.2.03' && format('ALRIOS v0.2.03 Prototype {0}', github.run_number) || format('ALRIOS v0.2.0 Prototype {0}', github.run_number)) }}
           files: |
             alrios-installer-linux-x64
             alrios-setup.exe
@@ -226,7 +226,7 @@ jobs:
 
             **Full Changelog**: https://github.com/alrigroup/alrios/commits/v0.2.03-beta
           draft: false
-          prerelease: false
-          make_latest: true
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          make_latest: ${{ startsWith(github.ref, 'refs/tags/') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

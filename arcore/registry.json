@@ -55,7 +55,7 @@
       "author": "ALRIGROUP",
       "download_url_linux": "https://github.com/alrigroup/arauth/releases/latest/download/arauth-linux-x64.arapp",
       "download_url_windows": "https://github.com/alrigroup/arauth/releases/latest/download/arauth-windows-x64.arapp",
-      "download_url": "https://github.com/alrigroup/arauth/releases/latest/download/arauth-linux-x64.arapp",
+      "download_url": "https://github.com/alrigroup/arauth/releases/latest/download/arauth.arapp",
       "src_url": "https://github.com/alrigroup/arauth.git"
     },
     "arenterprise": {
@@ -123,6 +123,26 @@
       "src_url": "https://github.com/alrigroup/arenterprise.web.git",
       "download_url_linux": "https://github.com/alrigroup/arenterprise.web/releases/latest/download/arenterprise.web-linux-x64.arapp",
       "download_url_windows": "https://github.com/alrigroup/arenterprise.web/releases/latest/download/arenterprise.web-windows-x64.arapp"
+    },
+    "sc-zerohum": {
+      "name": "sc-zerohum",
+      "version": "0.1.4",
+      "runtime": "native",
+      "description": "SC-ZeroHum Backend for assessment and OMR workflows",
+      "author": "ALRIGROUP",
+      "download_url": "https://github.com/alrigroup/sc-zerohum/releases/latest/download/sc-zerohum.arapp",
+      "download_url_linux": "https://github.com/alrigroup/sc-zerohum/releases/latest/download/sc-zerohum-linux-x64.arapp",
+      "src_url": "https://github.com/alrigroup/sc-zerohum.git"
+    },
+    "sc-zerohum.web": {
+      "name": "sc-zerohum.web",
+      "version": "0.1.2",
+      "runtime": "native",
+      "description": "SC-ZeroHum React SPA packaged for the ARWE runtime",
+      "author": "ALRIGROUP",
+      "download_url": "https://github.com/alrigroup/sc-zerohum.web/releases/latest/download/sc-zerohum.web.arapp",
+      "download_url_linux": "https://github.com/alrigroup/sc-zerohum.web/releases/latest/download/sc-zerohum.web-linux-x64.arapp",
+      "src_url": "https://github.com/alrigroup/sc-zerohum.web.git"
     }
   }
 }
