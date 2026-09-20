@@ -136,7 +136,7 @@
     },
     "sc-zerohum.web": {
       "name": "sc-zerohum.web",
-      "version": "0.1.7",
+      "version": "0.1.8",
       "runtime": "native",
       "description": "SC-ZeroHum React SPA packaged for the ARWE runtime",
       "author": "ALRIGROUP",
