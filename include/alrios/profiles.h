@@ -75,6 +75,9 @@ typedef struct alrios_node_policy {
 #define ALRIOS_APP_FLAG_PQC_HYBRID_SIG       (1U << 6)
 #define ALRIOS_APP_FLAG_STRIPPED_SYMBOLS     (1U << 7)
 
+#define ALRIOS_PROFILE_ERR_INVALID     -1
+#define ALRIOS_PROFILE_ERR_UNAVAILABLE -2
+
 /* Core Profile API */
 int alrios_profile_init(alrios_node_policy_t *p, alrios_profile_t choice);
 int alrios_profile_parse(const char *name_or_flag, alrios_profile_t *out_profile);

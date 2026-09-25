@@ -3,6 +3,7 @@
  * ==================================================================== */
 
 #include "alrios/profiles.h"
+#include "alrios/crypto_verify.h"
 #include <string.h>
 #include <ctype.h>
 
@@ -15,6 +16,12 @@ int alrios_profile_init(alrios_node_policy_t *p, alrios_profile_t choice) {
 
     switch (choice) {
     case PROFILE_SOVEREIGN_MAX:
+        if (!alrios_crypto_has_capability(ALRIOS_CRYPTO_CAP_ED25519 |
+                                          ALRIOS_CRYPTO_CAP_AES_256_GCM |
+                                          ALRIOS_CRYPTO_CAP_ML_DSA_65)) {
+            memset(p, 0, sizeof(*p));
+            return -2;
+        }
         p->require_pqc          = 1;
         p->require_zero_disk     = 1;
         p->seccomp_strict       = 1;

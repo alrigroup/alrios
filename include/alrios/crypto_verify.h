@@ -15,6 +15,13 @@
 #define ALRIOS_CRYPTO_ERR_BAD_SIG_PQC      -1003
 #define ALRIOS_CRYPTO_ERR_GCM_AUTH_FAIL    -1004
 #define ALRIOS_CRYPTO_ERR_ALLOC_FAIL       -1005
+#define ALRIOS_CRYPTO_ERR_UNAVAILABLE      -1006
+#define ALRIOS_CRYPTO_ERR_INVALID_KEY      -1007
+#define ALRIOS_CRYPTO_ERR_INTERNAL         -1008
+
+#define ALRIOS_CRYPTO_CAP_ED25519           (1U << 0)
+#define ALRIOS_CRYPTO_CAP_AES_256_GCM       (1U << 1)
+#define ALRIOS_CRYPTO_CAP_ML_DSA_65         (1U << 2)
 
 #define ED25519_PUBLIC_KEY_LEN             32
 #define ED25519_SIGNATURE_LEN              64
@@ -28,6 +35,9 @@
 void alrios_explicit_zeroize(void *ptr, size_t len);
 
 int alrios_constant_time_memcmp(const void *a, const void *b, size_t len);
+
+uint32_t alrios_crypto_capabilities(void);
+int alrios_crypto_has_capability(uint32_t capability);
 
 /* FIPS 180-4 SHA-512 Streaming Context */
 typedef struct alrios_sha512_ctx {
