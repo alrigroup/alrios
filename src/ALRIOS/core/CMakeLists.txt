@@ -1,7 +1,9 @@
 add_executable(arcore
     main.c
     loader.c
+    vault_loader.c
     ctl.c
+    hotreload.c
     arapp_parser.c
     ar_path.c
     log.c

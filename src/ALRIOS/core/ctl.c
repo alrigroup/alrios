@@ -1,13 +1,15 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
 
 #include "ctl.h"
 #include "loader.h"
+#include "hotreload.h"
 #include "ar_ipc.h"
 #include "ar_kernel.h"
 #include "aros_hal.h"
@@ -87,6 +89,30 @@ static void handle_frame(int fd, int type, const unsigned char *payload, uint32_
             send_result(fd, 1, "ok");
             break;
 
+        case IPC_DEPLOY_SUBMIT: {
+            char log_buf[512] = {0};
+            char *newline = strchr(name, '\n');
+            char pkg_path[1024] = {0};
+            if (newline) {
+                *newline = '\0';
+                snprintf(pkg_path, sizeof(pkg_path), "%s", newline + 1);
+            } else {
+                char apps_dir[1024];
+                loader_get_apps_dir(apps_dir, sizeof(apps_dir));
+                snprintf(pkg_path, sizeof(pkg_path), "%s/%s.arapp", apps_dir, name);
+            }
+            int ret = ar_hotreload_deploy(name, pkg_path, log_buf, sizeof(log_buf));
+            send_result(fd, ret == 0 ? 1 : 0, log_buf);
+            break;
+        }
+
+        case IPC_ROUTE_SWAP: {
+            char status_buf[512] = {0};
+            ar_hotreload_status(name, status_buf, sizeof(status_buf));
+            send_result(fd, 1, status_buf);
+            break;
+        }
+
         case IPC_CTL_POWER_OFF:
             send_result(fd, 1, "bye");
             ar_sleep_ms(100);
@@ -125,6 +151,7 @@ static void *accept_loop(void *arg) {
             ar_sleep_ms(50);
             continue;
         }
+        ar_socket_set_timeouts(client_fd, 5);
         void *th = ar_thread_create(client_handler_loop, (void *)(intptr_t)client_fd);
         if (th) ar_thread_detach(th);
     }
@@ -132,6 +159,7 @@ static void *accept_loop(void *arg) {
 }
 
 int ctl_start(void) {
+    ar_hotreload_init();
     ctl_server_fd = ar_ipc_server_start(AR_CTL_PORT);
     if (ctl_server_fd < 0) {
         alri_printf("  " RED "x" RST " Control channel bind 127.0.0.1:%d failed\n", AR_CTL_PORT);
