@@ -61,6 +61,6 @@ int ar_write_armake_header_file(const char *path);
 int ar_detect_header(const char *path);
 
 /* Write little-endian 16-bit value (useful for building headers) */
-void ar_write_le16(unsigned char *p, unsigned short v);
+void ar_write_le16(unsigned char *p, unsigned int v);
 
 #endif

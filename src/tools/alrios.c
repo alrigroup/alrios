@@ -284,9 +284,11 @@ static int spawn_arcore_detached(const char *exe) {
   if (pid > 0)
     return pid;
   setsid();
-  freopen("/dev/null", "r", stdin);
-  freopen("/dev/null", "w", stdout);
-  freopen("/dev/null", "w", stderr);
+  if (!freopen("/dev/null", "r", stdin) ||
+      !freopen("/dev/null", "w", stdout) ||
+      !freopen("/dev/null", "w", stderr)) {
+    _exit(126);
+  }
   execl(exe, exe, NULL);
   _exit(127);
 #endif
@@ -549,12 +551,16 @@ static int cmd_fullupdate(int argc, char **argv) {
   printf("\033[1;34m[2/4]\033[0m Verificando kernel (arcore) e ferramentas de "
          "desenvolvedor (armake/alrios)...\n");
 #ifdef _WIN32
-  system("cmake --build build --target arcore armake alrios -j4");
+  int build_rc = system("cmake --build build --target arcore armake alrios -j4");
 #else
-  system("cmake --build build-linux --target arcore armake alrios -- -j4 "
-         "2>/dev/null || cmake --build build --target arcore armake alrios -j4 "
-         "2>/dev/null || true");
+  int build_rc = system("cmake --build build-linux --target arcore armake alrios -- -j4 "
+                        "2>/dev/null || cmake --build build --target arcore armake alrios -j4 "
+                        "2>/dev/null");
 #endif
+  if (build_rc != 0) {
+    fprintf(stderr, "\033[1;31m[ERRO]\033[0m build do kernel/toolchain falhou (codigo %d).\n", build_rc);
+    return 1;
+  }
   printf("\033[1;32m✓\033[0m Kernel e ferramentas atualizados.\n\n");
 
   /* 3. Incremental App Packaging */
@@ -575,7 +581,11 @@ static int cmd_fullupdate(int argc, char **argv) {
         snprintf(cmd, sizeof(cmd),
                  "./arcore/armake build %s arcore/apps/%s.arapp %s", appdir,
                  entry->d_name, force ? "--force" : "");
-        system(cmd);
+        int package_rc = system(cmd);
+        if (package_rc != 0) {
+          fprintf(stderr, "\033[1;33m[AVISO]\033[0m empacotamento de %s falhou (codigo %d).\n",
+                  entry->d_name, package_rc);
+        }
       }
     }
     closedir(d);

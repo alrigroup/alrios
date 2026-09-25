@@ -67,9 +67,25 @@ static unsigned int crc32(unsigned int crc, const void *buf, int len) {
     return crc ^ 0xFFFFFFFF;
 }
 
+static int read_exact(FILE *file, void *buffer, size_t length) {
+    if (!file || (!buffer && length > 0U)) return -1;
+
+    unsigned char *cursor = (unsigned char *)buffer;
+    size_t total = 0U;
+    while (total < length) {
+        size_t count = fread(cursor + total, 1U, length - total, file);
+        if (count == 0U) {
+            return -1;
+        }
+        total += count;
+    }
+    return 0;
+}
+
 /* --- Helpers --- */
-void ar_write_le16(unsigned char *p, unsigned short v) {
-    p[0] = v & 0xFF; p[1] = (v >> 8) & 0xFF;
+void ar_write_le16(unsigned char *p, unsigned int v) {
+    p[0] = (unsigned char)(v & 0xFFU);
+    p[1] = (unsigned char)((v >> 8U) & 0xFFU);
 }
 static void write_le32(unsigned char *p, unsigned int v) {
     p[0] = v & 0xFF; p[1] = (v >> 8) & 0xFF;
@@ -278,7 +294,11 @@ int ar_write_header_file(const char *path) {
     fseek(f, 0, SEEK_SET);
     unsigned char *content = (unsigned char *)malloc((size_t)len + 1);
     if (!content) { fclose(f); return -1; }
-    fread(content, 1, (size_t)len, f);
+    if (read_exact(f, content, (size_t)len) != 0) {
+        fclose(f);
+        free(content);
+        return -1;
+    }
     fclose(f);
 
     unsigned char hdr[16];
@@ -313,7 +333,11 @@ int ar_write_armake_header_file(const char *path) {
     fseek(f, 0, SEEK_SET);
     unsigned char *content = (unsigned char *)malloc((size_t)len + 1);
     if (!content) { fclose(f); return -1; }
-    fread(content, 1, (size_t)len, f);
+    if (read_exact(f, content, (size_t)len) != 0) {
+        fclose(f);
+        free(content);
+        return -1;
+    }
     fclose(f);
 
     unsigned char hdr[20];
@@ -368,7 +392,12 @@ zip_reader_t *zip_reader_open(const char *path) {
     if (!buf) { fclose(z->fp); free(z); return NULL; }
     int search = (filesize > 66000) ? 66000 : (int)filesize;
     fseek(z->fp, filesize - search, SEEK_SET);
-    fread(buf, 1, search, z->fp);
+    if (read_exact(z->fp, buf, (size_t)search) != 0) {
+        free(buf);
+        fclose(z->fp);
+        free(z);
+        return NULL;
+    }
 
     int eocd_pos = -1;
     for (int i = search - 22; i >= 0; i--) {
@@ -431,8 +460,17 @@ zip_reader_t *zip_reader_open(const char *path) {
 
         if (name_len > 255) name_len = 255;
         char name[256] = {0};
-        fread(name, 1, name_len, z->fp);
+        if (read_exact(z->fp, name, (size_t)name_len) != 0) {
+            z->entry_count = i;
+            zip_reader_close(z);
+            return NULL;
+        }
         z->names[i] = strdup(name);
+        if (!z->names[i]) {
+            z->entry_count = i;
+            zip_reader_close(z);
+            return NULL;
+        }
 
         fseek(z->fp, extra_len + comment_len, SEEK_CUR);
     }
@@ -501,7 +539,7 @@ int zip_reader_extract(zip_reader_t *z, int idx, const char *outdir) {
     /* seek to file data: skip local file header */
     fseek(z->fp, z->offsets[idx], SEEK_SET);
     unsigned char lfh[30];
-    fread(lfh, 1, 30, z->fp);
+    if (read_exact(z->fp, lfh, sizeof(lfh)) != 0) return -1;
     int lfname_len = read_le16(lfh + 26);
     int lfextra_len = read_le16(lfh + 28);
     fseek(z->fp, lfname_len + lfextra_len, SEEK_CUR);
@@ -514,8 +552,12 @@ int zip_reader_extract(zip_reader_t *z, int idx, const char *outdir) {
     int remaining = z->sizes_comp[idx];
     while (remaining > 0) {
         int chunk = (remaining > 4096) ? 4096 : remaining;
-        fread(data, 1, chunk, z->fp);
-        fwrite(data, 1, chunk, out);
+        if (read_exact(z->fp, data, (size_t)chunk) != 0 ||
+            fwrite(data, 1, (size_t)chunk, out) != (size_t)chunk) {
+            fclose(out);
+            remove(outpath);
+            return -1;
+        }
         remaining -= chunk;
     }
 #ifndef _WIN32

@@ -351,13 +351,13 @@ static void load_native(const ar_app_manifest_t *m, const char *app_dir, loader_
 
     for (int i = 0; i < m->service_count; i++) {
         const ar_service_def_t *svc = &m->services[i];
-        int (*entry)(void) = NULL;
-        *(void **)(&entry) = ar_module_sym(handle, svc->entry);
-        if (!entry) {
+        int (*service_entry)(void) = NULL;
+        *(void **)(&service_entry) = ar_module_sym(handle, svc->entry);
+        if (!service_entry) {
             alri_printf("    " YLW "!" RST " Symbol '" DIM "%s" RST "' not found in " BLD "%s" RST "\n", svc->entry, m->entry);
             continue;
         }
-        ar_svc_register(svc->name, entry);
+        ar_svc_register(svc->name, service_entry);
         alri_printf("    " GRN "✓" RST " Service " CYN "%s" RST " registered\n", svc->name);
     }
 }
