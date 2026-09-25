@@ -104,7 +104,7 @@ static void sha512_transform(uint64_t state[8], const uint8_t block[128]) {
     state[7] += h;
 
     /* Scrub schedule memory from stack */
-    explicit_bzero(w, sizeof(w));
+    alrios_explicit_zeroize(w, sizeof(w));
 }
 
 int alrios_sha512_init(alrios_sha512_ctx_t *ctx) {
@@ -208,7 +208,7 @@ int alrios_sha512_final(alrios_sha512_ctx_t *ctx, uint8_t out_hash[SHA512_DIGEST
     }
 
     /* Zeroize sensitive context data upon finalization */
-    explicit_bzero(ctx, sizeof(alrios_sha512_ctx_t));
+    alrios_explicit_zeroize(ctx, sizeof(alrios_sha512_ctx_t));
     return ALRIOS_CRYPTO_OK;
 }
 
@@ -228,7 +228,7 @@ int alrios_sha512(const uint8_t *data, size_t len, uint8_t out_hash[SHA512_DIGES
 
     ret = alrios_sha512_update(&ctx, data, len);
     if (ret != ALRIOS_CRYPTO_OK) {
-        explicit_bzero(&ctx, sizeof(ctx));
+        alrios_explicit_zeroize(&ctx, sizeof(ctx));
         return ret;
     }
 

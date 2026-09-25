@@ -9,7 +9,8 @@
 int main(void) {
     alrios_node_policy_t p;
 
-    /* 1. Sovereign Profile Initializer & Matrix Invariants */
+    /* 1. Sovereign Profile is fail-closed without a real ML-DSA backend. */
+#if defined(ALRIOS_HAVE_ML_DSA_65)
     assert(alrios_profile_init(&p, PROFILE_SOVEREIGN_MAX) == 0);
     assert(p.profile == PROFILE_SOVEREIGN_MAX);
     assert(p.require_pqc == 1);
@@ -24,11 +25,14 @@ int main(void) {
     assert(p.exec_mode == ALRIOS_EXEC_MEMFD_SEALED);
     assert(p.isolation_mode == ALRIOS_ISOLATION_STRICT_SECCOMP_NAMESPACES);
 
-    /* Sovereign helper queries */
     assert(alrios_profile_is_zero_disk(&p) == 1);
     assert(alrios_profile_requires_pqc(&p) == 1);
     assert(alrios_profile_has_guard_pages(&p) == 1);
     assert(alrios_profile_get_timeout(&p) == 5);
+#else
+    assert(alrios_profile_init(&p, PROFILE_SOVEREIGN_MAX) ==
+           ALRIOS_PROFILE_ERR_UNAVAILABLE);
+#endif
 
     /* 2. Enterprise Profile Initializer & Matrix Invariants */
     assert(alrios_profile_init(&p, PROFILE_ENTERPRISE_BAL) == 0);
@@ -93,10 +97,12 @@ int main(void) {
     assert(alrios_profile_validate_app_compat(&p, 0) == 0);
 
     /* Sovereign node tests */
+#if defined(ALRIOS_HAVE_ML_DSA_65)
     assert(alrios_profile_init(&p, PROFILE_SOVEREIGN_MAX) == 0);
     assert(alrios_profile_validate_app_compat(&p, ALRIOS_APP_FLAG_PROFILE_SOVEREIGN) == 0);
     assert(alrios_profile_validate_app_compat(&p, ALRIOS_APP_FLAG_PQC_HYBRID_SIG) == 0);
     assert(alrios_profile_validate_app_compat(&p, 0) == 0);
+#endif
 
     /* NULL node check */
     assert(alrios_profile_validate_app_compat(NULL, 0) == -1);

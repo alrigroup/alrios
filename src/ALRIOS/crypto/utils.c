@@ -44,3 +44,16 @@ int alrios_constant_time_memcmp(const void *a, const void *b, size_t len) {
 
     return -((int)diff);
 }
+
+uint32_t alrios_crypto_capabilities(void) {
+    uint32_t capabilities = ALRIOS_CRYPTO_CAP_ED25519 |
+                            ALRIOS_CRYPTO_CAP_AES_256_GCM;
+#if defined(ALRIOS_HAVE_ML_DSA_65)
+    capabilities |= ALRIOS_CRYPTO_CAP_ML_DSA_65;
+#endif
+    return capabilities;
+}
+
+int alrios_crypto_has_capability(uint32_t capability) {
+    return (alrios_crypto_capabilities() & capability) == capability;
+}

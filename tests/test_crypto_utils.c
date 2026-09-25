@@ -24,6 +24,15 @@ int main(void) {
         assert(buf1[i] == 0x00);
     }
 
+    uint32_t capabilities = alrios_crypto_capabilities();
+    assert((capabilities & ALRIOS_CRYPTO_CAP_ED25519) != 0U);
+    assert((capabilities & ALRIOS_CRYPTO_CAP_AES_256_GCM) != 0U);
+#if defined(ALRIOS_HAVE_ML_DSA_65)
+    assert((capabilities & ALRIOS_CRYPTO_CAP_ML_DSA_65) != 0U);
+#else
+    assert((capabilities & ALRIOS_CRYPTO_CAP_ML_DSA_65) == 0U);
+#endif
+
     printf("TASK-001 (Crypto Utils): PASS\n");
     return 0;
 }
