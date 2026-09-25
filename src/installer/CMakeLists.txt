@@ -7,8 +7,6 @@ set(INSTALLER_SOURCES
     arinstall.c
     installer_core.c
     cli_ui.c
-    ${CMAKE_SOURCE_DIR}/src/tools/zip.c
-    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core/arapp_parser.c
 )
 
 if(WIN32)
@@ -26,6 +24,7 @@ target_include_directories(arinstall PRIVATE
     ${CMAKE_SOURCE_DIR}/src/tools
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
 )
+target_link_libraries(arinstall PRIVATE ararchive armanifest)
 
 if(GTK3_FOUND)
     target_include_directories(arinstall PRIVATE ${GTK3_INCLUDE_DIRS})

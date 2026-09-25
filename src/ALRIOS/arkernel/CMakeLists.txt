@@ -1,3 +1,27 @@
+add_library(arlog STATIC
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core/log.c
+)
+set_property(TARGET arlog PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arlog PUBLIC
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
+)
+
+add_library(ararchive STATIC
+    ${CMAKE_SOURCE_DIR}/src/tools/zip.c
+)
+set_property(TARGET ararchive PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(ararchive PUBLIC
+    ${CMAKE_SOURCE_DIR}/src/tools
+)
+
+add_library(armanifest STATIC
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core/arapp_parser.c
+)
+set_property(TARGET armanifest PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(armanifest PUBLIC
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
+)
+
 add_library(arkernel
     os/main.c
     svc/svc_manager.c
@@ -5,14 +29,15 @@ add_library(arkernel
     svc/svc_health.c
     svc/arkernel_main.c
     ipc/ar_ipc.c
-    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core/log.c
 )
 set_property(TARGET arkernel PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arkernel PUBLIC
     include
     ipc
     os/include
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
 )
+target_link_libraries(arkernel PUBLIC arlog)
 find_package(OpenSSL REQUIRED)
 target_include_directories(arkernel PUBLIC ${OPENSSL_INCLUDE_DIR})
 set_target_properties(arkernel PROPERTIES

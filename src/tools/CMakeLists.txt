@@ -1,9 +1,8 @@
 add_executable(armake
     armake.c
-    zip.c
-    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core/arapp_parser.c
 )
 target_include_directories(armake PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src/ALRIOS/core)
+target_link_libraries(armake PRIVATE ararchive armanifest)
 set_target_properties(armake PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"
@@ -17,15 +16,13 @@ find_package(Threads REQUIRED)
 add_executable(alrios
     alrios.c
     arpm.c
-    zip.c
-    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core/arapp_parser.c
 )
 target_include_directories(alrios PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/include
 )
-target_link_libraries(alrios PRIVATE arkernel OpenSSL::SSL OpenSSL::Crypto Threads::Threads ${CMAKE_DL_LIBS})
+target_link_libraries(alrios PRIVATE arkernel arlog ararchive armanifest OpenSSL::SSL OpenSSL::Crypto Threads::Threads ${CMAKE_DL_LIBS})
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_options(alrios PRIVATE "-Wl,-rpath,$ORIGIN/lib")
