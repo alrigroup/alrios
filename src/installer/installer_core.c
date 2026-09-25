@@ -78,6 +78,7 @@ static int file_exists(const char *path) {
 /* Safe process execution helper without invoking an OS shell (prevents CWE-78) */
 static int safe_run_process(const char *prog, char *const argv[]) {
 #ifdef _WIN32
+    (void)prog;
     STARTUPINFOA si = { sizeof(si) };
     PROCESS_INFORMATION pi = { 0 };
     char cmdline[4096] = { 0 };
