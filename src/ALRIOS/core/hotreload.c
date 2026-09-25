@@ -18,7 +18,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdatomic.h>
 #include <sys/stat.h>
 #include <errno.h>
 
@@ -276,7 +275,7 @@ int ar_hotreload_deploy(const char *app_name, const char *arapp_path, char *out_
     hotreload_slot_t *old_slot = &ctx->slots[old_slot_idx];
 
     cand->state = HOTRELOAD_ACTIVE;
-    atomic_store(&ctx->active_slot, candidate_idx);
+    ctx->active_slot = candidate_idx;
 
     /* Atualiza o status no loader oficial */
     loader_update_app_process(app_name, cand->pid, cand->staging_dir);

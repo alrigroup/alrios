@@ -528,9 +528,14 @@ static int read_manifest_info(const char *manifest_file, char *name_out, size_t 
     long sz = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    char *buf = (char *)malloc((size_t)sz + 1);
+    if (sz < 0) { fclose(f); return -1; }
+    char *buf = (char *)malloc((size_t)sz + 1U);
     if (!buf) { fclose(f); return -1; }
-    fread(buf, 1, sz, f);
+    if (fread(buf, 1U, (size_t)sz, f) != (size_t)sz) {
+        fclose(f);
+        free(buf);
+        return -1;
+    }
     buf[sz] = '\0';
     fclose(f);
 
@@ -598,9 +603,13 @@ static int resolve_registry_package(const char *app, char *url_out, size_t url_m
             fseek(f, 0, SEEK_END);
             long sz = ftell(f);
             fseek(f, 0, SEEK_SET);
-            char *json = (char *)malloc(sz + 1);
+            char *json = sz >= 0 ? (char *)malloc((size_t)sz + 1U) : NULL;
             if (json) {
-                fread(json, 1, sz, f);
+                if (fread(json, 1U, (size_t)sz, f) != (size_t)sz) {
+                    free(json);
+                    fclose(f);
+                    return -1;
+                }
                 json[sz] = '\0';
 
                 char search_key[128];

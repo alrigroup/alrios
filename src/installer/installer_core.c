@@ -394,8 +394,12 @@ int installer_register_path(const char *dest_dir, const installer_callbacks_t *c
         char link_path[2048], target_path[2048];
         snprintf(link_path, sizeof(link_path), "%s/%s", bin_dir, bins[i]);
         snprintf(target_path, sizeof(target_path), "%s/arcore/%s", dest_dir, targets[i]);
-        unlink(link_path);
-        symlink(target_path, link_path);
+        (void)unlink(link_path);
+        if (symlink(target_path, link_path) != 0) {
+            log_msg(cb, user_data, "[ERRO] Falha ao criar link %s -> %s: %s\n",
+                    link_path, target_path, strerror(errno));
+            return -1;
+        }
     }
     log_msg(cb, user_data, "✓ Comandos vinculados com sucesso em %s (alrios, arpm, arcore, armake)\n", bin_dir);
 
@@ -405,8 +409,11 @@ int installer_register_path(const char *dest_dir, const installer_callbacks_t *c
             char sys_link[2048], target_path[2048];
             snprintf(sys_link, sizeof(sys_link), "/usr/local/bin/%s", bins[i]);
             snprintf(target_path, sizeof(target_path), "%s/arcore/%s", dest_dir, targets[i]);
-            unlink(sys_link);
-            symlink(target_path, sys_link);
+            (void)unlink(sys_link);
+            if (symlink(target_path, sys_link) != 0) {
+                log_msg(cb, user_data, "[AVISO] Falha ao criar link global %s -> %s: %s\n",
+                        sys_link, target_path, strerror(errno));
+            }
         }
         log_msg(cb, user_data, "✓ Links globais adicionais criados em /usr/local/bin\n");
     }

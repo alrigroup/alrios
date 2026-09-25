@@ -198,6 +198,20 @@ static unsigned file_hash(const char *path) {
     return h;
 }
 
+static int stream_file_to_zip(FILE *file, zip_writer_t *zip, size_t size) {
+    unsigned char buffer[4096];
+    size_t remaining = size;
+
+    while (remaining > 0U) {
+        size_t chunk = remaining > sizeof(buffer) ? sizeof(buffer) : remaining;
+        size_t count = fread(buffer, 1U, chunk, file);
+        if (count != chunk) return -1;
+        if (zip_write(zip, buffer, (int)count) != 0) return -1;
+        remaining -= count;
+    }
+    return 0;
+}
+
 static int is_cache_busting_eligible(const char *name) {
     if (!name) return 0;
     const char *ext = strrchr(name, '.');
@@ -237,16 +251,12 @@ static void pack_cache_busting_alias(zip_writer_t *z, const char *fullpath, cons
     snprintf(hashed_name, sizeof(hashed_name), "%.*s.%08x%s", (int)base_len, zipname, h, ext);
 
     fseek(f, 0, SEEK_END);
-    int size = (int)ftell(f);
+    long size = ftell(f);
     fseek(f, 0, SEEK_SET);
-
-    zip_add_entry(z, hashed_name, ZIP_METHOD_STORED);
-    unsigned char buf[4096];
-    while (size > 0) {
-        int chunk = (size > 4096) ? 4096 : size;
-        fread(buf, 1, chunk, f);
-        zip_write(z, buf, chunk);
-        size -= chunk;
+    if (size < 0 || zip_add_entry(z, hashed_name, ZIP_METHOD_STORED) != 0 ||
+        stream_file_to_zip(f, z, (size_t)size) != 0) {
+        fclose(f);
+        return;
     }
     fclose(f);
     printf("  \033[1;35m[ARWE-CACHE-BUSTING]\033[0m %s -> \033[1;32m%s\033[0m (Cloudflare immutable asset)\n", zipname, hashed_name);
@@ -282,16 +292,14 @@ static int walk_dir(const char *base, const char *rel_prefix,
             FILE *f = fopen(fullpath, "rb");
             if (!f) continue;
             fseek(f, 0, SEEK_END);
-            int size = (int)ftell(f);
+            long size = ftell(f);
             fseek(f, 0, SEEK_SET);
 
-            zip_add_entry(z, zipname, ZIP_METHOD_STORED);
-            unsigned char buf[4096];
-            while (size > 0) {
-                int chunk = (size > 4096) ? 4096 : size;
-                fread(buf, 1, chunk, f);
-                zip_write(z, buf, chunk);
-                size -= chunk;
+            if (size < 0 || zip_add_entry(z, zipname, ZIP_METHOD_STORED) != 0 ||
+                stream_file_to_zip(f, z, (size_t)size) != 0) {
+                fclose(f);
+                walker_close(&w);
+                return -1;
             }
             fclose(f);
             pack_cache_busting_alias(z, fullpath, zipname);
@@ -652,9 +660,14 @@ static int read_manifest(const char *path, ar_app_manifest_t *m) {
     fseek(f, 0, SEEK_END);
     long len = ftell(f);
     fseek(f, 0, SEEK_SET);
-    char *json = (char *)malloc((size_t)len + 1);
+    if (len < 0) { fclose(f); return -1; }
+    char *json = (char *)malloc((size_t)len + 1U);
     if (!json) { fclose(f); return -1; }
-    fread(json, 1, (size_t)len, f);
+    if (fread(json, 1U, (size_t)len, f) != (size_t)len) {
+        fclose(f);
+        free(json);
+        return -1;
+    }
     fclose(f);
     json[len] = '\0';
 
@@ -765,16 +778,13 @@ static int pack_file(zip_writer_t *z, const char *dir, const char *file) {
         return -1;
     }
     fseek(f, 0, SEEK_END);
-    int size = (int)ftell(f);
+    long size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    zip_add_entry(z, file, ZIP_METHOD_STORED);
-    unsigned char buf[4096];
-    while (size > 0) {
-        int chunk = (size > 4096) ? 4096 : size;
-        fread(buf, 1, chunk, f);
-        zip_write(z, buf, chunk);
-        size -= chunk;
+    if (size < 0 || zip_add_entry(z, file, ZIP_METHOD_STORED) != 0 ||
+        stream_file_to_zip(f, z, (size_t)size) != 0) {
+        fclose(f);
+        return -1;
     }
     fclose(f);
     pack_cache_busting_alias(z, fullpath, file);
@@ -1104,9 +1114,11 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
                 printf("[ERRO] step '%s': chdir(%s) falhou\n", step->name, step_cwd);
                 if (saved_cwd[0]) {
 #ifdef _WIN32
-                    _chdir(saved_cwd);
+                    (void)_chdir(saved_cwd);
 #else
-                    chdir(saved_cwd);
+                    if (chdir(saved_cwd) != 0) {
+                        fprintf(stderr, "[AVISO] nao foi possivel restaurar cwd: %s\n", saved_cwd);
+                    }
 #endif
                 }
                 return 1;
@@ -1118,9 +1130,12 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
             int ret = safe_exec_shell(cmd_exp);
             if (saved_cwd[0]) {
 #ifdef _WIN32
-                _chdir(saved_cwd);
+                (void)_chdir(saved_cwd);
 #else
-                chdir(saved_cwd);
+                if (chdir(saved_cwd) != 0) {
+                    fprintf(stderr, "[AVISO] nao foi possivel restaurar cwd: %s\n", saved_cwd);
+                    return 1;
+                }
 #endif
             }
             if (ret != 0) {
@@ -1146,9 +1161,12 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
         int ret = safe_exec_shell(m->build.command);
         if (saved_cwd[0]) {
 #ifdef _WIN32
-            _chdir(saved_cwd);
+            (void)_chdir(saved_cwd);
 #else
-            chdir(saved_cwd);
+            if (chdir(saved_cwd) != 0) {
+                fprintf(stderr, "[AVISO] nao foi possivel restaurar cwd: %s\n", saved_cwd);
+                return 1;
+            }
 #endif
         }
         if (ret != 0) { printf("[ERRO] Build command falhou (exit %d)\n", ret); return 1; }

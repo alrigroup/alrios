@@ -3,7 +3,10 @@
  * ==================================================================== */
 
 #include "alrios/crypto_verify.h"
-#include <stdatomic.h>
+
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
 
 void alrios_explicit_zeroize(void *ptr, size_t len) {
     if (!ptr || len == 0) {
@@ -13,8 +16,9 @@ void alrios_explicit_zeroize(void *ptr, size_t len) {
     while (len--) {
         *p++ = 0x00;
     }
-    atomic_signal_fence(memory_order_seq_cst);
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(_MSC_VER)
+    _ReadWriteBarrier();
+#elif defined(__GNUC__) || defined(__clang__)
     __asm__ __volatile__("" : : "r"(ptr) : "memory");
 #endif
 }
