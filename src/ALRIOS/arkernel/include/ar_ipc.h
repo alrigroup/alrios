@@ -1,11 +1,7 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
-
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
 #ifndef AR_IPC_H
 #define AR_IPC_H
 
@@ -35,6 +31,16 @@
 #define IPC_CTL_POWER_OFF     19
 #define IPC_CTL_POWER_RELOAD  20
 #define IPC_CTL_REFRESH       21
+
+/* Real-Time Zero-Downtime Hot-Reload Opcodes */
+#define IPC_DEPLOY_SUBMIT     0x20
+#define IPC_DEPLOY_STAGE      0x21
+#define IPC_DEPLOY_SPAWN      0x22
+#define IPC_DEPLOY_PROBE      0x23
+#define IPC_ROUTE_SWAP        0x24
+#define IPC_ROUTE_DRAIN       0x25
+#define IPC_DEPLOY_ROLLBACK   0x26
+#define IPC_FD_HANDOFF        0x27
 
 #define AR_IPC_DEFAULT_PORT 9500
 #define AR_CTL_PORT 9600

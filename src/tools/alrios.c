@@ -1,10 +1,11 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
 
 #include "ar_ipc.h"
 #include "aros_hal.h"
@@ -138,7 +139,7 @@ static void print_installed_apps(void) {
         if (strcmp(installed_names[i], name) == 0) { exists = 1; break; }
       }
       if (!exists && installed_count < 64) {
-        strncpy(installed_names[installed_count++], name, 63);
+        snprintf(installed_names[installed_count++], sizeof(installed_names[0]), "%s", name);
       }
     } while (FindNextFileA(hFind, &ffd) != 0);
     FindClose(hFind);
@@ -150,8 +151,7 @@ static void print_installed_apps(void) {
     while ((entry = readdir(d)) != NULL) {
       if (entry->d_name[0] == '.') continue;
       char name[64];
-      strncpy(name, entry->d_name, sizeof(name) - 1);
-      name[sizeof(name) - 1] = '\0';
+      snprintf(name, sizeof(name), "%s", entry->d_name);
       char *dot = strstr(name, ".arapp");
       if (dot && strcmp(dot, ".arapp") == 0) *dot = '\0';
       else if (strstr(name, ".hash") != NULL) continue;
@@ -161,7 +161,7 @@ static void print_installed_apps(void) {
         if (strcmp(installed_names[i], name) == 0) { exists = 1; break; }
       }
       if (!exists && installed_count < 64) {
-        strncpy(installed_names[installed_count++], name, 63);
+        snprintf(installed_names[installed_count++], sizeof(installed_names[0]), "%s", name);
       }
     }
     closedir(d);
@@ -199,7 +199,7 @@ static void print_installed_apps(void) {
         uint32_t rlen = sizeof(buf);
         if (ar_ipc_recv_frame(fd, &rtype, buf, &rlen) == 0 && rtype == IPC_RESPONSE) {
           buf[rlen < sizeof(buf) ? rlen : sizeof(buf) - 1] = '\0';
-          strncpy(status_buf, (char *)buf, sizeof(status_buf) - 1);
+          snprintf(status_buf, sizeof(status_buf), "%s", (char *)buf);
         }
       }
       ar_socket_close(fd);
@@ -227,6 +227,7 @@ static void print_usage(void) {
   printf("  alrios fullupdate [--force]      (rebuild incremental de apps e reload)\n");
   printf("  alrios update <alvo>             (alvo: all|alrios|armake|arinstall)\n");
   printf("  alrios build -p <SRC> [-o <OUT>] (compila diretorio de app -> .arapp)\n");
+  printf("  alrios deploy <app> [pkg.arapp]  (deploy atomico em tempo real com Zero-Downtime)\n");
   printf("  alrios refresh                   (atualiza lista de apps sem reiniciar)\n\n");
   print_installed_apps();
 }
@@ -636,34 +637,6 @@ static int cmd_update(const char *which) {
   return res;
 }
 
-static void abs_path(const char *in, char *out, int size) {
-#ifdef _WIN32
-  _fullpath(out, in, size);
-#else
-  if (!realpath(in, out)) {
-    strncpy(out, in, size - 1);
-    out[size - 1] = '\0';
-  }
-#endif
-}
-
-static int path_eq(const char *a, const char *b) {
-#ifdef _WIN32
-  return _stricmp(a, b) == 0;
-#else
-  return strcmp(a, b) == 0;
-#endif
-}
-
-static int fexists(const char *path) {
-  FILE *f = fopen(path, "rb");
-  if (f) {
-    fclose(f);
-    return 1;
-  }
-  return 0;
-}
-
 static int cmd_build(int argc, char *argv[]) {
   const char *src = NULL;
   const char *out = NULL;
@@ -710,6 +683,33 @@ static int cmd_build(int argc, char *argv[]) {
   return 0;
 }
 
+static int cmd_deploy(int argc, char *argv[]) {
+  if (argc < 3) {
+    printf("Uso: alrios deploy <app_name> [caminho_pacote.arapp]\n");
+    return 1;
+  }
+  const char *app = argv[2];
+  char payload[AR_IPC_BUF_SIZE];
+  if (argc >= 4) {
+    snprintf(payload, sizeof(payload), "%s\n%s", app, argv[3]);
+  } else {
+    if (strstr(app, ".arapp") != NULL) {
+      char aname[64];
+      const char *base = strrchr(app, '/');
+      if (!base) base = strrchr(app, '\\');
+      base = base ? base + 1 : app;
+      snprintf(aname, sizeof(aname), "%s", base);
+      char *dot = strstr(aname, ".arapp");
+      if (dot) *dot = '\0';
+      snprintf(payload, sizeof(payload), "%s\n%s", aname, app);
+    } else {
+      snprintf(payload, sizeof(payload), "%s", app);
+    }
+  }
+  printf("\033[1;36m[HOTRELOAD]\033[0m Disparando deploy atomico Zero-Downtime para '%s'...\n", app);
+  return run_ctl(IPC_DEPLOY_SUBMIT, payload);
+}
+
 int main(int argc, char *argv[]) {
   const char *prog = strrchr(argv[0], '/');
   if (!prog)
@@ -741,6 +741,9 @@ int main(int argc, char *argv[]) {
   /* Comandos do Ciclo de Vida do SO (arcore 9600) */
   if (strcmp(a1, "arpm") == 0 || strcmp(a1, "pkg") == 0)
     return cmd_arpm(argc - 1, argv + 1);
+
+  if (strcmp(a1, "deploy") == 0)
+    return cmd_deploy(argc, argv);
 
   if (strcmp(a1, "status") == 0 || strcmp(a1, "list") == 0)
     return run_ctl(IPC_CTL_LIST, NULL);

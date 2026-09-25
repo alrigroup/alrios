@@ -1,10 +1,11 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
 
 #include "zip.h"
 #include "arapp_parser.h"
@@ -53,7 +54,7 @@ static int safe_exec_shell(const char *cmd) {
 
 static void mkdir_p(const char *path) {
     char tmp[1024];
-    strncpy(tmp, path, sizeof(tmp) - 1);
+    snprintf(tmp, sizeof(tmp), "%s", path);
     for (char *p = tmp + 1; *p; p++) {
         if (*p == SEPARATOR) {
             *p = '\0';
@@ -172,6 +173,85 @@ static int should_skip(const char *name) {
     return 0;
 }
 
+static long file_size(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+    fseek(f, 0, SEEK_END);
+    long s = ftell(f);
+    fclose(f);
+    return s;
+}
+
+static unsigned file_hash(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    unsigned h = 2166136261u;
+    unsigned char buf[8192];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+        for (size_t i = 0; i < n; i++) {
+            h ^= buf[i];
+            h *= 16777619u;
+        }
+    }
+    fclose(f);
+    return h;
+}
+
+static int is_cache_busting_eligible(const char *name) {
+    if (!name) return 0;
+    const char *ext = strrchr(name, '.');
+    if (!ext) return 0;
+    if (strcmp(ext, ".arweb") == 0 ||
+        strcmp(ext, ".js") == 0 ||
+        strcmp(ext, ".css") == 0 ||
+        strcmp(ext, ".wasm") == 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int already_has_hash(const char *name, const char *ext) {
+    if (!name || !ext || ext <= name + 9) return 0;
+    if (*(ext - 9) != '.') return 0;
+    for (int i = 8; i >= 1; i--) {
+        char c = *(ext - i);
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
+            return 0;
+    }
+    return 1;
+}
+
+static void pack_cache_busting_alias(zip_writer_t *z, const char *fullpath, const char *zipname) {
+    const char *ext = strrchr(zipname, '.');
+    if (!ext || !is_cache_busting_eligible(zipname) || already_has_hash(zipname, ext)) {
+        return;
+    }
+
+    FILE *f = fopen(fullpath, "rb");
+    if (!f) return;
+
+    unsigned h = file_hash(fullpath);
+    char hashed_name[1024];
+    size_t base_len = (size_t)(ext - zipname);
+    snprintf(hashed_name, sizeof(hashed_name), "%.*s.%08x%s", (int)base_len, zipname, h, ext);
+
+    fseek(f, 0, SEEK_END);
+    int size = (int)ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    zip_add_entry(z, hashed_name, ZIP_METHOD_STORED);
+    unsigned char buf[4096];
+    while (size > 0) {
+        int chunk = (size > 4096) ? 4096 : size;
+        fread(buf, 1, chunk, f);
+        zip_write(z, buf, chunk);
+        size -= chunk;
+    }
+    fclose(f);
+    printf("  \033[1;35m[ARWE-CACHE-BUSTING]\033[0m %s -> \033[1;32m%s\033[0m (Cloudflare immutable asset)\n", zipname, hashed_name);
+}
+
 static int walk_dir(const char *base, const char *rel_prefix,
                     zip_writer_t *z, char *path_buf, int path_size) {
     walker_t w;
@@ -214,6 +294,7 @@ static int walk_dir(const char *base, const char *rel_prefix,
                 size -= chunk;
             }
             fclose(f);
+            pack_cache_busting_alias(z, fullpath, zipname);
         }
     }
     walker_close(&w);
@@ -245,31 +326,6 @@ static int g_snap_count = 0;
 static char g_appdir[SNAP_PATH_MAX] = {0};
 static rm_entry_t g_rm[RM_CAP];
 static int g_rm_count = 0;
-
-static long file_size(const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (!f) return -1;
-    fseek(f, 0, SEEK_END);
-    long s = ftell(f);
-    fclose(f);
-    return s;
-}
-
-static unsigned file_hash(const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (!f) return 0;
-    unsigned h = 2166136261u;
-    unsigned char buf[8192];
-    size_t n;
-    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
-        for (size_t i = 0; i < n; i++) {
-            h ^= buf[i];
-            h *= 16777619u;
-        }
-    }
-    fclose(f);
-    return h;
-}
 
 static int is_abs_path(const char *p) {
 #ifdef _WIN32
@@ -721,6 +777,7 @@ static int pack_file(zip_writer_t *z, const char *dir, const char *file) {
         size -= chunk;
     }
     fclose(f);
+    pack_cache_busting_alias(z, fullpath, file);
     return 0;
 }
 
@@ -997,7 +1054,7 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
     if (staging[0] == '/' && staging[1] == '.' && (staging[2] == 's' || staging[2] == '/')) {
         char fixed[1024];
         snprintf(fixed, sizeof(fixed), ".%s", staging);
-        strncpy(staging, fixed, sizeof(staging) - 1);
+        snprintf(staging, sizeof(staging), "%s", fixed);
     }
 
     char safe_staging[1024] = {0};
@@ -1174,17 +1231,6 @@ static int manifest_is_arwe(ar_app_manifest_t *m) {
     for (int i = 0; i < m->build.step_count; i++) {
         if (strstr(m->build.steps[i].cmd, "ARWE_BUILD") != NULL ||
             strstr(m->build.steps[i].cmd, "ARWE_BUILD") != NULL) return 1;
-    }
-    for (int i = 0; i < m->file_count; i++) {
-        if (strcmp(m->files[i], "config.arwe") == 0 ||
-            strcmp(m->files[i], "config.arwe") == 0) return 1;
-    }
-    return 0;
-}
-static int legacy_manifest_is_arwe_unused(ar_app_manifest_t *m) {
-    if (!m) return 0;
-    for (int i = 0; i < m->build.step_count; i++) {
-        if (strstr(m->build.steps[i].cmd, "ARWE_BUILD") != NULL) return 1;
     }
     for (int i = 0; i < m->file_count; i++) {
         if (strcmp(m->files[i], "config.arwe") == 0) return 1;
@@ -1426,8 +1472,21 @@ static int cmd_build(int argc, char **argv) {
             long alen = ftell(af);
             fseek(af, 0, SEEK_SET);
             unsigned char *arm_content = (unsigned char *)malloc((size_t)alen + 1);
-            fread(arm_content, 1, (size_t)alen, af);
+            if (!arm_content) {
+                fclose(af);
+                zip_close(z);
+                cleanup_and_report();
+                return 1;
+            }
+            size_t read_bytes = fread(arm_content, 1, (size_t)alen, af);
             fclose(af);
+            if (read_bytes != (size_t)alen) {
+                free(arm_content);
+                zip_close(z);
+                cleanup_and_report();
+                return 1;
+            }
+            arm_content[alen] = '\0';
 
             unsigned char *json_data = arm_content;
             while ((long)(json_data - arm_content) < alen &&
@@ -1519,7 +1578,7 @@ static int cmd_build(int argc, char **argv) {
                 ar_manifest_get_platform_entry(&m, "linux", platform_entry, sizeof(platform_entry));
 
             if (!platform_entry[0] && m.entry[0])
-                strncpy(platform_entry, m.entry, sizeof(platform_entry) - 1);
+                snprintf(platform_entry, sizeof(platform_entry), "%s", m.entry);
 
             if (platform_entry[0]) {
                 if (pack_file(z, dir, platform_entry) == 0)
