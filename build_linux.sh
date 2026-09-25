@@ -25,7 +25,7 @@ echo "[1/2] Configuring CMake (Release) in ${BUILD_DIR}"
 cmake -S "${ROOT}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release
 
 echo "[2/2] Compiling sovereign kernel + developer tools"
-cmake --build "${BUILD_DIR}" --target arcore alrios armake -- -j"${NPROC}"
+cmake --build "${BUILD_DIR}" --target arcore alrios armake arsdk -- -j"${NPROC}"
 
 ln -sf arcore/alrios "${ROOT}/alrios"
 ln -sf alrios "${ROOT}/arcore/arpm"
