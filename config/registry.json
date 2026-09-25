@@ -1,0 +1,148 @@
+{
+  "registry": "ALRIOS Official Package Registry",
+  "version": "0.2.03",
+  "updated_at": "2026-09-07T20:00:00Z",
+  "packages": {
+    "arws": {
+      "name": "arws",
+      "version": "0.2.03",
+      "runtime": "native",
+      "description": "HTTP/HTTPS Reverse Proxy, Load Balancer & Dynamic Gateway",
+      "author": "ALRIGROUP",
+      "download_url_linux": "https://github.com/alrigroup/arws/releases/latest/download/arws-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/arws/releases/latest/download/arws-windows-x64.arapp",
+      "download_url": "https://github.com/alrigroup/arws/releases/latest/download/arws-linux-x64.arapp",
+      "src_url": "https://github.com/alrigroup/arws.git"
+    },
+    "ardb": {
+      "name": "ardb",
+      "version": "0.2.03",
+      "runtime": "native",
+      "description": "ALRI Sovereign Database Guardian with Audit Log Blockchain",
+      "author": "ALRIGROUP",
+      "download_url_linux": "https://github.com/alrigroup/ardb/releases/latest/download/ardb-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/ardb/releases/latest/download/ardb-windows-x64.arapp",
+      "download_url": "https://github.com/alrigroup/ardb/releases/latest/download/ardb-linux-x64.arapp",
+      "src_url": "https://github.com/alrigroup/ardb.git"
+    },
+    "arcdn": {
+      "name": "arcdn",
+      "version": "0.2.03",
+      "runtime": "native",
+      "description": "Static Assets Distribution & Low-Latency Streaming Engine",
+      "author": "ALRIGROUP",
+      "download_url_linux": "https://github.com/alrigroup/arcdn/releases/latest/download/arcdn-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/arcdn/releases/latest/download/arcdn-windows-x64.arapp",
+      "download_url": "https://github.com/alrigroup/arcdn/releases/latest/download/arcdn-linux-x64.arapp",
+      "src_url": "https://github.com/alrigroup/arcdn.git"
+    },
+    "arwe": {
+      "name": "arwe",
+      "version": "0.2.03",
+      "runtime": "native",
+      "description": "ALRI Web Engine Runtime & High Performance .arweb Container Engine",
+      "author": "ALRIGROUP",
+      "download_url_linux": "https://github.com/alrigroup/arwe/releases/latest/download/arwe-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/arwe/releases/latest/download/arwe-windows-x64.arapp",
+      "download_url": "https://github.com/alrigroup/arwe/releases/latest/download/arwe-linux-x64.arapp",
+      "src_url": "https://github.com/alrigroup/arwe.git"
+    },
+    "arauth": {
+      "name": "arauth",
+      "version": "0.2.03",
+      "runtime": "native",
+      "description": "Unified Sovereign Authentication & Token Service",
+      "author": "ALRIGROUP",
+      "download_url_linux": "https://github.com/alrigroup/arauth/releases/latest/download/arauth-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/arauth/releases/latest/download/arauth-windows-x64.arapp",
+      "download_url": "https://github.com/alrigroup/arauth/releases/latest/download/arauth.arapp",
+      "src_url": "https://github.com/alrigroup/arauth.git"
+    },
+    "arenterprise": {
+      "name": "arenterprise",
+      "version": "0.2.03",
+      "runtime": "native",
+      "description": "ALRI Enterprise Resource Management Core Service",
+      "author": "ALRIGROUP",
+      "download_url_linux": "https://github.com/alrigroup/arenterprise/releases/latest/download/arenterprise-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/arenterprise/releases/latest/download/arenterprise-windows-x64.arapp",
+      "download_url": "https://github.com/alrigroup/arenterprise/releases/latest/download/arenterprise-linux-x64.arapp",
+      "src_url": "https://github.com/alrigroup/arenterprise.git"
+    },
+    "ardcbot": {
+      "name": "ardcbot",
+      "version": "0.2.03",
+      "runtime": "node",
+      "description": "Discord Bot Service integration for ALRIOS",
+      "author": "ALRIGROUP",
+      "download_url": "https://github.com/alrigroup/ardcbot/releases/latest/download/ardcbot.arapp",
+      "src_url": "https://github.com/alrigroup/ardcbot.git",
+      "download_url_linux": "https://github.com/alrigroup/ardcbot/releases/latest/download/ardcbot-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/ardcbot/releases/latest/download/ardcbot-windows-x64.arapp"
+    },
+    "alrigroup.web": {
+      "name": "alrigroup.web",
+      "version": "0.2.03",
+      "runtime": "node",
+      "description": "ALRIGROUP Official Corporate Portal and Ecosystem Showcase (Liquid Glass)",
+      "author": "ALRIGROUP",
+      "download_url": "https://github.com/alrigroup/alrigroup.web/releases/latest/download/alrigroup.web.arapp",
+      "src_url": "https://github.com/alrigroup/alrigroup.web.git",
+      "download_url_linux": "https://github.com/alrigroup/alrigroup.web/releases/latest/download/alrigroup.web-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/alrigroup.web/releases/latest/download/alrigroup.web-windows-x64.arapp"
+    },
+    "detroit.web": {
+      "name": "detroit.web",
+      "version": "0.2.03",
+      "runtime": "node",
+      "description": "Detroit Web Application Platform",
+      "author": "ALRIGROUP",
+      "download_url": "https://github.com/alrigroup/detroit.web/releases/latest/download/detroit.web.arapp",
+      "src_url": "https://github.com/alrigroup/detroit.web.git",
+      "download_url_linux": "https://github.com/alrigroup/detroit.web/releases/latest/download/detroit.web-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/detroit.web/releases/latest/download/detroit.web-windows-x64.arapp"
+    },
+    "fourtech.web": {
+      "name": "fourtech.web",
+      "version": "0.2.03",
+      "runtime": "node",
+      "description": "FourTech Web Application Platform",
+      "author": "ALRIGROUP",
+      "download_url": "https://github.com/alrigroup/fourtech.web/releases/latest/download/fourtech.web.arapp",
+      "src_url": "https://github.com/alrigroup/fourtech.web.git",
+      "download_url_linux": "https://github.com/alrigroup/fourtech.web/releases/latest/download/fourtech.web-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/fourtech.web/releases/latest/download/fourtech.web-windows-x64.arapp"
+    },
+    "arenterprise.web": {
+      "name": "arenterprise.web",
+      "version": "0.2.03",
+      "runtime": "node",
+      "description": "ALRI Enterprise Web Portal and Management Dashboard",
+      "author": "ALRIGROUP",
+      "download_url": "https://github.com/alrigroup/arenterprise.web/releases/latest/download/arenterprise.web.arapp",
+      "src_url": "https://github.com/alrigroup/arenterprise.web.git",
+      "download_url_linux": "https://github.com/alrigroup/arenterprise.web/releases/latest/download/arenterprise.web-linux-x64.arapp",
+      "download_url_windows": "https://github.com/alrigroup/arenterprise.web/releases/latest/download/arenterprise.web-windows-x64.arapp"
+    },
+    "sc-zerohum": {
+      "name": "sc-zerohum",
+      "version": "0.1.4",
+      "runtime": "native",
+      "description": "SC-ZeroHum Backend for assessment and OMR workflows",
+      "author": "ALRIGROUP",
+      "download_url": "https://github.com/alrigroup/sc-zerohum/releases/latest/download/sc-zerohum.arapp",
+      "download_url_linux": "https://github.com/alrigroup/sc-zerohum/releases/latest/download/sc-zerohum-linux-x64.arapp",
+      "src_url": "https://github.com/alrigroup/sc-zerohum.git"
+    },
+    "sc-zerohum.web": {
+      "name": "sc-zerohum.web",
+      "version": "0.1.8",
+      "runtime": "native",
+      "description": "SC-ZeroHum React SPA packaged for the ARWE runtime",
+      "author": "ALRIGROUP",
+      "download_url": "https://github.com/alrigroup/sc-zerohum.web/releases/latest/download/sc-zerohum.web.arapp",
+      "download_url_linux": "https://github.com/alrigroup/sc-zerohum.web/releases/latest/download/sc-zerohum.web-linux-x64.arapp",
+      "src_url": "https://github.com/alrigroup/sc-zerohum.web.git"
+    }
+  }
+}
