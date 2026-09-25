@@ -4,10 +4,7 @@ add_executable(arcore
     vault_loader.c
     ctl.c
     hotreload.c
-    arapp_parser.c
     ar_path.c
-    log.c
-    ${CMAKE_SOURCE_DIR}/src/tools/zip.c
 )
 target_include_directories(arcore PRIVATE
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/include
@@ -17,7 +14,7 @@ target_include_directories(arcore PRIVATE
 )
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
-target_link_libraries(arcore PRIVATE arkernel OpenSSL::SSL OpenSSL::Crypto Threads::Threads ${CMAKE_DL_LIBS})
+target_link_libraries(arcore PRIVATE arkernel arlog ararchive armanifest OpenSSL::SSL OpenSSL::Crypto Threads::Threads ${CMAKE_DL_LIBS})
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_options(arcore PRIVATE -rdynamic "-Wl,-rpath,$ORIGIN/lib")
 endif()
