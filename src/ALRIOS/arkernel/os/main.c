@@ -1,11 +1,7 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
-
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
 #include "aros_hal.h"
 #include <stddef.h>
 #include <stdint.h>
@@ -60,6 +56,7 @@ static int  os_socket_recv(int fd, void *buf, size_t len);
 static void os_socket_close(int fd);
 static int  os_socket_set_nonblock(int fd);
 static int  os_socket_set_recv_timeout(int fd, int timeout_ms);
+static int  os_socket_set_timeouts(int fd, int timeout_sec);
 
 static int   os_fs_mkdir(const char *path);
 static int   os_fs_rmdir(const char *path);
@@ -269,6 +266,11 @@ int ar_socket_set_nonblock(int fd) {
 int ar_socket_set_recv_timeout(int fd, int timeout_ms) {
     if (fd < 0) return -1;
     return os_socket_set_recv_timeout(fd, timeout_ms);
+}
+
+int ar_socket_set_timeouts(int fd, int timeout_sec) {
+    if (fd < 0) return -1;
+    return os_socket_set_timeouts(fd, timeout_sec);
 }
 
 int ar_fs_mkdir(const char *path) {

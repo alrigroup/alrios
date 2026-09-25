@@ -1,11 +1,7 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
-
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
 #include "ar_kernel.h"
 #include "aros_hal.h"
 #include "ctl.h"
@@ -25,52 +21,6 @@
 #include <process.h>
 #include <shellapi.h>
 #endif
-
-static void escalate_privileges(void) {
-#ifdef __linux__
-  if (geteuid() != 0) {
-    alri_printf("  \033[33m⚡\033[0m Root privileges required. Re-running with "
-                "sudo...\n\n");
-    char exe[1024];
-    ssize_t len = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
-    if (len > 0) {
-      exe[len] = '\0';
-      char *args[] = {"sudo", exe, NULL};
-      execvp("sudo", args);
-      alri_printf(
-          "  \033[31m✗\033[0m Failed to escalate: sudo not available?\n");
-    }
-  }
-#elif defined(_WIN32)
-  static int elevated = 0;
-  if (!elevated) {
-    HANDLE hToken = NULL;
-    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
-      TOKEN_ELEVATION elev;
-      DWORD size = sizeof(elev);
-      if (GetTokenInformation(hToken, TokenElevation, &elev, size, &size)) {
-        if (!elev.TokenIsElevated) {
-          alri_printf("  \033[33m⚡\033[0m Administrator privileges required. "
-                      "Re-launching...\n\n");
-          char exe[MAX_PATH];
-          GetModuleFileNameA(NULL, exe, sizeof(exe));
-          SHELLEXECUTEINFOA sei = {0};
-          sei.cbSize = sizeof(sei);
-          sei.lpVerb = "runas";
-          sei.lpFile = exe;
-          sei.nShow = SW_NORMAL;
-          if (ShellExecuteExA(&sei)) {
-            exit(0);
-          }
-          alri_printf("  \033[31m✗\033[0m Failed to escalate privileges.\n");
-        }
-      }
-      CloseHandle(hToken);
-    }
-    elevated = 1;
-  }
-#endif
-}
 
 static void drop_privileges(void) {
 #ifdef __linux__

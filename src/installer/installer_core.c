@@ -1,10 +1,10 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * ==================================================================== */
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
 
 #include "installer_core.h"
 #include "runtimes.h"
@@ -251,17 +251,17 @@ int installer_extract_payload(const installer_config_t *cfg, const installer_cal
         }
     } else {
         /* 2. Procurar pasta arcore local (modo de desenvolvimento / repositorio) */
-        char local_arcore[1024];
+        char local_arcore[2048];
         snprintf(local_arcore, sizeof(local_arcore), "arcore");
         if (file_exists(local_arcore)) {
             log_msg(cb, user_data, "Instalando a partir dos fontes locais (arcore/)...\n");
-            char dest_arcore[1024];
+            char dest_arcore[2048];
             snprintf(dest_arcore, sizeof(dest_arcore), "%s%carcore", cfg->dest_dir, AR_PATH_SEP);
             copy_dir_recursive(local_arcore, dest_arcore);
         } else {
             /* 3. Baixar versao de release do GitHub */
             log_msg(cb, user_data, "Baixando ultima versao do ALRIOS do GitHub...\n");
-            char staging[1024], zip_file[1024];
+            char staging[2048], zip_file[2048];
             snprintf(staging, sizeof(staging), "%s%c.staging", cfg->dest_dir, AR_PATH_SEP);
             mkdir_p(staging);
 #ifdef _WIN32
@@ -339,7 +339,6 @@ int installer_register_path(const char *dest_dir, const installer_callbacks_t *c
         SendMessageTimeoutA(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)"Environment", SMTO_ABORTIFHUNG, 3000, &dwResult);
     }
 #else
-    char target_bin[1024];
     int is_root = (geteuid() == 0);
     const char *bin_dir = is_root ? "/usr/local/bin" : NULL;
 
@@ -419,6 +418,7 @@ int installer_register_path(const char *dest_dir, const installer_callbacks_t *c
 /* ─── GCC Toolchain Auto-Provisioning ─── */
 
 int installer_provision_gcc(const char *dest_dir, const installer_callbacks_t *cb, void *user_data) {
+    (void)dest_dir;
     if (installer_check_tool_exists("gcc")) {
         log_msg(cb, user_data, "✓ Compilador GCC C/C++ ja disponivel no sistema.\n");
         return 0;
@@ -502,21 +502,21 @@ int installer_provision_runtime(const char *dest_dir, const char *rt_name, const
     for (size_t i = 0; i < RUNTIME_COUNT; i++) {
         if (strcmp(available_runtimes[i].name, rt_name) == 0) {
             log_msg(cb, user_data, "-> Provisionando runtime %s (v%s)...\n", rt_name, available_runtimes[i].version);
-            char run_dir[1024];
+            char run_dir[2048];
             snprintf(run_dir, sizeof(run_dir), "%s%carcore%crun", dest_dir, AR_PATH_SEP, AR_PATH_SEP);
             mkdir_p(run_dir);
 
-            char staging[1024];
+            char staging[2048];
             snprintf(staging, sizeof(staging), "%s%c.staging%c%s", dest_dir, AR_PATH_SEP, AR_PATH_SEP, rt_name);
             mkdir_p(staging);
 
 #ifdef _WIN32
             const char *url = available_runtimes[i].url_windows;
-            char dest_file[1024];
+            char dest_file[2048];
             snprintf(dest_file, sizeof(dest_file), "%s\\rt.zip", staging);
 #else
             const char *url = available_runtimes[i].url_linux;
-            char dest_file[1024];
+            char dest_file[2048];
             snprintf(dest_file, sizeof(dest_file), "%s/rt.tar.gz", staging);
 #endif
             log_msg(cb, user_data, "   Baixando %s de %s...\n", rt_name, url);

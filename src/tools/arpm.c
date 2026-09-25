@@ -1,10 +1,11 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
 
 #include "ar_ipc.h"
 #include "aros_hal.h"
@@ -252,7 +253,7 @@ static int calc_file_sha256(const char *path, char *out_hex) {
     EVP_MD_CTX_free(ctx);
 
     for (unsigned int i = 0; i < md_len; i++) {
-        sprintf(out_hex + (i * 2), "%02x", md[i]);
+        snprintf(out_hex + (i * 2), 3, "%02x", md[i]);
     }
     out_hex[md_len * 2] = '\0';
     return 0;
@@ -717,7 +718,7 @@ static int cmd_install(int argc, char **argv) {
             }
             const char *repo_name = strrchr(repo_path, '/');
             repo_name = repo_name ? repo_name + 1 : repo_path;
-            strncpy(app_name, repo_name, sizeof(app_name) - 1);
+            snprintf(app_name, sizeof(app_name), "%s", repo_name);
 
             if (strcmp(tag, "latest") == 0) {
                 snprintf(download_url_buf, sizeof(download_url_buf),
@@ -906,7 +907,7 @@ static int cmd_install_src(int argc, char **argv) {
     char version[64] = "0.2.03";
     read_manifest_info(manifest_path, app_name, sizeof(app_name), version, sizeof(version));
     if (app_name[0] == '\0') {
-        strncpy(app_name, app_hint[0] ? app_hint : "app", sizeof(app_name) - 1);
+        snprintf(app_name, sizeof(app_name), "%s", app_hint[0] ? app_hint : "app");
     }
 
     printf("-> Compilando e empacotando aplicativo '%s' (v%s) via armake...\n", app_name, version);
@@ -1030,7 +1031,7 @@ static int cmd_update(int argc, char **argv) {
                 const char *ext = strrchr(ent->d_name, '.');
                 if (ext && strcmp(ext, ".arapp") == 0) {
                     char app[128];
-                    strncpy(app, ent->d_name, sizeof(app) - 1);
+                    snprintf(app, sizeof(app), "%s", ent->d_name);
                     char *dot = strstr(app, ".arapp");
                     if (dot) *dot = '\0';
                     char *sub_argv[] = {"arpm", "install", app, "--force"};
@@ -1086,7 +1087,7 @@ static int cmd_list(void) {
             const char *ext = strrchr(ent->d_name, '.');
             if (ext && strcmp(ext, ".arapp") == 0) {
                 char app[128];
-                strncpy(app, ent->d_name, sizeof(app) - 1);
+                snprintf(app, sizeof(app), "%s", ent->d_name);
                 char *dot = strstr(app, ".arapp");
                 if (dot) *dot = '\0';
 

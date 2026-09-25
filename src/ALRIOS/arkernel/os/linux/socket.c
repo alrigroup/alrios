@@ -1,11 +1,7 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
-
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -101,6 +97,19 @@ static int os_socket_set_recv_timeout(int fd, int timeout_ms) {
     tv.tv_usec = (timeout_ms % 1000) * 1000;
     return setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO,
                       (const char *)&tv, sizeof(tv)) == 0 ? 0 : -1;
+}
+
+static int os_socket_set_timeouts(int fd, int timeout_sec) {
+    struct timeval tv;
+    tv.tv_sec = timeout_sec;
+    tv.tv_usec = 0;
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof(tv)) < 0) {
+        return -1;
+    }
+    if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (const char *)&tv, sizeof(tv)) < 0) {
+        return -1;
+    }
+    return 0;
 }
 
 static void os_socket_close(int fd) {

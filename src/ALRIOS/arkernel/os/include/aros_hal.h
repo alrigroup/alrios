@@ -1,11 +1,7 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
-
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
 #ifndef AROS_HAL_H
 #define AROS_HAL_H
 
@@ -58,6 +54,7 @@ int  ar_socket_send(int fd, const void *data, size_t len);
 int  ar_socket_recv(int fd, void *buf, size_t len);
 int  ar_socket_set_nonblock(int fd);
 int  ar_socket_set_recv_timeout(int fd, int timeout_ms);
+int  ar_socket_set_timeouts(int fd, int timeout_sec);
 void ar_socket_close(int fd);
 
 int  ar_fs_mkdir(const char *path);

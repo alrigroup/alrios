@@ -1,11 +1,7 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
-
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
 #include "zip.h"
 #include <stdlib.h>
 #include <string.h>
@@ -125,21 +121,34 @@ int zip_add_entry(zip_writer_t *z, const char *filename, int method) {
     ar_write_le16(hdr + 8, method);            /* compression method */
     ar_write_le16(hdr + 26, (unsigned short)name_len); /* filename len */
 
-    int padding = 0; /* no data descriptor; we know sizes up front (STORED) */
     long offset = ftell(z->fp);
 
     fwrite(hdr, 1, 30, z->fp);
     fwrite(filename, 1, name_len, z->fp);
 
     /* grow metadata arrays */
+    size_t new_count = (size_t)z->file_count + 1;
+    void *tmp_offsets = realloc(z->offsets, new_count * sizeof(long));
+    if (!tmp_offsets) return -1;
+    z->offsets = (long *)tmp_offsets;
+
+    void *tmp_names = realloc(z->names, new_count * sizeof(char *));
+    if (!tmp_names) return -1;
+    z->names = (char **)tmp_names;
+
+    void *tmp_crcs = realloc(z->crcs, new_count * sizeof(int));
+    if (!tmp_crcs) return -1;
+    z->crcs = (int *)tmp_crcs;
+
+    void *tmp_sizes_c = realloc(z->sizes_comp, new_count * sizeof(int));
+    if (!tmp_sizes_c) return -1;
+    z->sizes_comp = (int *)tmp_sizes_c;
+
+    void *tmp_sizes_u = realloc(z->sizes_uncomp, new_count * sizeof(int));
+    if (!tmp_sizes_u) return -1;
+    z->sizes_uncomp = (int *)tmp_sizes_u;
+
     z->file_count++;
-    z->offsets = realloc(z->offsets, z->file_count * sizeof(long));
-    z->names = realloc(z->names, z->file_count * sizeof(char *));
-    z->crcs = realloc(z->crcs, z->file_count * sizeof(int));
-    z->sizes_comp = realloc(z->sizes_comp, z->file_count * sizeof(int));
-    z->sizes_uncomp = realloc(z->sizes_uncomp, z->file_count * sizeof(int));
-    if (!z->offsets || !z->names || !z->crcs || !z->sizes_comp || !z->sizes_uncomp)
-        return -1;
 
     z->offsets[z->file_count - 1] = offset;
     z->names[z->file_count - 1] = strdup(filename);
@@ -166,7 +175,6 @@ int zip_close(zip_writer_t *z) {
 
     /* patch local headers with correct CRC and sizes */
     for (int i = 0; i < z->file_count; i++) {
-        long pos = ftell(z->fp);
         fseek(z->fp, z->offsets[i] + 14, SEEK_SET);
         unsigned char buf[12];
         write_le32(buf, (unsigned int)z->crcs[i]);
@@ -393,6 +401,18 @@ zip_reader_t *zip_reader_open(const char *path) {
     z->sizes_comp = calloc(z->entry_count, sizeof(int));
     z->sizes_uncomp = calloc(z->entry_count, sizeof(int));
 
+    if (!z->offsets || !z->names || !z->methods || !z->crcs || !z->sizes_comp || !z->sizes_uncomp) {
+        free(z->offsets);
+        free(z->names);
+        free(z->methods);
+        free(z->crcs);
+        free(z->sizes_comp);
+        free(z->sizes_uncomp);
+        fclose(z->fp);
+        free(z);
+        return NULL;
+    }
+
     fseek(z->fp, (long)cd_offset, SEEK_SET);
     for (int i = 0; i < z->entry_count; i++) {
         unsigned char cd[46];
@@ -437,7 +457,7 @@ int zip_reader_entry(zip_reader_t *z, int idx, zip_entry_t *out) {
 
 static void mkdirp(const char *path) {
     char tmp[1024];
-    strncpy(tmp, path, sizeof(tmp) - 1);
+    snprintf(tmp, sizeof(tmp), "%s", path);
     for (char *p = tmp + 1; *p; p++) {
         if (*p == '/' || *p == '\\') {
             *p = '\0';

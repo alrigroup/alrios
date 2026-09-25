@@ -1,11 +1,7 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
-
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
 #include <windows.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -20,14 +16,29 @@ static int os_process_create(const char *path, char *const argv[]) {
             cmdlen += strlen(argv[i]) + 4;
     }
 
-    char *cmd = malloc(cmdlen);
+    char *cmd = (char *)malloc(cmdlen);
     if (!cmd) return -ENOMEM;
 
     char *p = cmd;
-    p += sprintf(p, "\"%s\"", path);
+    size_t rem = cmdlen;
+    int written = snprintf(p, rem, "\"%s\"", path);
+    if (written < 0 || (size_t)written >= rem) {
+        free(cmd);
+        return -EINVAL;
+    }
+    p += written;
+    rem -= (size_t)written;
+
     if (argv) {
-        for (int i = start; argv[i]; i++)
-            p += sprintf(p, " \"%s\"", argv[i]);
+        for (int i = start; argv[i]; i++) {
+            written = snprintf(p, rem, " \"%s\"", argv[i]);
+            if (written < 0 || (size_t)written >= rem) {
+                free(cmd);
+                return -EINVAL;
+            }
+            p += written;
+            rem -= (size_t)written;
+        }
     }
 
     STARTUPINFOA si = {0};
