@@ -44,3 +44,18 @@ endif()
 if(WIN32)
     target_link_libraries(alrios PRIVATE ws2_32)
 endif()
+
+# Offline Sovereign Certificate Authority CLI (PKI Tier 1/2)
+add_executable(alrios-ca
+    ${CMAKE_SOURCE_DIR}/src/commands/alrios-ca/main.c
+)
+target_include_directories(alrios-ca PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(alrios-ca PRIVATE arpki arcrypto OpenSSL::Crypto)
+set_target_properties(alrios-ca PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore"
+)

@@ -65,6 +65,15 @@ set_target_properties(test_certificate PROPERTIES
 )
 add_test(NAME test_certificate COMMAND test_certificate)
 
+add_executable(test_ca_chain integration/pki/test_ca_chain.c)
+target_link_libraries(test_ca_chain PRIVATE arpki OpenSSL::Crypto)
+set_target_properties(test_ca_chain PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_ca_chain COMMAND test_ca_chain)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
