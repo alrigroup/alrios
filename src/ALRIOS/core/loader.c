@@ -43,31 +43,29 @@
 static char temp_dirs[MAX_TEMP_DIRS][1024];
 static int temp_dir_count = 0;
 
-static void *proc_group = NULL;
+static ar_supervisor_t g_supervisor_ctx;
+static int g_supervisor_ctx_ready = 0;
 
-#define AR_MAX_APPS 64
-typedef enum {
-    APP_STOPPED,
-    APP_RUNNING,
-    APP_CRASHED
-} loader_app_state_t;
+static void ensure_supervisor_context(void) {
+    if (!g_supervisor_ctx_ready) {
+        memset(&g_supervisor_ctx, 0, sizeof(g_supervisor_ctx));
+        g_supervisor_ctx.app_mutex = ar_mutex_create();
+        g_supervisor_ctx_ready = 1;
+    }
+}
 
-typedef struct {
-    char name[AR_APP_NAME_MAX];
-    char dir[1024];
-    ar_app_manifest_t m;
-    int pid;
-    loader_app_state_t state;
-    int is_native_service;
-} loader_app_t;
+ar_supervisor_t *loader_get_supervisor_context(void) {
+    ensure_supervisor_context();
+    return &g_supervisor_ctx;
+}
 
-static loader_app_t apps[AR_MAX_APPS];
-static int app_count = 0;
-static void *app_mutex = NULL;
-static int g_refresh_scan = 0;
-
-static char autostart_apps[AR_MAX_APPS][AR_APP_NAME_MAX];
-static int autostart_count = 0;
+#define apps (loader_get_supervisor_context()->apps)
+#define app_count (loader_get_supervisor_context()->app_count)
+#define app_mutex (loader_get_supervisor_context()->app_mutex)
+#define proc_group (loader_get_supervisor_context()->proc_group)
+#define g_refresh_scan (loader_get_supervisor_context()->refresh_scan)
+#define autostart_apps (loader_get_supervisor_context()->autostart_apps)
+#define autostart_count (loader_get_supervisor_context()->autostart_count)
 
 static void app_lock(void) {
     if (!app_mutex) app_mutex = ar_mutex_create();
