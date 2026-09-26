@@ -36,8 +36,14 @@ register_alrios_test(test_http_serializer test_http_serializer.c)
 register_alrios_test(test_memfd_creation test_memfd_creation.c)
 register_alrios_test(test_memfd_seals test_memfd_seals.c)
 register_alrios_test(test_vault test_vault.c)
-register_alrios_test(tc_vault_006 tc_vault_006.c)
+add_executable(tc_vault_006 tc_vault_006.c)
 target_link_libraries(tc_vault_006 PRIVATE arvault_legacy)
+set_target_properties(tc_vault_006 PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME tc_vault_006 COMMAND tc_vault_006)
 register_alrios_test(test_hooks test_hooks.c)
 register_alrios_test(test_fd_pass test_fd_pass.c)
 register_alrios_test(test_atomic_swap test_atomic_swap.c)
