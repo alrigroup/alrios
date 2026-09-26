@@ -1,8 +1,12 @@
 add_executable(armake
     armake.c
 )
-target_include_directories(armake PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src/ALRIOS/core)
-target_link_libraries(armake PRIVATE ararchive armanifest)
+target_include_directories(armake PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
+)
+target_link_libraries(armake PRIVATE ararchive armanifest arhal_isolation)
 set_target_properties(armake PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"
@@ -55,6 +59,21 @@ target_include_directories(alrios-ca PRIVATE
 )
 target_link_libraries(alrios-ca PRIVATE arpki arcrypto OpenSSL::Crypto)
 set_target_properties(alrios-ca PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore"
+)
+
+# Isolated Cryptographic Notary CLI (PKI / arsign)
+add_executable(arsign
+    ${CMAKE_SOURCE_DIR}/src/commands/arsign/main.c
+)
+target_include_directories(arsign PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(arsign PRIVATE arpki arcrypto OpenSSL::Crypto)
+set_target_properties(arsign PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore"
