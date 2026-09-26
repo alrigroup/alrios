@@ -5,6 +5,37 @@
 #ifndef AR_LOADER_H
 #define AR_LOADER_H
 
+#include "arapp_parser.h"
+
+#define AR_MAX_APPS 64
+
+typedef enum {
+    APP_STOPPED,
+    APP_RUNNING,
+    APP_CRASHED
+} loader_app_state_t;
+
+typedef struct {
+    char name[AR_APP_NAME_MAX];
+    char dir[1024];
+    ar_app_manifest_t m;
+    int pid;
+    loader_app_state_t state;
+    int is_native_service;
+} loader_app_t;
+
+typedef struct ar_supervisor {
+    loader_app_t apps[AR_MAX_APPS];
+    int app_count;
+    void *app_mutex;
+    void *proc_group;
+    int refresh_scan;
+    char autostart_apps[AR_MAX_APPS][AR_APP_NAME_MAX];
+    int autostart_count;
+} ar_supervisor_t;
+
+ar_supervisor_t *loader_get_supervisor_context(void);
+
 void loader_get_apps_dir(char *buf, int size);
 void loader_get_run_dir(char *buf, int size);
 void loader_get_base_dir(char *buf, int size);
