@@ -135,6 +135,7 @@ add_library(arpki STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/manifest_canon.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/preimage.c
     ${CMAKE_SOURCE_DIR}/src/libraries/pki/certificate.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/pki/issuer.c
 )
 set_property(TARGET arpki PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arpki PUBLIC
@@ -206,6 +207,7 @@ add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/manifest_canon.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/preimage.c
     ${CMAKE_SOURCE_DIR}/src/libraries/pki/certificate.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/pki/issuer.c
 )
 set_property(TARGET arsdk PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arsdk PUBLIC
