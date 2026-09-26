@@ -55,3 +55,33 @@ register_alrios_test(test_cgroups_init test_cgroups_init.c)
 register_alrios_test(test_ns_unshare test_ns_unshare.c)
 register_alrios_test(test_manifest_canon test_manifest_canon.c)
 register_alrios_test(test_preimage test_preimage.c)
+
+add_executable(test_certificate unit/pki/test_certificate.c)
+target_link_libraries(test_certificate PRIVATE arpki)
+set_target_properties(test_certificate PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_certificate COMMAND test_certificate)
+
+option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
+if(ALRIOS_ENABLE_FUZZING)
+    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "ALRIOS_ENABLE_FUZZING requires Clang with LibFuzzer")
+    endif()
+    add_executable(fuzz_certificate
+        fuzz/fuzz_certificate.c
+        ${CMAKE_SOURCE_DIR}/src/libraries/pki/certificate.c
+    )
+    target_link_libraries(fuzz_certificate PRIVATE arcrypto)
+    target_include_directories(fuzz_certificate PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_options(fuzz_certificate PRIVATE
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer
+    )
+    target_link_options(fuzz_certificate PRIVATE
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer
+    )
+endif()

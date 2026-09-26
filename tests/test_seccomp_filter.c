@@ -97,8 +97,20 @@ int main(void) {
     test_whitelisted_and_unlisted_syscalls();
     test_blacklisted_kill_process();
 
-    /* Direct filter application in main process */
-    assert(alrios_sandbox_apply_seccomp() == ALRIOS_SANDBOX_OK);
+    /* Child process test for filter application to avoid breaking ASan leak-checker */
+    pid_t pid = fork();
+    assert(pid >= 0);
+    if (pid == 0) {
+        if (alrios_sandbox_apply_seccomp() != ALRIOS_SANDBOX_OK) {
+            _exit(1);
+        }
+        _exit(0);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    assert(WIFEXITED(status));
+    assert(WEXITSTATUS(status) == 0);
+
     printf("TASK-017 (Seccomp-BPF Assembly Filter): PASS\n");
     return 0;
 }

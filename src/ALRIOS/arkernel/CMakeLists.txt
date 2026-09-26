@@ -134,12 +134,14 @@ target_include_directories(aripc_v2 PUBLIC
 add_library(arpki STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/manifest_canon.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/preimage.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/pki/certificate.c
 )
 set_property(TARGET arpki PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arpki PUBLIC
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/alrios
 )
+target_link_libraries(arpki PUBLIC arcrypto)
 
 # 6. ardeploy (Zero-Downtime Deployment, SCM_RIGHTS, Symlinks & Deltas)
 add_library(ardeploy STATIC
@@ -203,6 +205,7 @@ add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/sandbox/ns_unshare.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/manifest_canon.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/preimage.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/pki/certificate.c
 )
 set_property(TARGET arsdk PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arsdk PUBLIC

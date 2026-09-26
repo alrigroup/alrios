@@ -102,6 +102,18 @@ int alrios_sandbox_apply_seccomp(void) {
         BPF_JUMP(BPF_JMP | BPF_K | BPF_JEQ, SYS_exit_group, 0, 1),
         BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
 
+        BPF_JUMP(BPF_JMP | BPF_K | BPF_JEQ, SYS_exit, 0, 1),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+
+        BPF_JUMP(BPF_JMP | BPF_K | BPF_JEQ, SYS_sigaltstack, 0, 1),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+
+        BPF_JUMP(BPF_JMP | BPF_K | BPF_JEQ, SYS_rt_sigaction, 0, 1),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+
+        BPF_JUMP(BPF_JMP | BPF_K | BPF_JEQ, SYS_rt_sigprocmask, 0, 1),
+        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+
         BPF_JUMP(BPF_JMP | BPF_K | BPF_JEQ, SYS_clock_gettime, 0, 1),
         BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
 
