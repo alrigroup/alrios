@@ -22,6 +22,14 @@ target_include_directories(armanifest PUBLIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
 )
 
+add_library(arhal_isolation STATIC
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/isolation.c
+)
+set_property(TARGET arhal_isolation PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arhal_isolation PUBLIC
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
+)
+
 add_library(arkernel
     os/main.c
     svc/svc_manager.c
@@ -136,13 +144,16 @@ add_library(arpki STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/preimage.c
     ${CMAKE_SOURCE_DIR}/src/libraries/pki/certificate.c
     ${CMAKE_SOURCE_DIR}/src/libraries/pki/issuer.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/pki/notary.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/pki/notary_isolation.c
 )
 set_property(TARGET arpki PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arpki PUBLIC
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/alrios
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
 )
-target_link_libraries(arpki PUBLIC arcrypto)
+target_link_libraries(arpki PUBLIC arcrypto arhal_isolation)
 
 # 6. ardeploy (Zero-Downtime Deployment, SCM_RIGHTS, Symlinks & Deltas)
 add_library(ardeploy STATIC

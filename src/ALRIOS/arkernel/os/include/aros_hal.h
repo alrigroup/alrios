@@ -60,6 +60,12 @@ void ar_socket_close(int fd);
 int  ar_fs_mkdir(const char *path);
 int  ar_fs_rmdir(const char *path);
 int  ar_fs_exists(const char *path);
+int  ar_fs_restrict_to_paths(const char *const *read_roots,
+                            size_t read_count,
+                            const char *const *write_roots,
+                            size_t write_count);
+
+int  ar_process_enable_noexec_confinement(void);
 
 void *ar_mem_alloc(size_t size);
 void  ar_mem_free(void *ptr);

@@ -9,6 +9,7 @@
 
 #include "zip.h"
 #include "arapp_parser.h"
+#include "aros_hal.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -28,6 +29,8 @@
     #include <unistd.h>
     #include <sys/stat.h>
     #include <sys/wait.h>
+    #include <limits.h>
+    #include <errno.h>
     #include <ctype.h>
     #define SEPARATOR '/'
     #define OTHER_SEP '\\'
@@ -50,6 +53,111 @@ static int safe_exec_shell(const char *cmd) {
     waitpid(pid, &status, 0);
     return (WIFEXITED(status)) ? WEXITSTATUS(status) : -1;
 #endif
+}
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
+static int make_absolute_path(const char *path, char *out, size_t out_cap) {
+    if (!path || !out || out_cap == 0U) return -1;
+#ifdef _WIN32
+    DWORD n = GetFullPathNameA(path, (DWORD)out_cap, out, NULL);
+    if (n == 0 || n >= out_cap) return -1;
+    return 0;
+#else
+    char resolved[PATH_MAX];
+    if (realpath(path, resolved)) {
+        snprintf(out, out_cap, "%s", resolved);
+        return 0;
+    }
+    if (errno == ENOENT) {
+        char parent[PATH_MAX];
+        char *last;
+        snprintf(parent, sizeof(parent), "%s", path);
+        last = strrchr(parent, SEPARATOR);
+        if (last) {
+            *last = '\0';
+            if (parent[0] == '\0') snprintf(parent, sizeof(parent), "%c", SEPARATOR);
+            if (!realpath(parent, resolved)) return -1;
+            snprintf(out, out_cap, "%s%c%s", resolved, SEPARATOR, last + 1);
+            return 0;
+        }
+    }
+    return -1;
+#endif
+}
+
+static int path_is_within_root(const char *path, const char *root) {
+    size_t root_len;
+    if (!path || !root || !path[0] || !root[0]) return 0;
+    root_len = strlen(root);
+    if (strncmp(path, root, root_len) != 0) return 0;
+    return path[root_len] == '\0' || path[root_len] == SEPARATOR;
+}
+
+static int armake_enable_packaging_fs_boundary(const char *manifest_dir,
+                                               const char *packaging_dir,
+                                               const char *output_path) {
+#ifndef _WIN32
+    char manifest_abs[PATH_MAX];
+    char packaging_abs[PATH_MAX];
+    char output_abs[PATH_MAX];
+    char output_parent[PATH_MAX];
+    const char *read_roots[2];
+    const char *write_roots[2];
+    size_t read_count = 0U;
+    size_t write_count = 0U;
+    char *last;
+
+    if (make_absolute_path(manifest_dir, manifest_abs, sizeof(manifest_abs)) != 0 ||
+        make_absolute_path(packaging_dir ? packaging_dir : manifest_dir, packaging_abs, sizeof(packaging_abs)) != 0 ||
+        make_absolute_path(output_path, output_abs, sizeof(output_abs)) != 0) {
+        return -1;
+    }
+
+    snprintf(output_parent, sizeof(output_parent), "%s", output_abs);
+    last = strrchr(output_parent, SEPARATOR);
+    if (!last) {
+        return -1;
+    }
+    if (last == output_parent) {
+        output_parent[1] = '\0';
+    } else {
+        *last = '\0';
+    }
+
+    read_roots[read_count++] = manifest_abs;
+    if (!path_is_within_root(packaging_abs, manifest_abs) &&
+        !path_is_within_root(manifest_abs, packaging_abs)) {
+        read_roots[read_count++] = packaging_abs;
+    }
+
+    write_roots[write_count++] = output_parent;
+    if (path_is_within_root(output_abs, manifest_abs)) {
+        write_roots[write_count++] = manifest_abs;
+    }
+    return ar_fs_restrict_to_paths(read_roots, read_count, write_roots, write_count);
+#else
+    (void)manifest_dir;
+    (void)packaging_dir;
+    (void)output_path;
+    return -ENOTSUP;
+#endif
+}
+
+static int armake_try_enable_packaging_fs_boundary(const char *manifest_dir,
+                                                   const char *packaging_dir,
+                                                   const char *output_path) {
+    int rc = armake_enable_packaging_fs_boundary(manifest_dir, packaging_dir, output_path);
+    if (rc == 0) {
+        return 0;
+    }
+    if (rc == -ENOTSUP || rc == -EINVAL || rc == -EPERM || rc == -EACCES) {
+        printf("[AVISO] Isolamento Landlock indisponivel para empacotamento (rc=%d); usando validacao canonica de caminhos.\n", rc);
+        return 0;
+    }
+    return rc;
 }
 
 static void mkdir_p(const char *path) {
@@ -158,6 +266,8 @@ static void walker_close(walker_t *w) {
 #endif
 }
 
+static int is_abs_path(const char *p);
+
 static int should_skip(const char *name) {
     if (strcmp(name, "CMakeLists.txt") == 0 || strcmp(name, "CMakeCache.txt") == 0)
         return 1;
@@ -170,6 +280,42 @@ static int should_skip(const char *name) {
             strcmp(ext, ".suo") == 0)
             return 1;
     }
+    return 0;
+}
+
+static int is_private_key_material_name(const char *name) {
+    const char *ext;
+    if (!name || !name[0]) return 1;
+    if (strstr(name, "..") != NULL) return 1;
+    if (strstr(name, "id_rsa") != NULL || strstr(name, "id_ed25519") != NULL) return 1;
+    if (strstr(name, "private") != NULL || strstr(name, "secret") != NULL) return 1;
+    ext = strrchr(name, '.');
+    if (!ext) return 0;
+    return strcmp(ext, ".pem") == 0 || strcmp(ext, ".key") == 0 ||
+           strcmp(ext, ".p12") == 0 || strcmp(ext, ".pfx") == 0;
+}
+
+static int validate_manifest_relative_path(const char *file) {
+    if (!file || !file[0]) return -1;
+    if (is_abs_path(file)) return -1;
+    if (file[0] == '/' || file[0] == '\\') return -1;
+    if (strstr(file, "..") != NULL) return -1;
+    if (is_private_key_material_name(file)) return -2;
+    return 0;
+}
+
+static int validate_pack_file_path(const char *root, const char *file) {
+    char fullpath[PATH_MAX];
+    char abs_path[PATH_MAX];
+    char abs_root[PATH_MAX];
+    int rc;
+    if (validate_manifest_relative_path(file) != 0) return -1;
+    snprintf(fullpath, sizeof(fullpath), "%s%c%s", root, SEPARATOR, file);
+    rc = make_absolute_path(root, abs_root, sizeof(abs_root));
+    if (rc != 0) return -1;
+    rc = make_absolute_path(fullpath, abs_path, sizeof(abs_path));
+    if (rc != 0) return -1;
+    if (!path_is_within_root(abs_path, abs_root)) return -1;
     return 0;
 }
 
@@ -271,6 +417,7 @@ static int walk_dir(const char *base, const char *rel_prefix,
     int is_dir;
     while (walker_next(&w, name, &is_dir)) {
         if (is_dir && (strcmp(name, ".git") == 0 || strcmp(name, ".svn") == 0)) continue;
+        if (is_private_key_material_name(name)) continue;
         if (!is_dir && should_skip(name)) continue;
         char fullpath[1024];
         snprintf(fullpath, sizeof(fullpath), "%s%c%s", base, SEPARATOR, name);
@@ -335,6 +482,7 @@ static char g_appdir[SNAP_PATH_MAX] = {0};
 static rm_entry_t g_rm[RM_CAP];
 static int g_rm_count = 0;
 
+static int is_abs_path(const char *p);
 static int is_abs_path(const char *p) {
 #ifdef _WIN32
     return (p[0] && p[1] == ':') || p[0] == '\\' || p[0] == '/';
@@ -640,6 +788,14 @@ static int cmd_pack(int argc, char **argv) {
     const char *input_dir = argv[2];
     const char *output = argv[3];
 
+    {
+        int iso_rc = armake_try_enable_packaging_fs_boundary(input_dir, input_dir, output);
+        if (iso_rc != 0) {
+            printf("[ERRO] Isolamento de filesystem indisponivel para pack (rc=%d)\n", iso_rc);
+            return 1;
+        }
+    }
+
     zip_writer_t *z = zip_open_arapp(output);
     if (!z) {
         printf("[ERRO] Nao foi possivel criar: %s\n", output);
@@ -771,6 +927,10 @@ static int pack_file(zip_writer_t *z, const char *dir, const char *file) {
         walk_dir(fullpath, prefix, z, fullpath, sizeof(fullpath));
         return 0;
     }
+    if (validate_pack_file_path(dir, file) != 0) {
+        printf("[ERRO] Caminho de manifesto rejeitado por politica de isolamento: %s\n", file);
+        return -1;
+    }
     snprintf(fullpath, sizeof(fullpath), "%s%c%s", dir, SEPARATOR, file);
     FILE *f = fopen(fullpath, "rb");
     if (!f) {
@@ -795,9 +955,17 @@ static int pack_file_list(zip_writer_t *z, const char *dir,
                           char files[AR_MAX_FILES][AR_FILE_PATH_MAX],
                           int count) {
     int packed = 0;
-    for (int i = 0; i < count; i++)
-        if (pack_file(z, dir, files[i]) == 0)
+    for (int i = 0; i < count; i++) {
+        if (validate_manifest_relative_path(files[i]) != 0) {
+            printf("[ERRO] Caminho de manifesto rejeitado por politica de isolamento: %s\n", files[i]);
+            return -1;
+        }
+        if (pack_file(z, dir, files[i]) == 0) {
             packed++;
+        } else {
+            return -1;
+        }
+    }
     return packed;
 }
 
@@ -1455,6 +1623,13 @@ static int cmd_build(int argc, char **argv) {
 
     /* --- Execute build steps / legacy command if specified --- */
     int has_build = (m.build.step_count > 0 || m.build.command[0]);
+    if (!has_build) {
+        int iso_rc = armake_try_enable_packaging_fs_boundary(app_dir_buf, app_dir_buf, output);
+        if (iso_rc != 0) {
+            printf("[ERRO] Isolamento de filesystem indisponivel para empacotamento (rc=%d)\n", iso_rc);
+            return 1;
+        }
+    }
     if (has_build) {
         set_g_appdir(app_dir_buf);
         g_snap_count = 0;
@@ -1536,6 +1711,7 @@ static int cmd_build(int argc, char **argv) {
     }
 
     int total_packed = 0;
+    int pack_failed = 0;
 
     if (has_build && m.file_count > 0) {
         /* Resolve staging e tenta empacotar de lá; fallback = dir do manifesto */
@@ -1577,7 +1753,11 @@ static int cmd_build(int argc, char **argv) {
 
         const char *pack_dir = staging_ok ? staging_resolved : app_dir_buf2;
         printf("[INFO] Empacotando de: %s\n", pack_dir);
-        total_packed += pack_file_list(z, pack_dir, m.files, m.file_count);
+        {
+            int packed_now = pack_file_list(z, pack_dir, m.files, m.file_count);
+            if (packed_now < 0) pack_failed = 1;
+            else total_packed += packed_now;
+        }
     } else if (has_build) {
         /* build.command legado sem files[]: pack dir inteiro */
         char path_buf[1024];
@@ -1601,36 +1781,59 @@ static int cmd_build(int argc, char **argv) {
             if (platform_entry[0]) {
                 if (pack_file(z, dir, platform_entry) == 0)
                     total_packed++;
+                else
+                    pack_failed = 1;
             }
 
             if (universal) {
                 char win_entry[AR_ENTRY_MAX] = {0}, lin_entry[AR_ENTRY_MAX] = {0};
                 ar_manifest_get_platform_entry(&m, "windows", win_entry, sizeof(win_entry));
                 ar_manifest_get_platform_entry(&m, "linux", lin_entry, sizeof(lin_entry));
-                if (win_entry[0] && pack_file(z, dir, win_entry) == 0) total_packed++;
-                if (lin_entry[0] && strcmp(lin_entry, win_entry) != 0 &&
-                    pack_file(z, dir, lin_entry) == 0) total_packed++;
+                if (win_entry[0]) {
+                    if (pack_file(z, dir, win_entry) == 0) total_packed++;
+                    else pack_failed = 1;
+                }
+                if (lin_entry[0] && strcmp(lin_entry, win_entry) != 0) {
+                    if (pack_file(z, dir, lin_entry) == 0) total_packed++;
+                    else pack_failed = 1;
+                }
             }
         }
 
         /* pack common files */
-        total_packed += pack_file_list(z, dir, m.files, m.file_count);
+        {
+            int packed_now = pack_file_list(z, dir, m.files, m.file_count);
+            if (packed_now < 0) pack_failed = 1;
+            else total_packed += packed_now;
+        }
 
         /* pack platform-specific files */
         if (universal) {
-            total_packed += pack_file_list(z, dir, m.files_windows, m.files_windows_count);
-            total_packed += pack_file_list(z, dir, m.files_linux, m.files_linux_count);
+            int packed_win = pack_file_list(z, dir, m.files_windows, m.files_windows_count);
+            int packed_lin = pack_file_list(z, dir, m.files_linux, m.files_linux_count);
+            if (packed_win < 0 || packed_lin < 0) pack_failed = 1;
+            else total_packed += packed_win + packed_lin;
             printf("[INFO] Alvo: universal (windows + linux)\n");
         } else {
             int is_win = is_platform(target, "windows");
+            int packed_now;
             if (is_win) {
-                total_packed += pack_file_list(z, dir, m.files_windows, m.files_windows_count);
+                packed_now = pack_file_list(z, dir, m.files_windows, m.files_windows_count);
                 printf("[INFO] Alvo: windows\n");
             } else {
-                total_packed += pack_file_list(z, dir, m.files_linux, m.files_linux_count);
+                packed_now = pack_file_list(z, dir, m.files_linux, m.files_linux_count);
                 printf("[INFO] Alvo: %s\n", target);
             }
+            if (packed_now < 0) pack_failed = 1;
+            else total_packed += packed_now;
         }
+    }
+
+    if (pack_failed) {
+        zip_close(z);
+        cleanup_and_report();
+        remove_file_(output);
+        return 1;
     }
 
     zip_close(z);
@@ -1841,5 +2044,5 @@ int main(int argc, char **argv) {
     else
         print_usage();
 
-    return 0;
+    return 1;
 }
