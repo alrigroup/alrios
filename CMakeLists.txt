@@ -20,10 +20,13 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore")
 
+find_package(OpenSSL REQUIRED)
+find_package(Threads REQUIRED)
+
+enable_testing()
+
 add_subdirectory(src/ALRIOS/arkernel)
 add_subdirectory(src/ALRIOS/core)
 add_subdirectory(src/tools)
 add_subdirectory(src/installer)
-
-find_package(OpenSSL REQUIRED)
-find_package(Threads REQUIRED)
+add_subdirectory(tests)

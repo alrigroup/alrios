@@ -12,6 +12,7 @@ int main(void) {
         .slot_path = "/opt/alrios/slots/alpha",
         .timeout_ms = 5000
     };
+    (void)inv;
     assert(alrios_hook_execute(&inv) == ALRIOS_HOOK_OK);
     printf("TASK-007 (Reactive Hooks): PASS\n");
     return 0;

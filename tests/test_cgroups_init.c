@@ -33,6 +33,7 @@ static void test_cgroups_creation_and_limits(void) {
     pid_t pid = 1234;
 
     int ret = alrios_sandbox_setup_cgroups(slot, pid);
+    (void)ret;
     assert(ret == ALRIOS_SANDBOX_OK);
 
     const char *root = alrios_sandbox_get_cgroup_root();
@@ -43,6 +44,7 @@ static void test_cgroups_creation_and_limits(void) {
 
     /* 1. Verify memory.max is 256MB */
     int n = snprintf(path, sizeof(path), "%s/%s/memory.max", root, slot);
+    (void)n;
     assert(n > 0 && (size_t)n < sizeof(path));
     read_file_exact(path, content, sizeof(content));
     assert(strcmp(content, "268435456\n") == 0);
@@ -76,11 +78,13 @@ static void test_custom_root_and_cleanup(void) {
 
     const char *slot = "slot_custom_42";
     pid_t pid = 7890;
+    (void)pid;
     assert(alrios_sandbox_setup_cgroups(slot, pid) == ALRIOS_SANDBOX_OK);
 
     char path[PATH_MAX];
     char content[128];
     int n = snprintf(path, sizeof(path), "%s/%s/pids.max", custom_root, slot);
+    (void)n;
     assert(n > 0 && (size_t)n < sizeof(path));
     read_file_exact(path, content, sizeof(content));
     assert(strcmp(content, "32\n") == 0);

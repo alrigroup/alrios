@@ -36,6 +36,7 @@ int main(void) {
     assert(offsetof(arapp_signatures_v1_t, padding) == 3373);
 
     arapp_header_v1_t hdr;
+    (void)hdr;
     hdr.prefix.magic[0] = ARAPP_MAGIC_0;
     hdr.prefix.magic[1] = ARAPP_MAGIC_1;
     hdr.prefix.magic[2] = ARAPP_MAGIC_2;

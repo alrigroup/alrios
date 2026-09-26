@@ -8,6 +8,7 @@
 
 int main(void) {
     alrios_node_policy_t p;
+    (void)p;
 
     /* 1. Sovereign Profile is fail-closed without a real ML-DSA backend. */
 #if defined(ALRIOS_HAVE_ML_DSA_65)
@@ -109,6 +110,7 @@ int main(void) {
 
     /* 6. Profile String Parsing */
     alrios_profile_t parsed;
+    (void)parsed;
     assert(alrios_profile_parse("--profile=sovereign", &parsed) == 0 && parsed == PROFILE_SOVEREIGN_MAX);
     assert(alrios_profile_parse("alrios.profile=sovereign", &parsed) == 0 && parsed == PROFILE_SOVEREIGN_MAX);
     assert(alrios_profile_parse("sovereign", &parsed) == 0 && parsed == PROFILE_SOVEREIGN_MAX);

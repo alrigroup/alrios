@@ -11,7 +11,11 @@ int alrios_manifest_canonicalize(const char *in_json, char *out_canon,
 static void expect_canonical(const char *input, const char *expected)
 {
     char output[1024];
-    assert(alrios_manifest_canonicalize(input, output, sizeof(output)) == 0);
+    memset(output, 0, sizeof(output));
+    int rc = alrios_manifest_canonicalize(input, output, sizeof(output));
+    (void)rc;
+    (void)expected;
+    assert(rc == 0);
     assert(strcmp(output, expected) == 0);
 }
 
@@ -38,6 +42,7 @@ static void test_strings_and_unicode(void)
 static void test_fail_closed(void)
 {
     char output[32] = "stale";
+    (void)output;
     assert(alrios_manifest_canonicalize(NULL, output, sizeof(output)) != 0);
     assert(alrios_manifest_canonicalize("{}", NULL, sizeof(output)) != 0);
     assert(alrios_manifest_canonicalize("{}", output, 0U) != 0);
