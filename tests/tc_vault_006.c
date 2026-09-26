@@ -31,6 +31,7 @@
 
 static void test_null_params(void) {
     char **envp = NULL;
+    (void)envp;
     vault_matrix_t vault;
     memset(&vault, 0, sizeof(vault));
 
@@ -45,6 +46,7 @@ static void test_null_params(void) {
 
 static void test_empty_vault(void) {
     char **envp = NULL;
+    (void)envp;
     vault_matrix_t vault;
     memset(&vault, 0, sizeof(vault));
     vault.count = 0;
@@ -55,6 +57,7 @@ static void test_empty_vault(void) {
 
 static void test_count_overflow(void) {
     char **envp = NULL;
+    (void)envp;
     vault_matrix_t vault;
     memset(&vault, 0, sizeof(vault));
     vault.count = VAULT_MAX_ENTRIES + 1;

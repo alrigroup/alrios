@@ -11,6 +11,10 @@ int main(void) {
     uint8_t digest[SHA512_DIGEST_LEN] = {0};
     uint8_t signature[ML_DSA_65_SIGNATURE_LEN] = {0};
 
+    (void)public_key;
+    (void)digest;
+    (void)signature;
+
 #if defined(ALRIOS_HAVE_ML_DSA_65)
     int result = alrios_ml_dsa_65_verify(public_key, digest, signature);
     assert(result == ALRIOS_CRYPTO_ERR_INVALID_KEY ||

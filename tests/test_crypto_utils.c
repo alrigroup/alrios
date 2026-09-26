@@ -25,6 +25,7 @@ int main(void) {
     }
 
     uint32_t capabilities = alrios_crypto_capabilities();
+    (void)capabilities;
     assert((capabilities & ALRIOS_CRYPTO_CAP_ED25519) != 0U);
     assert((capabilities & ALRIOS_CRYPTO_CAP_AES_256_GCM) != 0U);
 #if defined(ALRIOS_HAVE_ML_DSA_65)

@@ -8,6 +8,7 @@
 
 int main(void) {
     alrios_vault_t v;
+    memset(&v, 0, sizeof(v));
     assert(alrios_vault_init(&v) == 0);
     assert(alrios_vault_set(&v, "DB_HOST", "127.0.0.1") == 0);
     assert(strcmp(alrios_vault_get(&v, "DB_HOST"), "127.0.0.1") == 0);

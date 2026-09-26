@@ -21,6 +21,7 @@ int main(void) {
     memset(iv, 0x5A, sizeof(iv));
     memset(ciphertext, 0, sizeof(ciphertext));
     memset(decrypted, 0, sizeof(decrypted));
+    memset(tag, 0, sizeof(tag));
 
     EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
     assert(ctx != NULL);
@@ -31,11 +32,15 @@ int main(void) {
     int output_len = 0;
     int final_len = 0;
     assert(EVP_EncryptUpdate(ctx, NULL, &output_len, aad, sizeof(aad) - 1U) == 1);
+    (void)output_len;
     assert(EVP_EncryptUpdate(ctx, ciphertext, &output_len,
                              plaintext, sizeof(plaintext)) == 1);
     assert(EVP_EncryptFinal_ex(ctx, ciphertext + output_len, &final_len) == 1);
+    (void)final_len;
     assert(EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, sizeof(tag), tag) == 1);
     EVP_CIPHER_CTX_free(ctx);
+
+    (void)aad;
 
     assert(alrios_aes256_gcm_decrypt(ciphertext, sizeof(ciphertext),
                                      aad, sizeof(aad) - 1U, tag, key, iv,

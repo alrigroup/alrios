@@ -37,10 +37,12 @@ int main(void) {
 
     /* 2.2 Aligned Allocation Verification */
     void *ptr1 = ar_arena_alloc_aligned(arena, 13, 16);
+    (void)ptr1;
     assert(ptr1 != NULL);
     assert(((uintptr_t)ptr1 % 16) == 0);
 
     void *ptr2 = ar_arena_alloc_aligned(arena, 32, 64);
+    (void)ptr2;
     assert(ptr2 != NULL);
     assert(((uintptr_t)ptr2 % 64) == 0);
 
@@ -58,12 +60,14 @@ int main(void) {
 
     /* Allocate again in the same buffer, verify it starts from fresh offset */
     char *fresh_buf = (char *)ar_arena_alloc(arena, 128);
+    (void)fresh_buf;
     assert(fresh_buf != NULL);
     assert(fresh_buf == (char *)ar_arena_alloc(arena, 0) || ar_arena_get_used(arena) >= 128);
 
     /* 2.5 Out-of-memory / Boundary limits */
     size_t remaining = ar_arena_get_capacity(arena) - ar_arena_get_used(arena);
     void *overflow = ar_arena_alloc(arena, remaining + 1);
+    (void)overflow;
     assert(overflow == NULL);
 
     /* 2.6 Edge cases & NULL resilience */

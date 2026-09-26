@@ -20,6 +20,7 @@ int main(void) {
     uint8_t public_key[ED25519_PUBLIC_KEY_LEN];
     size_t public_key_len = sizeof(public_key);
     assert(EVP_PKEY_get_raw_public_key(key, public_key, &public_key_len) == 1);
+    (void)public_key_len;
     assert(public_key_len == ED25519_PUBLIC_KEY_LEN);
 
     uint8_t digest[SHA512_DIGEST_LEN];
@@ -34,6 +35,7 @@ int main(void) {
     assert(EVP_DigestSignInit(sign_ctx, NULL, NULL, NULL, key) == 1);
     assert(EVP_DigestSign(sign_ctx, signature, &signature_len,
                           digest, sizeof(digest)) == 1);
+    (void)signature_len;
     assert(signature_len == ED25519_SIGNATURE_LEN);
     EVP_MD_CTX_free(sign_ctx);
     EVP_PKEY_free(key);
