@@ -26,7 +26,10 @@
 #define ED25519_PUBLIC_KEY_LEN             32
 #define ED25519_SIGNATURE_LEN              64
 #define ML_DSA_65_PUBLIC_KEY_LEN           1952
+#define ML_DSA_65_SECRET_KEY_LEN           4032
 #define ML_DSA_65_SIGNATURE_LEN            3309
+#define ML_DSA_65_SEED_LEN                 32
+#define ML_DSA_65_CONTEXT_MAX_LEN          255
 #define AES256_KEY_LEN                     32
 #define AES256_GCM_IV_LEN                  12
 #define AES256_GCM_TAG_LEN                 16
@@ -58,9 +61,61 @@ int alrios_ed25519_verify(
     const uint8_t signature[ED25519_SIGNATURE_LEN]
 );
 
+int alrios_ml_dsa_65_provider_available(void);
+
+int alrios_ml_dsa_65_keypair(
+    uint8_t out_public_key[ML_DSA_65_PUBLIC_KEY_LEN],
+    uint8_t out_secret_key[ML_DSA_65_SECRET_KEY_LEN]
+);
+
+int alrios_ml_dsa_65_keypair_from_seed(
+    const uint8_t seed[ML_DSA_65_SEED_LEN],
+    uint8_t out_public_key[ML_DSA_65_PUBLIC_KEY_LEN],
+    uint8_t out_secret_key[ML_DSA_65_SECRET_KEY_LEN]
+);
+
+int alrios_ml_dsa_65_sign(
+    const uint8_t secret_key[ML_DSA_65_SECRET_KEY_LEN],
+    const uint8_t digest[SHA512_DIGEST_LEN],
+    uint8_t out_signature[ML_DSA_65_SIGNATURE_LEN]
+);
+
+int alrios_ml_dsa_65_sign_msg(
+    const uint8_t secret_key[ML_DSA_65_SECRET_KEY_LEN],
+    const uint8_t *msg,
+    size_t msg_len,
+    uint8_t out_signature[ML_DSA_65_SIGNATURE_LEN]
+);
+
+int alrios_ml_dsa_65_sign_ctx(
+    const uint8_t secret_key[ML_DSA_65_SECRET_KEY_LEN],
+    const uint8_t *msg,
+    size_t msg_len,
+    const uint8_t *context,
+    size_t context_len,
+    int deterministic,
+    uint8_t out_signature[ML_DSA_65_SIGNATURE_LEN]
+);
+
 int alrios_ml_dsa_65_verify(
     const uint8_t public_key[ML_DSA_65_PUBLIC_KEY_LEN],
     const uint8_t digest[SHA512_DIGEST_LEN],
+    const uint8_t signature[ML_DSA_65_SIGNATURE_LEN]
+);
+
+int alrios_ml_dsa_65_verify_msg(
+    const uint8_t public_key[ML_DSA_65_PUBLIC_KEY_LEN],
+    const uint8_t *msg,
+    size_t msg_len,
+    const uint8_t signature[ML_DSA_65_SIGNATURE_LEN]
+);
+
+int alrios_ml_dsa_65_verify_ctx(
+    const uint8_t public_key[ML_DSA_65_PUBLIC_KEY_LEN],
+    const uint8_t *msg,
+    size_t msg_len,
+    const uint8_t *context,
+    size_t context_len,
     const uint8_t signature[ML_DSA_65_SIGNATURE_LEN]
 );
 
