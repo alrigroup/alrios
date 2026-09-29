@@ -22,6 +22,7 @@
 #define ALRIOS_CRYPTO_CAP_ED25519           (1U << 0)
 #define ALRIOS_CRYPTO_CAP_AES_256_GCM       (1U << 1)
 #define ALRIOS_CRYPTO_CAP_ML_DSA_65         (1U << 2)
+#define ALRIOS_CRYPTO_CAP_ML_KEM_768        (1U << 3)
 
 #define ED25519_PUBLIC_KEY_LEN             32
 #define ED25519_SIGNATURE_LEN              64

@@ -33,6 +33,11 @@ int main(void) {
 #else
     assert((capabilities & ALRIOS_CRYPTO_CAP_ML_DSA_65) == 0U);
 #endif
+#if defined(ALRIOS_HAVE_ML_KEM_768)
+    assert((capabilities & ALRIOS_CRYPTO_CAP_ML_KEM_768) != 0U);
+#else
+    assert((capabilities & ALRIOS_CRYPTO_CAP_ML_KEM_768) == 0U);
+#endif
 
     printf("TASK-001 (Crypto Utils): PASS\n");
     return 0;

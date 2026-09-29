@@ -74,6 +74,15 @@ set_target_properties(test_ml_dsa_65_kat PROPERTIES
 )
 add_test(NAME test_ml_dsa_65_kat COMMAND test_ml_dsa_65_kat)
 
+add_executable(test_ml_kem_768_kat unit/crypto/test_ml_kem_768_kat.c)
+target_link_libraries(test_ml_kem_768_kat PRIVATE arcrypto OpenSSL::Crypto)
+set_target_properties(test_ml_kem_768_kat PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_ml_kem_768_kat COMMAND test_ml_kem_768_kat)
+
 add_executable(test_ca_chain integration/pki/test_ca_chain.c)
 target_link_libraries(test_ca_chain PRIVATE arpki OpenSSL::Crypto)
 set_target_properties(test_ca_chain PROPERTIES

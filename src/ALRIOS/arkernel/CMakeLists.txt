@@ -105,6 +105,7 @@ add_library(arcrypto STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/crypto/sha512.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/crypto/ed25519.c
     ${CMAKE_SOURCE_DIR}/src/libraries/crypto/ml_dsa_65.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/crypto/ml_kem_768.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/crypto/aes_gcm.c
 )
 set_property(TARGET arcrypto PROPERTY POSITION_INDEPENDENT_CODE ON)
@@ -208,6 +209,7 @@ add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/crypto/sha512.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/crypto/ed25519.c
     ${CMAKE_SOURCE_DIR}/src/libraries/crypto/ml_dsa_65.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/crypto/ml_kem_768.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/crypto/aes_gcm.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/ipc/ipc_channel.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/ipc/epoll_multiplexer.c
