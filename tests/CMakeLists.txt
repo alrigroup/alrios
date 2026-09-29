@@ -202,6 +202,17 @@ set_target_properties(test_zero_disk_exec PROPERTIES
 )
 add_test(NAME test_zero_disk_exec COMMAND test_zero_disk_exec)
 
+add_executable(test_profile_enforcement
+    integration/policy/test_profile_enforcement.c
+)
+target_link_libraries(test_profile_enforcement PRIVATE arpolicy arpackage arpki arcrypto OpenSSL::Crypto)
+set_target_properties(test_profile_enforcement PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_profile_enforcement COMMAND test_profile_enforcement)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")

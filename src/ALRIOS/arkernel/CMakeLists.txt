@@ -119,6 +119,7 @@ target_link_libraries(arcrypto PUBLIC OpenSSL::Crypto)
 # 3. arpolicy (Execution Profiles & Compliance Gates)
 add_library(arpolicy STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/profiles/profiles.c
+    ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/policy.c
 )
 set_property(TARGET arpolicy PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arpolicy PUBLIC
@@ -268,4 +269,14 @@ add_custom_command(TARGET arsdk POST_BUILD
         "${CMAKE_SOURCE_DIR}/include/alrios"
         "${CMAKE_SOURCE_DIR}/arcore/include/alrios"
     COMMENT "Installing ALRIOS Native SDK (ar.h, profiles.h, etc.) into arcore/include/alrios"
+)
+
+add_executable(supervisor_policy
+    ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/main.c
+)
+target_link_libraries(supervisor_policy PRIVATE arpolicy)
+set_target_properties(supervisor_policy PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore"
 )
