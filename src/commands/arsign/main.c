@@ -15,12 +15,17 @@
 #include <string.h>
 #include <time.h>
 
+int arsign_handle_sign_arapp(int argc, char **argv);
+int arsign_handle_verify_arapp(int argc, char **argv);
+
 static void print_usage(void) {
     (void)printf("ALRIOS Isolated Cryptographic Notary (arsign)\n");
     (void)printf("Usage:\n");
     (void)printf("  arsign sign --key <key_file> --in <file> --out <sig_file> [--policy <default|strict>]\n");
     (void)printf("  arsign verify --key <key_file_or_cert> --in <file> --sig <sig_file> [--policy <default|strict>]\n");
     (void)printf("  arsign verify-chain --leaf <leaf.bin> --inter <inter.bin> --root <root.bin> --in <file> --sig <sig_file>\n");
+    (void)printf("  arsign sign-arapp --in <file.arapp> --out <signed.arapp> --key <ed_key> [--ml-key <ml_key>]\n");
+    (void)printf("  arsign verify-arapp --in <signed.arapp> --leaf <leaf.bin> --inter <inter.bin> --root <root.bin> [--ml-pub <ml_pub_key>]\n");
     (void)printf("  arsign status\n");
 }
 
@@ -179,6 +184,13 @@ int main(int argc, char **argv) {
     }
 
     cmd = argv[1];
+
+    if (strcmp(cmd, "sign-arapp") == 0) {
+        return arsign_handle_sign_arapp(argc, argv);
+    }
+    if (strcmp(cmd, "verify-arapp") == 0) {
+        return arsign_handle_verify_arapp(argc, argv);
+    }
 
     if (strcmp(cmd, "status") == 0) {
         (void)printf("arsign: Sovereign Cryptographic Notary\n");

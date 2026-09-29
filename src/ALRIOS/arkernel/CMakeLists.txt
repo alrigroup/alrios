@@ -196,6 +196,7 @@ endif()
 # 9. arpackage (Canonical .arapp v2 Reader and Envelope Structural Validator)
 add_library(arpackage STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_reader.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_signatures.c
 )
 set_property(TARGET arpackage PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arpackage PUBLIC
@@ -233,6 +234,7 @@ add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/pki/certificate.c
     ${CMAKE_SOURCE_DIR}/src/libraries/pki/issuer.c
     ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_reader.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_signatures.c
 )
 set_property(TARGET arsdk PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arsdk PUBLIC

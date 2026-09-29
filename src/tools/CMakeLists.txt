@@ -70,12 +70,13 @@ set_target_properties(alrios-ca PROPERTIES
 # Isolated Cryptographic Notary CLI (PKI / arsign)
 add_executable(arsign
     ${CMAKE_SOURCE_DIR}/src/commands/arsign/main.c
+    ${CMAKE_SOURCE_DIR}/src/commands/arsign/arapp_sign.c
 )
 target_include_directories(arsign PRIVATE
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/alrios
 )
-target_link_libraries(arsign PRIVATE arpki arcrypto OpenSSL::Crypto)
+target_link_libraries(arsign PRIVATE arpackage arpki arcrypto OpenSSL::Crypto)
 set_target_properties(arsign PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"

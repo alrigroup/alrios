@@ -12,6 +12,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "alrios/pki/certificate.h"
+#include <openssl/evp.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -165,6 +167,19 @@ int arapp_v2_build(const arapp_v2_header_prefix_t *prefix,
                    const uint8_t *ciphertext, size_t ciphertext_len,
                    uint8_t *out_buffer, size_t out_capacity,
                    size_t *out_written);
+
+int arapp_v2_sign(arapp_v2_package_t *pkg,
+                  EVP_PKEY *ed25519_privkey,
+                  const uint8_t *ml_dsa_65_privkey,
+                  arapp_v2_signatures_t *out_sigs);
+
+int arapp_v2_verify_package_with_chain(const uint8_t *buffer, size_t size,
+                                       const alrios_certificate_t *leaf_cert,
+                                       const alrios_certificate_t *inter_cert,
+                                       const alrios_trust_store_t *store,
+                                       const uint8_t *ml_dsa_65_pubkey,
+                                       uint64_t current_time,
+                                       arapp_v2_package_t *out_pkg);
 
 #ifdef __cplusplus
 }
