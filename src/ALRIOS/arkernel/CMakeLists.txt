@@ -205,6 +205,17 @@ target_include_directories(arpackage PUBLIC
 )
 target_link_libraries(arpackage PUBLIC arpki arcrypto OpenSSL::Crypto)
 
+# 10. arloader (Verified Decrypt-to-Memfd Execution Pipeline)
+add_library(arloader STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/loader/sovereign_loader.c
+)
+set_property(TARGET arloader PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arloader PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(arloader PUBLIC arpackage arpki arcrypto OpenSSL::Crypto)
+
 # ====================================================================
 # Umbrella Target: libarsdk (Maintains 100% Backward Compatibility)
 # ====================================================================
@@ -235,6 +246,7 @@ add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/pki/issuer.c
     ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_reader.c
     ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_signatures.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/loader/sovereign_loader.c
 )
 set_property(TARGET arsdk PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arsdk PUBLIC
