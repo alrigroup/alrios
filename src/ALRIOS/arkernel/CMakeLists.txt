@@ -193,6 +193,17 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     )
 endif()
 
+# 9. arpackage (Canonical .arapp v2 Reader and Envelope Structural Validator)
+add_library(arpackage STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_reader.c
+)
+set_property(TARGET arpackage PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arpackage PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(arpackage PUBLIC arpki arcrypto OpenSSL::Crypto)
+
 # ====================================================================
 # Umbrella Target: libarsdk (Maintains 100% Backward Compatibility)
 # ====================================================================
@@ -221,6 +232,7 @@ add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/preimage.c
     ${CMAKE_SOURCE_DIR}/src/libraries/pki/certificate.c
     ${CMAKE_SOURCE_DIR}/src/libraries/pki/issuer.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_reader.c
 )
 set_property(TARGET arsdk PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arsdk PUBLIC

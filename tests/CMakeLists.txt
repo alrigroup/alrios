@@ -159,6 +159,15 @@ set_tests_properties(test_arsign_rejects_unknown_policy PROPERTIES WILL_FAIL TRU
 add_test(NAME test_arsign_rejects_pqc_policy COMMAND arsign sign --policy pqc)
 set_tests_properties(test_arsign_rejects_pqc_policy PROPERTIES WILL_FAIL TRUE)
 
+add_executable(test_arapp_v2_reader unit/package/test_arapp_v2_reader.c)
+target_link_libraries(test_arapp_v2_reader PRIVATE arpackage arpki arcrypto OpenSSL::Crypto)
+set_target_properties(test_arapp_v2_reader PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_arapp_v2_reader COMMAND test_arapp_v2_reader)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
@@ -175,6 +184,21 @@ if(ALRIOS_ENABLE_FUZZING)
         -fno-omit-frame-pointer
     )
     target_link_options(fuzz_certificate PRIVATE
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer
+    )
+
+    add_executable(fuzz_arapp_v2
+        fuzz/fuzz_arapp_v2.c
+        ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_reader.c
+    )
+    target_link_libraries(fuzz_arapp_v2 PRIVATE arpki arcrypto OpenSSL::Crypto)
+    target_include_directories(fuzz_arapp_v2 PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_options(fuzz_arapp_v2 PRIVATE
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer
+    )
+    target_link_options(fuzz_arapp_v2 PRIVATE
         -fsanitize=fuzzer,address,undefined
         -fno-omit-frame-pointer
     )
