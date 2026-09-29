@@ -168,6 +168,18 @@ set_target_properties(test_arapp_v2_reader PROPERTIES
 )
 add_test(NAME test_arapp_v2_reader COMMAND test_arapp_v2_reader)
 
+add_executable(test_armake_v2
+    integration/package/test_armake_v2.c
+    ${CMAKE_SOURCE_DIR}/src/commands/armake/package_v2.c
+)
+target_link_libraries(test_armake_v2 PRIVATE arpackage armanifest ararchive arhal_isolation arcrypto OpenSSL::Crypto)
+set_target_properties(test_armake_v2 PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_armake_v2 COMMAND test_armake_v2)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")

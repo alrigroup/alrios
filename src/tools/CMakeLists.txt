@@ -1,10 +1,13 @@
 add_executable(armake
-    armake.c
+    ${CMAKE_SOURCE_DIR}/src/commands/armake/main.c
+    ${CMAKE_SOURCE_DIR}/src/commands/armake/package_v2.c
 )
 target_include_directories(armake PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
 )
 target_link_libraries(armake PRIVATE ararchive armanifest arhal_isolation)
 set_target_properties(armake PROPERTIES
