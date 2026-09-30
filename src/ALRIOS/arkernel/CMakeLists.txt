@@ -247,9 +247,10 @@ target_include_directories(arstorage PUBLIC
 )
 target_link_libraries(arstorage PUBLIC arkernel arcrypto)
 
-# 12. araudit (Append-Only Cryptographic Audit Chain)
+# 12. araudit (Append-Only Cryptographic Audit Chain & Forwarder)
 add_library(araudit STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/audit/hash_chain.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/audit/forwarder.c
 )
 set_property(TARGET araudit PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(araudit PUBLIC
@@ -257,6 +258,12 @@ target_include_directories(araudit PUBLIC
     ${CMAKE_SOURCE_DIR}/include/alrios
 )
 target_link_libraries(araudit PUBLIC arcrypto OpenSSL::Crypto)
+
+add_executable(ar_auditd ${CMAKE_SOURCE_DIR}/src/daemons/ar_auditd/main.c)
+target_link_libraries(ar_auditd PRIVATE araudit arcrypto OpenSSL::Crypto)
+set_target_properties(ar_auditd PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+)
 
 # ====================================================================
 # Umbrella Target: libarsdk (Maintains 100% Backward Compatibility)

@@ -256,6 +256,15 @@ set_target_properties(test_hash_chain PROPERTIES
 )
 add_test(NAME test_hash_chain COMMAND test_hash_chain)
 
+add_executable(test_remote_checkpoint integration/audit/test_remote_checkpoint.c)
+target_link_libraries(test_remote_checkpoint PRIVATE araudit OpenSSL::Crypto)
+set_target_properties(test_remote_checkpoint PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_remote_checkpoint COMMAND test_remote_checkpoint)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
