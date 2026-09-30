@@ -257,11 +257,27 @@ target_include_directories(araudit PUBLIC
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/alrios
 )
-target_link_libraries(araudit PUBLIC arcrypto OpenSSL::Crypto)
+target_link_libraries(araudit PUBLIC arcrypto OpenSSL::Crypto Threads::Threads)
 
 add_executable(ar_auditd ${CMAKE_SOURCE_DIR}/src/daemons/ar_auditd/main.c)
 target_link_libraries(ar_auditd PRIVATE araudit arcrypto OpenSSL::Crypto)
 set_target_properties(ar_auditd PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+)
+
+# 13. arresources (PSI Memory Governance & Cooperative Shedding)
+add_library(arresources STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/resources/psi.c
+)
+set_property(TARGET arresources PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arresources PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+
+add_executable(ar_resourced ${CMAKE_SOURCE_DIR}/src/daemons/ar_resourced/main.c)
+target_link_libraries(ar_resourced PRIVATE arresources)
+set_target_properties(ar_resourced PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
 )
 

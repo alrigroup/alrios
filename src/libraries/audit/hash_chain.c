@@ -7,45 +7,677 @@
  * and at: https://github.com/alrigroup/licenses
  */
 
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
 #include "alrios/audit/block.h"
-#include "alrios/crypto_verify.h"
-#include <stdio.h>
+
+#include <errno.h>
+#include <limits.h>
+#include <openssl/evp.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/file.h>
 
-#define AUDIT_MAGIC 0x41554454U /* "AUDT" */
-#define AUDIT_TRAILER_MAGIC 0x54445541U /* "TDUA" */
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <pthread.h>
+#include <unistd.h>
+#endif
 
-#pragma pack(push, 1)
-typedef struct audit_record_header {
-    uint32_t magic;
-    uint32_t version;
-    uint64_t sequence;
-    uint64_t timestamp;
-    uint32_t payload_size;
-    uint8_t previous_hash[ALRIOS_AUDIT_HASH_SIZE];
-    uint8_t hash[ALRIOS_AUDIT_HASH_SIZE];
-    uint8_t reserved[4];
-} audit_record_header_t;
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
+#ifndef O_CLOEXEC
+#define O_CLOEXEC 0
+#endif
 
-typedef struct audit_record_trailer {
-    uint32_t trailer_magic;
-    uint32_t checksum_type;
-    uint8_t padding[32];
-} audit_record_trailer_t;
-#pragma pack(pop)
+#define AUDIT_HEADER_MAGIC_SIZE 8U
+#define AUDIT_TRAILER_MAGIC_SIZE 8U
+#define AUDIT_HEADER_PAYLOAD_SIZE_OFFSET 12U
+#define AUDIT_HEADER_SEQUENCE_OFFSET 16U
+#define AUDIT_HEADER_TIMESTAMP_OFFSET 24U
+#define AUDIT_HEADER_PREVIOUS_HASH_OFFSET 32U
+#define AUDIT_HEADER_HASH_OFFSET 64U
+#define AUDIT_TRAILER_HASH_OFFSET 8U
+#define AUDIT_IO_CHUNK_SIZE 8192U
 
-_Static_assert(sizeof(audit_record_header_t) == ALRIOS_AUDIT_RECORD_HEADER_SIZE, "Header size mismatch");
-_Static_assert(sizeof(audit_record_trailer_t) == ALRIOS_AUDIT_RECORD_TRAILER_SIZE, "Trailer size mismatch");
+#ifdef _WIN32
+typedef int audit_fd_t;
+typedef __int64 audit_offset_t;
+#define audit_close _close
+#define audit_fstat _fstat64
+#define audit_open _open
+#define audit_read _read
+#define audit_seek _lseeki64
+#define audit_stat_t struct _stat64
+#define audit_write _write
+#else
+typedef int audit_fd_t;
+typedef off_t audit_offset_t;
+#define audit_close close
+#define audit_fstat fstat
+#define audit_open open
+#define audit_read read
+#define audit_seek lseek
+#define audit_stat_t struct stat
+#define audit_write write
+#endif
+
+static const uint8_t audit_header_magic[AUDIT_HEADER_MAGIC_SIZE] = {
+    'A', 'L', 'R', 'I', 'A', 'U', 'D', '1'
+};
+static const uint8_t audit_trailer_magic[AUDIT_TRAILER_MAGIC_SIZE] = {
+    'A', 'L', 'R', 'I', 'C', 'M', 'T', '1'
+};
+static const uint8_t audit_hash_domain[] = "ALRIOS-AUDIT-BLOCK-V1";
+
+#ifdef _WIN32
+static INIT_ONCE audit_process_lock_once = INIT_ONCE_STATIC_INIT;
+static CRITICAL_SECTION audit_process_lock;
+
+static BOOL CALLBACK initialize_process_lock(PINIT_ONCE once,
+                                              PVOID parameter,
+                                              PVOID *context) {
+    (void)once;
+    (void)parameter;
+    (void)context;
+    InitializeCriticalSection(&audit_process_lock);
+    return TRUE;
+}
+
+static int process_lock_acquire(void) {
+    if (!InitOnceExecuteOnce(&audit_process_lock_once,
+                             initialize_process_lock,
+                             NULL,
+                             NULL)) {
+        return ALRIOS_AUDIT_ERR_LOCK;
+    }
+    EnterCriticalSection(&audit_process_lock);
+    return ALRIOS_AUDIT_OK;
+}
+
+static int process_lock_release(void) {
+    LeaveCriticalSection(&audit_process_lock);
+    return ALRIOS_AUDIT_OK;
+}
+#else
+static pthread_mutex_t audit_process_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static int process_lock_acquire(void) {
+    return pthread_mutex_lock(&audit_process_lock) == 0
+               ? ALRIOS_AUDIT_OK
+               : ALRIOS_AUDIT_ERR_LOCK;
+}
+
+static int process_lock_release(void) {
+    return pthread_mutex_unlock(&audit_process_lock) == 0
+               ? ALRIOS_AUDIT_OK
+               : ALRIOS_AUDIT_ERR_LOCK;
+}
+#endif
+
+static uint16_t load_u16_be(const uint8_t *bytes) {
+    return (uint16_t)(((uint16_t)bytes[0] << 8U) | (uint16_t)bytes[1]);
+}
+
+static uint32_t load_u32_be(const uint8_t *bytes) {
+    return ((uint32_t)bytes[0] << 24U) |
+           ((uint32_t)bytes[1] << 16U) |
+           ((uint32_t)bytes[2] << 8U) |
+           (uint32_t)bytes[3];
+}
+
+static uint64_t load_u64_be(const uint8_t *bytes) {
+    uint64_t value = 0U;
+    size_t index;
+
+    for (index = 0U; index < 8U; ++index) {
+        value = (value << 8U) | (uint64_t)bytes[index];
+    }
+    return value;
+}
+
+static void store_u16_be(uint8_t *bytes, uint16_t value) {
+    bytes[0] = (uint8_t)(value >> 8U);
+    bytes[1] = (uint8_t)value;
+}
+
+static void store_u32_be(uint8_t *bytes, uint32_t value) {
+    bytes[0] = (uint8_t)(value >> 24U);
+    bytes[1] = (uint8_t)(value >> 16U);
+    bytes[2] = (uint8_t)(value >> 8U);
+    bytes[3] = (uint8_t)value;
+}
+
+static void store_u64_be(uint8_t *bytes, uint64_t value) {
+    size_t index;
+
+    for (index = 8U; index > 0U; --index) {
+        bytes[index - 1U] = (uint8_t)value;
+        value >>= 8U;
+    }
+}
+
+static int hashes_equal(const uint8_t *left, const uint8_t *right) {
+    uint8_t difference = 0U;
+    size_t index;
+
+    for (index = 0U; index < ALRIOS_AUDIT_HASH_SIZE; ++index) {
+        difference |= (uint8_t)(left[index] ^ right[index]);
+    }
+    return difference == 0U;
+}
+
+static int offset_from_u64(uint64_t value, audit_offset_t *out_offset) {
+    audit_offset_t converted;
+
+    if (!out_offset) {
+        return ALRIOS_AUDIT_ERR_INVALID_ARGUMENT;
+    }
+    converted = (audit_offset_t)value;
+    if (converted < 0 || (uint64_t)converted != value) {
+        return ALRIOS_AUDIT_ERR_OVERFLOW;
+    }
+    *out_offset = converted;
+    return ALRIOS_AUDIT_OK;
+}
+
+static int lock_fd(audit_fd_t fd, int exclusive) {
+#ifdef _WIN32
+    HANDLE handle = (HANDLE)_get_osfhandle(fd);
+    OVERLAPPED overlapped;
+    DWORD flags = exclusive != 0 ? LOCKFILE_EXCLUSIVE_LOCK : 0U;
+
+    if (handle == INVALID_HANDLE_VALUE) {
+        return ALRIOS_AUDIT_ERR_LOCK;
+    }
+    memset(&overlapped, 0, sizeof(overlapped));
+    return LockFileEx(handle, flags, 0U, MAXDWORD, MAXDWORD, &overlapped) != 0
+               ? ALRIOS_AUDIT_OK
+               : ALRIOS_AUDIT_ERR_LOCK;
+#else
+    struct flock lock;
+    int result;
+
+    memset(&lock, 0, sizeof(lock));
+    lock.l_type = exclusive != 0 ? F_WRLCK : F_RDLCK;
+    lock.l_whence = SEEK_SET;
+    do {
+        result = fcntl(fd, F_SETLKW, &lock);
+    } while (result < 0 && errno == EINTR);
+    return result == 0 ? ALRIOS_AUDIT_OK : ALRIOS_AUDIT_ERR_LOCK;
+#endif
+}
+
+static int unlock_fd(audit_fd_t fd) {
+#ifdef _WIN32
+    HANDLE handle = (HANDLE)_get_osfhandle(fd);
+    OVERLAPPED overlapped;
+
+    if (handle == INVALID_HANDLE_VALUE) {
+        return ALRIOS_AUDIT_ERR_LOCK;
+    }
+    memset(&overlapped, 0, sizeof(overlapped));
+    return UnlockFileEx(handle, 0U, MAXDWORD, MAXDWORD, &overlapped) != 0
+               ? ALRIOS_AUDIT_OK
+               : ALRIOS_AUDIT_ERR_LOCK;
+#else
+    struct flock lock;
+    int result;
+
+    memset(&lock, 0, sizeof(lock));
+    lock.l_type = F_UNLCK;
+    lock.l_whence = SEEK_SET;
+    do {
+        result = fcntl(fd, F_SETLK, &lock);
+    } while (result < 0 && errno == EINTR);
+    return result == 0 ? ALRIOS_AUDIT_OK : ALRIOS_AUDIT_ERR_LOCK;
+#endif
+}
+
+static int seek_fd(audit_fd_t fd, uint64_t offset) {
+    audit_offset_t converted;
+    int status;
+
+    status = offset_from_u64(offset, &converted);
+    if (status != ALRIOS_AUDIT_OK) {
+        return status;
+    }
+    if (audit_seek(fd, converted, SEEK_SET) < 0) {
+        return ALRIOS_AUDIT_ERR_IO;
+    }
+    return ALRIOS_AUDIT_OK;
+}
+
+static int read_exact_at(audit_fd_t fd,
+                         uint64_t offset,
+                         uint8_t *buffer,
+                         size_t length) {
+    size_t consumed = 0U;
+    int status;
+
+    status = seek_fd(fd, offset);
+    if (status != ALRIOS_AUDIT_OK) {
+        return status;
+    }
+    while (consumed < length) {
+#ifdef _WIN32
+        size_t request_size = length - consumed;
+        int count;
+
+        if (request_size > (size_t)INT_MAX) {
+            request_size = (size_t)INT_MAX;
+        }
+        count = audit_read(fd, buffer + consumed, (unsigned int)request_size);
+#else
+        ssize_t count = audit_read(fd, buffer + consumed, length - consumed);
+#endif
+        if (count == 0) {
+            return ALRIOS_AUDIT_ERR_TRUNCATED;
+        }
+        if (count < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            return ALRIOS_AUDIT_ERR_IO;
+        }
+        consumed += (size_t)count;
+    }
+    return ALRIOS_AUDIT_OK;
+}
+
+static int write_exact(audit_fd_t fd, const uint8_t *buffer, size_t length) {
+    size_t written = 0U;
+
+    while (written < length) {
+#ifdef _WIN32
+        size_t request_size = length - written;
+        int count;
+
+        if (request_size > (size_t)INT_MAX) {
+            request_size = (size_t)INT_MAX;
+        }
+        count = audit_write(fd, buffer + written, (unsigned int)request_size);
+#else
+        ssize_t count = audit_write(fd, buffer + written, length - written);
+#endif
+        if (count < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            return ALRIOS_AUDIT_ERR_IO;
+        }
+        if (count == 0) {
+            return ALRIOS_AUDIT_ERR_IO;
+        }
+        written += (size_t)count;
+    }
+    return ALRIOS_AUDIT_OK;
+}
+
+static int truncate_fd(audit_fd_t fd, uint64_t length) {
+    audit_offset_t converted;
+    int status;
+
+    status = offset_from_u64(length, &converted);
+    if (status != ALRIOS_AUDIT_OK) {
+        return status;
+    }
+#ifdef _WIN32
+    return _chsize_s(fd, converted) == 0
+               ? ALRIOS_AUDIT_OK
+               : ALRIOS_AUDIT_ERR_IO;
+#else
+    return ftruncate(fd, converted) == 0
+               ? ALRIOS_AUDIT_OK
+               : ALRIOS_AUDIT_ERR_IO;
+#endif
+}
+
+static int sync_fd(audit_fd_t fd) {
+#ifdef _WIN32
+    HANDLE handle;
+
+    if (_commit(fd) != 0) {
+        return ALRIOS_AUDIT_ERR_IO;
+    }
+    handle = (HANDLE)_get_osfhandle(fd);
+    if (handle == INVALID_HANDLE_VALUE || FlushFileBuffers(handle) == 0) {
+        return ALRIOS_AUDIT_ERR_IO;
+    }
+    return ALRIOS_AUDIT_OK;
+#else
+    return fsync(fd) == 0 ? ALRIOS_AUDIT_OK : ALRIOS_AUDIT_ERR_IO;
+#endif
+}
+
+static int fd_size(audit_fd_t fd, uint64_t *out_size) {
+    audit_stat_t file_status;
+
+    if (audit_fstat(fd, &file_status) != 0 || file_status.st_size < 0) {
+        return ALRIOS_AUDIT_ERR_IO;
+    }
+#ifdef _WIN32
+    if ((file_status.st_mode & _S_IFREG) == 0) {
+        return ALRIOS_AUDIT_ERR_NOT_REGULAR;
+    }
+#else
+    if (!S_ISREG(file_status.st_mode)) {
+        return ALRIOS_AUDIT_ERR_NOT_REGULAR;
+    }
+#endif
+    *out_size = (uint64_t)file_status.st_size;
+    return ALRIOS_AUDIT_OK;
+}
+
+static int digest_update(EVP_MD_CTX *context, const void *data, size_t length) {
+    if (length == 0U) {
+        return ALRIOS_AUDIT_OK;
+    }
+    return EVP_DigestUpdate(context, data, length) == 1
+               ? ALRIOS_AUDIT_OK
+               : ALRIOS_AUDIT_ERR_UNAVAILABLE;
+}
+
+static int digest_header(EVP_MD_CTX *context,
+                         const uint8_t header[ALRIOS_AUDIT_RECORD_HEADER_SIZE]) {
+    return digest_update(context, header, AUDIT_HEADER_HASH_OFFSET);
+}
+
+static int compute_hash_parts(
+    const uint8_t header[ALRIOS_AUDIT_RECORD_HEADER_SIZE],
+    const uint8_t *payload,
+    size_t payload_size,
+    uint8_t out_hash[ALRIOS_AUDIT_HASH_SIZE]) {
+    EVP_MD_CTX *context;
+    unsigned int digest_size = 0U;
+    int status = ALRIOS_AUDIT_ERR_UNAVAILABLE;
+
+    context = EVP_MD_CTX_new();
+    if (!context) {
+        return ALRIOS_AUDIT_ERR_UNAVAILABLE;
+    }
+    if (EVP_DigestInit_ex(context, EVP_sha256(), NULL) != 1 ||
+        digest_update(context, audit_hash_domain, sizeof(audit_hash_domain) - 1U) !=
+            ALRIOS_AUDIT_OK ||
+        digest_header(context, header) != ALRIOS_AUDIT_OK ||
+        digest_update(context, payload, payload_size) != ALRIOS_AUDIT_OK ||
+        EVP_DigestFinal_ex(context, out_hash, &digest_size) != 1 ||
+        digest_size != ALRIOS_AUDIT_HASH_SIZE) {
+        memset(out_hash, 0, ALRIOS_AUDIT_HASH_SIZE);
+        goto cleanup;
+    }
+    status = ALRIOS_AUDIT_OK;
+
+cleanup:
+    EVP_MD_CTX_free(context);
+    return status;
+}
+
+static void encode_header(uint8_t header[ALRIOS_AUDIT_RECORD_HEADER_SIZE],
+                          uint64_t sequence,
+                          uint64_t timestamp,
+                          uint32_t payload_size,
+                          const uint8_t previous_hash[ALRIOS_AUDIT_HASH_SIZE]) {
+    memset(header, 0, ALRIOS_AUDIT_RECORD_HEADER_SIZE);
+    memcpy(header, audit_header_magic, AUDIT_HEADER_MAGIC_SIZE);
+    store_u16_be(header + 8U, ALRIOS_AUDIT_FORMAT_VERSION);
+    store_u16_be(header + 10U, ALRIOS_AUDIT_RECORD_HEADER_SIZE);
+    store_u32_be(header + AUDIT_HEADER_PAYLOAD_SIZE_OFFSET, payload_size);
+    store_u64_be(header + AUDIT_HEADER_SEQUENCE_OFFSET, sequence);
+    store_u64_be(header + AUDIT_HEADER_TIMESTAMP_OFFSET, timestamp);
+    memcpy(header + AUDIT_HEADER_PREVIOUS_HASH_OFFSET,
+           previous_hash,
+           ALRIOS_AUDIT_HASH_SIZE);
+}
+
+static int validate_partial_header(audit_fd_t fd,
+                                   uint64_t offset,
+                                   uint64_t length) {
+    uint8_t partial[ALRIOS_AUDIT_RECORD_HEADER_SIZE];
+    uint8_t expected_prefix[12U];
+    size_t compare_size;
+    int status;
+
+    if (length == 0U || length >= ALRIOS_AUDIT_RECORD_HEADER_SIZE) {
+        return ALRIOS_AUDIT_ERR_FORMAT;
+    }
+    status = read_exact_at(fd, offset, partial, (size_t)length);
+    if (status != ALRIOS_AUDIT_OK) {
+        return status;
+    }
+    memcpy(expected_prefix, audit_header_magic, AUDIT_HEADER_MAGIC_SIZE);
+    store_u16_be(expected_prefix + 8U, ALRIOS_AUDIT_FORMAT_VERSION);
+    store_u16_be(expected_prefix + 10U, ALRIOS_AUDIT_RECORD_HEADER_SIZE);
+    compare_size = (size_t)length < sizeof(expected_prefix)
+                       ? (size_t)length
+                       : sizeof(expected_prefix);
+    return memcmp(partial, expected_prefix, compare_size) == 0
+               ? ALRIOS_AUDIT_OK
+               : ALRIOS_AUDIT_ERR_FORMAT;
+}
+
+static int validate_header(
+    const uint8_t header[ALRIOS_AUDIT_RECORD_HEADER_SIZE],
+    uint32_t *payload_size,
+    uint64_t *sequence,
+    uint8_t previous_hash[ALRIOS_AUDIT_HASH_SIZE]) {
+    uint32_t decoded_payload_size;
+
+    if (memcmp(header, audit_header_magic, AUDIT_HEADER_MAGIC_SIZE) != 0 ||
+        load_u16_be(header + 8U) != ALRIOS_AUDIT_FORMAT_VERSION ||
+        load_u16_be(header + 10U) != ALRIOS_AUDIT_RECORD_HEADER_SIZE) {
+        return ALRIOS_AUDIT_ERR_FORMAT;
+    }
+    decoded_payload_size = load_u32_be(header + AUDIT_HEADER_PAYLOAD_SIZE_OFFSET);
+    if (decoded_payload_size > ALRIOS_AUDIT_MAX_PAYLOAD_SIZE) {
+        return ALRIOS_AUDIT_ERR_FORMAT;
+    }
+    *payload_size = decoded_payload_size;
+    *sequence = load_u64_be(header + AUDIT_HEADER_SEQUENCE_OFFSET);
+    memcpy(previous_hash,
+           header + AUDIT_HEADER_PREVIOUS_HASH_OFFSET,
+           ALRIOS_AUDIT_HASH_SIZE);
+    return ALRIOS_AUDIT_OK;
+}
+
+static int verify_fd(audit_fd_t fd, alrios_audit_verify_result_t *out_result) {
+    uint8_t header[ALRIOS_AUDIT_RECORD_HEADER_SIZE];
+    uint8_t trailer[ALRIOS_AUDIT_RECORD_TRAILER_SIZE];
+    uint8_t expected_previous_hash[ALRIOS_AUDIT_HASH_SIZE] = {0};
+    uint8_t computed_hash[ALRIOS_AUDIT_HASH_SIZE];
+    uint8_t payload_buffer[AUDIT_IO_CHUNK_SIZE];
+    uint64_t file_size;
+    uint64_t offset = 0U;
+    uint64_t block_count = 0U;
+    int status;
+
+    memset(out_result, 0, sizeof(*out_result));
+    status = fd_size(fd, &file_size);
+    if (status != ALRIOS_AUDIT_OK) {
+        return status;
+    }
+
+    while (offset < file_size) {
+        uint8_t previous_hash[ALRIOS_AUDIT_HASH_SIZE];
+        uint32_t payload_size;
+        uint64_t sequence;
+        uint64_t record_size;
+        uint64_t payload_offset;
+        uint64_t trailer_offset;
+        size_t remaining;
+        EVP_MD_CTX *context;
+        unsigned int digest_size = 0U;
+
+        if (file_size - offset < ALRIOS_AUDIT_RECORD_HEADER_SIZE) {
+            status = validate_partial_header(fd, offset, file_size - offset);
+            if (status != ALRIOS_AUDIT_OK) {
+                return status;
+            }
+            out_result->has_incomplete_tail = 1;
+            break;
+        }
+        status = read_exact_at(fd, offset, header, sizeof(header));
+        if (status != ALRIOS_AUDIT_OK) {
+            return status;
+        }
+        status = validate_header(header, &payload_size, &sequence, previous_hash);
+        if (status != ALRIOS_AUDIT_OK) {
+            return status;
+        }
+        if (sequence != block_count ||
+            !hashes_equal(previous_hash, expected_previous_hash)) {
+            return ALRIOS_AUDIT_ERR_SEQUENCE;
+        }
+
+        record_size = (uint64_t)ALRIOS_AUDIT_RECORD_OVERHEAD +
+                      (uint64_t)payload_size;
+        if (record_size > UINT64_MAX - offset) {
+            return ALRIOS_AUDIT_ERR_OVERFLOW;
+        }
+        if (record_size > file_size - offset) {
+            uint64_t available_after_header =
+                file_size - offset - ALRIOS_AUDIT_RECORD_HEADER_SIZE;
+
+            if (available_after_header >= (uint64_t)payload_size) {
+                trailer_offset = offset + ALRIOS_AUDIT_RECORD_HEADER_SIZE +
+                                 (uint64_t)payload_size;
+                status = read_exact_at(fd,
+                                       trailer_offset,
+                                       trailer,
+                                       (size_t)(file_size - trailer_offset));
+                if (status != ALRIOS_AUDIT_OK) {
+                    return status;
+                }
+                if (memcmp(trailer,
+                           audit_trailer_magic,
+                           (size_t)(file_size - trailer_offset)) != 0) {
+                    return ALRIOS_AUDIT_ERR_FORMAT;
+                }
+            }
+            out_result->has_incomplete_tail = 1;
+            break;
+        }
+
+        context = EVP_MD_CTX_new();
+        if (!context) {
+            return ALRIOS_AUDIT_ERR_UNAVAILABLE;
+        }
+        if (EVP_DigestInit_ex(context, EVP_sha256(), NULL) != 1 ||
+            digest_update(context, audit_hash_domain,
+                          sizeof(audit_hash_domain) - 1U) != ALRIOS_AUDIT_OK ||
+            digest_header(context, header) != ALRIOS_AUDIT_OK) {
+            EVP_MD_CTX_free(context);
+            return ALRIOS_AUDIT_ERR_UNAVAILABLE;
+        }
+
+        payload_offset = offset + ALRIOS_AUDIT_RECORD_HEADER_SIZE;
+        remaining = (size_t)payload_size;
+        while (remaining > 0U) {
+            size_t chunk_size = remaining < sizeof(payload_buffer)
+                                    ? remaining
+                                    : sizeof(payload_buffer);
+            status = read_exact_at(fd, payload_offset, payload_buffer, chunk_size);
+            if (status != ALRIOS_AUDIT_OK ||
+                digest_update(context, payload_buffer, chunk_size) !=
+                    ALRIOS_AUDIT_OK) {
+                EVP_MD_CTX_free(context);
+                return status != ALRIOS_AUDIT_OK
+                           ? status
+                           : ALRIOS_AUDIT_ERR_UNAVAILABLE;
+            }
+            payload_offset += (uint64_t)chunk_size;
+            remaining -= chunk_size;
+        }
+        if (EVP_DigestFinal_ex(context, computed_hash, &digest_size) != 1 ||
+            digest_size != ALRIOS_AUDIT_HASH_SIZE) {
+            EVP_MD_CTX_free(context);
+            return ALRIOS_AUDIT_ERR_UNAVAILABLE;
+        }
+        EVP_MD_CTX_free(context);
+
+        trailer_offset = offset + ALRIOS_AUDIT_RECORD_HEADER_SIZE +
+                         (uint64_t)payload_size;
+        status = read_exact_at(fd, trailer_offset, trailer, sizeof(trailer));
+        if (status != ALRIOS_AUDIT_OK) {
+            return status;
+        }
+        if (memcmp(trailer, audit_trailer_magic, AUDIT_TRAILER_MAGIC_SIZE) != 0) {
+            return ALRIOS_AUDIT_ERR_FORMAT;
+        }
+        if (!hashes_equal(computed_hash, header + AUDIT_HEADER_HASH_OFFSET) ||
+            !hashes_equal(computed_hash, trailer + AUDIT_TRAILER_HASH_OFFSET)) {
+            return ALRIOS_AUDIT_ERR_HASH_MISMATCH;
+        }
+
+        memcpy(expected_previous_hash, computed_hash, ALRIOS_AUDIT_HASH_SIZE);
+        offset += record_size;
+        block_count++;
+        out_result->block_count = block_count;
+        out_result->valid_bytes = offset;
+        memcpy(out_result->last_hash, computed_hash, ALRIOS_AUDIT_HASH_SIZE);
+    }
+    return ALRIOS_AUDIT_OK;
+}
+
+static int open_append_file(const char *path, audit_fd_t *out_fd) {
+    audit_fd_t fd;
+
+#ifdef _WIN32
+    errno_t open_status = _sopen_s(&fd,
+                                   path,
+                                   _O_RDWR | _O_CREAT | _O_BINARY,
+                                   _SH_DENYNO,
+                                   _S_IREAD | _S_IWRITE);
+    if (open_status != 0 || fd < 0) {
+        return ALRIOS_AUDIT_ERR_IO;
+    }
+#else
+    fd = audit_open(path, O_RDWR | O_CREAT | O_CLOEXEC, (mode_t)0600);
+    if (fd < 0) {
+        return ALRIOS_AUDIT_ERR_IO;
+    }
+#endif
+    *out_fd = fd;
+    return ALRIOS_AUDIT_OK;
+}
+
+static int open_verify_file(const char *path, audit_fd_t *out_fd) {
+    audit_fd_t fd;
+
+#ifdef _WIN32
+    errno_t open_status = _sopen_s(&fd,
+                                   path,
+                                   _O_RDONLY | _O_BINARY,
+                                   _SH_DENYNO,
+                                   _S_IREAD);
+    if (open_status != 0 || fd < 0) {
+        return ALRIOS_AUDIT_ERR_IO;
+    }
+#else
+    fd = audit_open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        return ALRIOS_AUDIT_ERR_IO;
+    }
+#endif
+    *out_fd = fd;
+    return ALRIOS_AUDIT_OK;
+}
+
+static int close_locked_file(audit_fd_t fd, int status) {
+    int unlock_status = unlock_fd(fd);
+
+    if (status == ALRIOS_AUDIT_OK && unlock_status != ALRIOS_AUDIT_OK) {
+        status = unlock_status;
+    }
+    if (audit_close(fd) != 0 && status == ALRIOS_AUDIT_OK) {
+        status = ALRIOS_AUDIT_ERR_IO;
+    }
+    return status;
+}
 
 int alrios_audit_compute_hash(uint64_t sequence,
                               uint64_t timestamp,
@@ -53,33 +685,17 @@ int alrios_audit_compute_hash(uint64_t sequence,
                               const uint8_t *payload,
                               size_t payload_size,
                               uint8_t out_hash[ALRIOS_AUDIT_HASH_SIZE]) {
-    if (!previous_hash || !out_hash) {
+    uint8_t header[ALRIOS_AUDIT_RECORD_HEADER_SIZE];
+
+    if (!previous_hash || !out_hash || (payload_size > 0U && !payload)) {
         return ALRIOS_AUDIT_ERR_INVALID_ARGUMENT;
     }
-    if (payload_size > ALRIOS_AUDIT_MAX_PAYLOAD_SIZE) {
+    if (payload_size > ALRIOS_AUDIT_MAX_PAYLOAD_SIZE || payload_size > UINT32_MAX) {
         return ALRIOS_AUDIT_ERR_OVERFLOW;
     }
-
-    alrios_sha512_ctx_t ctx;
-    if (alrios_sha512_init(&ctx) != ALRIOS_CRYPTO_OK) {
-        return ALRIOS_AUDIT_ERR_UNAVAILABLE;
-    }
-    if (alrios_sha512_update(&ctx, (const uint8_t *)&sequence, sizeof(sequence)) != ALRIOS_CRYPTO_OK ||
-        alrios_sha512_update(&ctx, (const uint8_t *)&timestamp, sizeof(timestamp)) != ALRIOS_CRYPTO_OK ||
-        alrios_sha512_update(&ctx, previous_hash, ALRIOS_AUDIT_HASH_SIZE) != ALRIOS_CRYPTO_OK) {
-        return ALRIOS_AUDIT_ERR_UNAVAILABLE;
-    }
-    if (payload && payload_size > 0) {
-        if (alrios_sha512_update(&ctx, payload, payload_size) != ALRIOS_CRYPTO_OK) {
-            return ALRIOS_AUDIT_ERR_UNAVAILABLE;
-        }
-    }
-    uint8_t full_hash[64];
-    if (alrios_sha512_final(&ctx, full_hash) != ALRIOS_CRYPTO_OK) {
-        return ALRIOS_AUDIT_ERR_UNAVAILABLE;
-    }
-    memcpy(out_hash, full_hash, ALRIOS_AUDIT_HASH_SIZE);
-    return ALRIOS_AUDIT_OK;
+    encode_header(header, sequence, timestamp, (uint32_t)payload_size,
+                  previous_hash);
+    return compute_hash_parts(header, payload, payload_size, out_hash);
 }
 
 int alrios_audit_append(const char *path,
@@ -87,235 +703,157 @@ int alrios_audit_append(const char *path,
                         const uint8_t *payload,
                         size_t payload_size,
                         alrios_audit_block_t *out_block) {
-    if (!path || (payload_size > 0 && !payload)) {
+    uint8_t header[ALRIOS_AUDIT_RECORD_HEADER_SIZE];
+    uint8_t trailer[ALRIOS_AUDIT_RECORD_TRAILER_SIZE];
+    uint8_t *record = NULL;
+    alrios_audit_verify_result_t verification;
+    alrios_audit_block_t block;
+    audit_fd_t fd = -1;
+    uint64_t record_size_u64;
+    size_t record_size;
+    int status;
+    int process_unlock_status;
+
+    if (!path || path[0] == '\0' || (payload_size > 0U && !payload)) {
         return ALRIOS_AUDIT_ERR_INVALID_ARGUMENT;
     }
-    if (payload_size > ALRIOS_AUDIT_MAX_PAYLOAD_SIZE) {
+    if (payload_size > ALRIOS_AUDIT_MAX_PAYLOAD_SIZE || payload_size > UINT32_MAX) {
         return ALRIOS_AUDIT_ERR_OVERFLOW;
     }
+    if (payload_size > SIZE_MAX - ALRIOS_AUDIT_RECORD_OVERHEAD) {
+        return ALRIOS_AUDIT_ERR_OVERFLOW;
+    }
+    record_size = ALRIOS_AUDIT_RECORD_OVERHEAD + payload_size;
+    record_size_u64 = (uint64_t)record_size;
 
-    int fd = open(path, O_RDWR | O_CREAT, 0600);
-    if (fd < 0) {
-        return ALRIOS_AUDIT_ERR_IO;
+    status = process_lock_acquire();
+    if (status != ALRIOS_AUDIT_OK) {
+        return status;
+    }
+    status = open_append_file(path, &fd);
+    if (status != ALRIOS_AUDIT_OK) {
+        goto process_cleanup;
+    }
+    status = lock_fd(fd, 1);
+    if (status != ALRIOS_AUDIT_OK) {
+        if (audit_close(fd) != 0) {
+            status = ALRIOS_AUDIT_ERR_IO;
+        }
+        goto process_cleanup;
     }
 
-    if (flock(fd, LOCK_EX) < 0) {
-        close(fd);
-        return ALRIOS_AUDIT_ERR_LOCK;
+    status = verify_fd(fd, &verification);
+    if (status != ALRIOS_AUDIT_OK) {
+        goto file_cleanup;
     }
-
-    alrios_audit_verify_result_t verify_res;
-    memset(&verify_res, 0, sizeof(verify_res));
-    
-    // Read existing file to determine last sequence and hash
-    uint64_t next_seq = 0;
-    uint8_t prev_hash[ALRIOS_AUDIT_HASH_SIZE];
-    memset(prev_hash, 0, ALRIOS_AUDIT_HASH_SIZE);
-
-    off_t file_len = lseek(fd, 0, SEEK_END);
-    if (file_len < 0) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        return ALRIOS_AUDIT_ERR_IO;
-    }
-
-    if (file_len > 0) {
-        // Verify existing chain to get correct tail
-        lseek(fd, 0, SEEK_SET);
-        audit_record_header_t hdr;
-        while (read(fd, &hdr, sizeof(hdr)) == (ssize_t)sizeof(hdr)) {
-            if (hdr.magic != AUDIT_MAGIC || hdr.version != ALRIOS_AUDIT_FORMAT_VERSION) {
-                flock(fd, LOCK_UN);
-                close(fd);
-                return ALRIOS_AUDIT_ERR_FORMAT;
-            }
-            next_seq = hdr.sequence + 1;
-            memcpy(prev_hash, hdr.hash, ALRIOS_AUDIT_HASH_SIZE);
-            if (hdr.payload_size > ALRIOS_AUDIT_MAX_PAYLOAD_SIZE) {
-                flock(fd, LOCK_UN);
-                close(fd);
-                return ALRIOS_AUDIT_ERR_FORMAT;
-            }
-            if (lseek(fd, (off_t)hdr.payload_size + ALRIOS_AUDIT_RECORD_TRAILER_SIZE, SEEK_CUR) == (off_t)-1) {
-                // Incomplete tail or truncated
-                break;
-            }
+    if (verification.has_incomplete_tail) {
+        status = truncate_fd(fd, verification.valid_bytes);
+        if (status != ALRIOS_AUDIT_OK) {
+            goto file_cleanup;
+        }
+        status = sync_fd(fd);
+        if (status != ALRIOS_AUDIT_OK) {
+            goto file_cleanup;
         }
     }
-
-    uint8_t block_hash[ALRIOS_AUDIT_HASH_SIZE];
-    int hash_rc = alrios_audit_compute_hash(next_seq, timestamp, prev_hash, payload, payload_size, block_hash);
-    if (hash_rc != ALRIOS_AUDIT_OK) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        return hash_rc;
+    if (verification.block_count == UINT64_MAX ||
+        verification.valid_bytes > UINT64_MAX - record_size_u64) {
+        status = ALRIOS_AUDIT_ERR_OVERFLOW;
+        goto file_cleanup;
     }
 
-    audit_record_header_t new_hdr;
-    memset(&new_hdr, 0, sizeof(new_hdr));
-    new_hdr.magic = AUDIT_MAGIC;
-    new_hdr.version = ALRIOS_AUDIT_FORMAT_VERSION;
-    new_hdr.sequence = next_seq;
-    new_hdr.timestamp = timestamp;
-    new_hdr.payload_size = (uint32_t)payload_size;
-    memcpy(new_hdr.previous_hash, prev_hash, ALRIOS_AUDIT_HASH_SIZE);
-    memcpy(new_hdr.hash, block_hash, ALRIOS_AUDIT_HASH_SIZE);
+    memset(&block, 0, sizeof(block));
+    block.sequence = verification.block_count;
+    block.timestamp = timestamp;
+    block.payload_size = (uint32_t)payload_size;
+    memcpy(block.previous_hash, verification.last_hash, ALRIOS_AUDIT_HASH_SIZE);
+    encode_header(header, block.sequence, block.timestamp, block.payload_size,
+                  block.previous_hash);
+    status = compute_hash_parts(header, payload, payload_size, block.hash);
+    if (status != ALRIOS_AUDIT_OK) {
+        goto file_cleanup;
+    }
+    memcpy(header + AUDIT_HEADER_HASH_OFFSET, block.hash,
+           ALRIOS_AUDIT_HASH_SIZE);
+    memcpy(trailer, audit_trailer_magic, AUDIT_TRAILER_MAGIC_SIZE);
+    memcpy(trailer + AUDIT_TRAILER_HASH_OFFSET, block.hash,
+           ALRIOS_AUDIT_HASH_SIZE);
 
-    audit_record_trailer_t new_trl;
-    memset(&new_trl, 0, sizeof(new_trl));
-    new_trl.trailer_magic = AUDIT_TRAILER_MAGIC;
-    new_trl.checksum_type = 1;
+    record = (uint8_t *)malloc(record_size);
+    if (!record) {
+        status = ALRIOS_AUDIT_ERR_UNAVAILABLE;
+        goto file_cleanup;
+    }
+    memcpy(record, header, sizeof(header));
+    if (payload_size > 0U) {
+        memcpy(record + sizeof(header), payload, payload_size);
+    }
+    memcpy(record + sizeof(header) + payload_size, trailer, sizeof(trailer));
 
-    if (lseek(fd, 0, SEEK_END) == (off_t)-1) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        return ALRIOS_AUDIT_ERR_IO;
+    status = seek_fd(fd, verification.valid_bytes);
+    if (status == ALRIOS_AUDIT_OK) {
+        status = write_exact(fd, record, record_size);
+    }
+    if (status != ALRIOS_AUDIT_OK) {
+        int truncate_status = truncate_fd(fd, verification.valid_bytes);
+        if (truncate_status == ALRIOS_AUDIT_OK) {
+            truncate_status = sync_fd(fd);
+        }
+        if (truncate_status != ALRIOS_AUDIT_OK) {
+            status = truncate_status;
+        }
+        goto file_cleanup;
+    }
+    status = sync_fd(fd);
+    if (status == ALRIOS_AUDIT_OK && out_block) {
+        *out_block = block;
     }
 
-    if (write(fd, &new_hdr, sizeof(new_hdr)) != (ssize_t)sizeof(new_hdr) ||
-        (payload_size > 0 && write(fd, payload, payload_size) != (ssize_t)payload_size) ||
-        write(fd, &new_trl, sizeof(new_trl)) != (ssize_t)sizeof(new_trl)) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        return ALRIOS_AUDIT_ERR_IO;
+file_cleanup:
+    free(record);
+    status = close_locked_file(fd, status);
+process_cleanup:
+    process_unlock_status = process_lock_release();
+    if (status == ALRIOS_AUDIT_OK &&
+        process_unlock_status != ALRIOS_AUDIT_OK) {
+        status = process_unlock_status;
     }
-
-    if (fsync(fd) < 0) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        return ALRIOS_AUDIT_ERR_IO;
-    }
-
-    flock(fd, LOCK_UN);
-    close(fd);
-
-    if (out_block) {
-        out_block->sequence = next_seq;
-        out_block->timestamp = timestamp;
-        out_block->payload_size = (uint32_t)payload_size;
-        memcpy(out_block->previous_hash, prev_hash, ALRIOS_AUDIT_HASH_SIZE);
-        memcpy(out_block->hash, block_hash, ALRIOS_AUDIT_HASH_SIZE);
-    }
-
-    return ALRIOS_AUDIT_OK;
+    return status;
 }
 
 int alrios_audit_verify(const char *path,
                         alrios_audit_verify_result_t *out_result) {
-    if (!path || !out_result) {
+    audit_fd_t fd = -1;
+    int status;
+    int process_unlock_status;
+
+    if (!path || path[0] == '\0' || !out_result) {
         return ALRIOS_AUDIT_ERR_INVALID_ARGUMENT;
     }
-
     memset(out_result, 0, sizeof(*out_result));
-
-    int fd = open(path, O_RDONLY);
-    if (fd < 0) {
-        if (errno == ENOENT) {
-            return ALRIOS_AUDIT_OK;
-        }
-        return ALRIOS_AUDIT_ERR_IO;
+    status = process_lock_acquire();
+    if (status != ALRIOS_AUDIT_OK) {
+        return status;
     }
-
-    if (flock(fd, LOCK_SH) < 0) {
-        close(fd);
-        return ALRIOS_AUDIT_ERR_LOCK;
+    status = open_verify_file(path, &fd);
+    if (status != ALRIOS_AUDIT_OK) {
+        goto process_cleanup;
     }
-
-    struct stat st;
-    if (fstat(fd, &st) < 0 || !S_ISREG(st.st_mode)) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        return ALRIOS_AUDIT_ERR_NOT_REGULAR;
+    status = lock_fd(fd, 0);
+    if (status != ALRIOS_AUDIT_OK) {
+        if (audit_close(fd) != 0) {
+            status = ALRIOS_AUDIT_ERR_IO;
+        }
+        goto process_cleanup;
     }
+    status = verify_fd(fd, out_result);
+    status = close_locked_file(fd, status);
 
-    uint64_t block_count = 0;
-    uint64_t valid_bytes = 0;
-    uint64_t expected_seq = 0;
-    uint8_t expected_prev_hash[ALRIOS_AUDIT_HASH_SIZE];
-    memset(expected_prev_hash, 0, ALRIOS_AUDIT_HASH_SIZE);
-    int has_incomplete_tail = 0;
-
-    audit_record_header_t hdr;
-    ssize_t r;
-    while ((r = read(fd, &hdr, sizeof(hdr))) > 0) {
-        if (r < (ssize_t)sizeof(hdr)) {
-            has_incomplete_tail = 1;
-            break;
-        }
-        if (hdr.magic != AUDIT_MAGIC || hdr.version != ALRIOS_AUDIT_FORMAT_VERSION) {
-            flock(fd, LOCK_UN);
-            close(fd);
-            return ALRIOS_AUDIT_ERR_FORMAT;
-        }
-        if (hdr.sequence != expected_seq) {
-            flock(fd, LOCK_UN);
-            close(fd);
-            return ALRIOS_AUDIT_ERR_SEQUENCE;
-        }
-        if (block_count > 0 && memcmp(hdr.previous_hash, expected_prev_hash, ALRIOS_AUDIT_HASH_SIZE) != 0) {
-            flock(fd, LOCK_UN);
-            close(fd);
-            return ALRIOS_AUDIT_ERR_HASH_MISMATCH;
-        }
-
-        // Read payload into temporary buffer or validate
-        if (hdr.payload_size > ALRIOS_AUDIT_MAX_PAYLOAD_SIZE) {
-            flock(fd, LOCK_UN);
-            close(fd);
-            return ALRIOS_AUDIT_ERR_OVERFLOW;
-        }
-
-        uint8_t *payload_buf = NULL;
-        if (hdr.payload_size > 0) {
-            payload_buf = (uint8_t *)malloc(hdr.payload_size);
-            if (!payload_buf) {
-                flock(fd, LOCK_UN);
-                close(fd);
-                return ALRIOS_AUDIT_ERR_UNAVAILABLE;
-            }
-            ssize_t pr = read(fd, payload_buf, hdr.payload_size);
-            if (pr != (ssize_t)hdr.payload_size) {
-                free(payload_buf);
-                has_incomplete_tail = 1;
-                break;
-            }
-        }
-
-        audit_record_trailer_t trl;
-        ssize_t tr = read(fd, &trl, sizeof(trl));
-        if (tr != (ssize_t)sizeof(trl) || trl.trailer_magic != AUDIT_TRAILER_MAGIC) {
-            if (payload_buf) free(payload_buf);
-            has_incomplete_tail = 1;
-            break;
-        }
-
-        // Recompute hash
-        uint8_t computed_hash[ALRIOS_AUDIT_HASH_SIZE];
-        int ch_rc = alrios_audit_compute_hash(hdr.sequence, hdr.timestamp, hdr.previous_hash, payload_buf, hdr.payload_size, computed_hash);
-        if (payload_buf) {
-            explicit_bzero(payload_buf, hdr.payload_size);
-            free(payload_buf);
-        }
-
-        if (ch_rc != ALRIOS_AUDIT_OK || memcmp(computed_hash, hdr.hash, ALRIOS_AUDIT_HASH_SIZE) != 0) {
-            flock(fd, LOCK_UN);
-            close(fd);
-            return ALRIOS_AUDIT_ERR_HASH_MISMATCH;
-        }
-
-        block_count++;
-        valid_bytes += sizeof(audit_record_header_t) + hdr.payload_size + sizeof(audit_record_trailer_t);
-        expected_seq = hdr.sequence + 1;
-        memcpy(expected_prev_hash, hdr.hash, ALRIOS_AUDIT_HASH_SIZE);
-        memcpy(out_result->last_hash, hdr.hash, ALRIOS_AUDIT_HASH_SIZE);
+process_cleanup:
+    process_unlock_status = process_lock_release();
+    if (status == ALRIOS_AUDIT_OK &&
+        process_unlock_status != ALRIOS_AUDIT_OK) {
+        status = process_unlock_status;
     }
-
-    flock(fd, LOCK_UN);
-    close(fd);
-
-    out_result->block_count = block_count;
-    out_result->valid_bytes = valid_bytes;
-    out_result->has_incomplete_tail = has_incomplete_tail;
-
-    return ALRIOS_AUDIT_OK;
+    return status;
 }

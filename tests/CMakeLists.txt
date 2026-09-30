@@ -265,6 +265,15 @@ set_target_properties(test_remote_checkpoint PROPERTIES
 )
 add_test(NAME test_remote_checkpoint COMMAND test_remote_checkpoint)
 
+add_executable(test_memory_pressure integration/resources/test_memory_pressure.c)
+target_link_libraries(test_memory_pressure PRIVATE arresources)
+set_target_properties(test_memory_pressure PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_memory_pressure COMMAND test_memory_pressure)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
