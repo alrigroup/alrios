@@ -274,6 +274,15 @@ set_target_properties(test_memory_pressure PROPERTIES
 )
 add_test(NAME test_memory_pressure COMMAND test_memory_pressure)
 
+add_executable(test_hooks_transaction integration/deploy/test_hooks_transaction.c)
+target_link_libraries(test_hooks_transaction PRIVATE arhooks)
+set_target_properties(test_hooks_transaction PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_hooks_transaction COMMAND test_hooks_transaction)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")

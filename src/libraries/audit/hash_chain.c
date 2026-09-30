@@ -13,6 +13,7 @@
 #include <limits.h>
 #include <openssl/evp.h>
 #include <stdint.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -23,7 +24,7 @@
 #include <windows.h>
 #else
 #include <fcntl.h>
-#include <pthread.h>
+#include <sched.h>
 #include <unistd.h>
 #endif
 
@@ -74,50 +75,24 @@ static const uint8_t audit_trailer_magic[AUDIT_TRAILER_MAGIC_SIZE] = {
 };
 static const uint8_t audit_hash_domain[] = "ALRIOS-AUDIT-BLOCK-V1";
 
+static atomic_flag audit_process_lock = ATOMIC_FLAG_INIT;
+
+static int process_lock_acquire(void) {
+    while (atomic_flag_test_and_set_explicit(&audit_process_lock,
+                                              memory_order_acquire)) {
 #ifdef _WIN32
-static INIT_ONCE audit_process_lock_once = INIT_ONCE_STATIC_INIT;
-static CRITICAL_SECTION audit_process_lock;
-
-static BOOL CALLBACK initialize_process_lock(PINIT_ONCE once,
-                                              PVOID parameter,
-                                              PVOID *context) {
-    (void)once;
-    (void)parameter;
-    (void)context;
-    InitializeCriticalSection(&audit_process_lock);
-    return TRUE;
-}
-
-static int process_lock_acquire(void) {
-    if (!InitOnceExecuteOnce(&audit_process_lock_once,
-                             initialize_process_lock,
-                             NULL,
-                             NULL)) {
-        return ALRIOS_AUDIT_ERR_LOCK;
-    }
-    EnterCriticalSection(&audit_process_lock);
-    return ALRIOS_AUDIT_OK;
-}
-
-static int process_lock_release(void) {
-    LeaveCriticalSection(&audit_process_lock);
-    return ALRIOS_AUDIT_OK;
-}
+        Sleep(0U);
 #else
-static pthread_mutex_t audit_process_lock = PTHREAD_MUTEX_INITIALIZER;
-
-static int process_lock_acquire(void) {
-    return pthread_mutex_lock(&audit_process_lock) == 0
-               ? ALRIOS_AUDIT_OK
-               : ALRIOS_AUDIT_ERR_LOCK;
+        (void)sched_yield();
+#endif
+    }
+    return ALRIOS_AUDIT_OK;
 }
 
 static int process_lock_release(void) {
-    return pthread_mutex_unlock(&audit_process_lock) == 0
-               ? ALRIOS_AUDIT_OK
-               : ALRIOS_AUDIT_ERR_LOCK;
+    atomic_flag_clear_explicit(&audit_process_lock, memory_order_release);
+    return ALRIOS_AUDIT_OK;
 }
-#endif
 
 static uint16_t load_u16_be(const uint8_t *bytes) {
     return (uint16_t)(((uint16_t)bytes[0] << 8U) | (uint16_t)bytes[1]);

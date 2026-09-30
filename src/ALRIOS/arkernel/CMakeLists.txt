@@ -188,6 +188,8 @@ target_include_directories(ardeploy PUBLIC
 # 7. arhooks (Deterministic Lifecycle Event Execution)
 add_library(arhooks STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/hooks/hooks_executor.c
+    ${CMAKE_SOURCE_DIR}/src/commands/armake/build_pipeline.c
+    ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/deploy_hooks.c
 )
 set_property(TARGET arhooks PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arhooks PUBLIC
@@ -257,7 +259,7 @@ target_include_directories(araudit PUBLIC
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/alrios
 )
-target_link_libraries(araudit PUBLIC arcrypto OpenSSL::Crypto Threads::Threads)
+target_link_libraries(araudit PUBLIC arcrypto OpenSSL::Crypto)
 
 add_executable(ar_auditd ${CMAKE_SOURCE_DIR}/src/daemons/ar_auditd/main.c)
 target_link_libraries(ar_auditd PRIVATE araudit arcrypto OpenSSL::Crypto)
