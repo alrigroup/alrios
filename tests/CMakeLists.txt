@@ -236,6 +236,17 @@ set_target_properties(test_tripartite_state PROPERTIES
 )
 add_test(NAME test_tripartite_state COMMAND test_tripartite_state)
 
+add_executable(test_guest_isolation
+    integration/ipc/test_guest_isolation.c
+)
+target_link_libraries(test_guest_isolation PRIVATE aripc_v2 arkernel OpenSSL::Crypto Threads::Threads)
+set_target_properties(test_guest_isolation PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_guest_isolation COMMAND test_guest_isolation)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")

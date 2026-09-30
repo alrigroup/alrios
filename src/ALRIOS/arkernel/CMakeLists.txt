@@ -147,6 +147,8 @@ add_library(aripc_v2 STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/ipc/ipc_channel.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/ipc/epoll_multiplexer.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/ipc/http_serializer.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/ipc/guest_channel.c
+    ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/guest_router.c
 )
 set_property(TARGET aripc_v2 PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(aripc_v2 PUBLIC
