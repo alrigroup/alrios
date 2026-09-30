@@ -99,6 +99,19 @@ target_include_directories(arsdk_core PUBLIC
     ${CMAKE_SOURCE_DIR}/include/alrios
 )
 
+add_library(arvault STATIC
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/vault/vault.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/vault/store.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/vault/inject.c
+)
+set_property(TARGET arvault PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arvault PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+    ${OPENSSL_INCLUDE_DIR}
+)
+target_link_libraries(arvault PUBLIC arcrypto OpenSSL::Crypto)
+
 # 2. arcrypto (Cryptographic Operations & Hardware Verification)
 add_library(arcrypto STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/crypto/utils.c
