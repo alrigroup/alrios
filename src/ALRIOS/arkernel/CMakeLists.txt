@@ -247,6 +247,17 @@ target_include_directories(arstorage PUBLIC
 )
 target_link_libraries(arstorage PUBLIC arkernel arcrypto)
 
+# 12. araudit (Append-Only Cryptographic Audit Chain)
+add_library(araudit STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/audit/hash_chain.c
+)
+set_property(TARGET araudit PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(araudit PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(araudit PUBLIC arcrypto OpenSSL::Crypto)
+
 # ====================================================================
 # Umbrella Target: libarsdk (Maintains 100% Backward Compatibility)
 # ====================================================================
@@ -280,6 +291,7 @@ add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/loader/sovereign_loader.c
     ${CMAKE_SOURCE_DIR}/src/libraries/storage/bindings.c
     ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/mounts.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/audit/hash_chain.c
     ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/devmode.c
     ${CMAKE_SOURCE_DIR}/src/libraries/sandbox/launcher_linux.c
 )

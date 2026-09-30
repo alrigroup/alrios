@@ -247,6 +247,15 @@ set_target_properties(test_guest_isolation PROPERTIES
 )
 add_test(NAME test_guest_isolation COMMAND test_guest_isolation)
 
+add_executable(test_hash_chain unit/audit/test_hash_chain.c)
+target_link_libraries(test_hash_chain PRIVATE araudit OpenSSL::Crypto)
+set_target_properties(test_hash_chain PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_hash_chain COMMAND test_hash_chain)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
