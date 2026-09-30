@@ -224,6 +224,17 @@ set_target_properties(test_loader_injection PROPERTIES
 )
 add_test(NAME test_loader_injection COMMAND test_loader_injection)
 
+add_executable(test_tripartite_state
+    integration/storage/test_tripartite_state.c
+)
+target_link_libraries(test_tripartite_state PRIVATE arstorage arpackage arpki arcrypto OpenSSL::Crypto)
+set_target_properties(test_tripartite_state PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_tripartite_state COMMAND test_tripartite_state)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")

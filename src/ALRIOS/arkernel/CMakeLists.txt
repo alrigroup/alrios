@@ -230,6 +230,19 @@ target_include_directories(arloader PUBLIC
 )
 target_link_libraries(arloader PUBLIC arpackage arpki arcrypto OpenSSL::Crypto)
 
+# 11. arstorage (Immutable Code and External Persistent Data Mounts)
+add_library(arstorage STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/storage/bindings.c
+    ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/mounts.c
+)
+set_property(TARGET arstorage PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arstorage PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
+)
+target_link_libraries(arstorage PUBLIC arkernel arcrypto)
+
 # ====================================================================
 # Umbrella Target: libarsdk (Maintains 100% Backward Compatibility)
 # ====================================================================
@@ -261,6 +274,8 @@ add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_reader.c
     ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_signatures.c
     ${CMAKE_SOURCE_DIR}/src/libraries/loader/sovereign_loader.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/storage/bindings.c
+    ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/mounts.c
 )
 set_property(TARGET arsdk PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arsdk PUBLIC
