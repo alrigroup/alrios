@@ -133,6 +133,7 @@ target_link_libraries(arcrypto PUBLIC OpenSSL::Crypto)
 add_library(arpolicy STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/profiles/profiles.c
     ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/policy.c
+    ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/devmode.c
 )
 set_property(TARGET arpolicy PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arpolicy PUBLIC
@@ -199,6 +200,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         ${CMAKE_SOURCE_DIR}/src/ALRIOS/sandbox/cgroups_init.c
         ${CMAKE_SOURCE_DIR}/src/ALRIOS/sandbox/ns_unshare.c
         ${CMAKE_SOURCE_DIR}/src/ALRIOS/kernel/memloader.c
+        ${CMAKE_SOURCE_DIR}/src/libraries/sandbox/launcher_linux.c
     )
     set_property(TARGET arsandbox_linux PROPERTY POSITION_INDEPENDENT_CODE ON)
     target_include_directories(arsandbox_linux PUBLIC
@@ -276,6 +278,8 @@ add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/loader/sovereign_loader.c
     ${CMAKE_SOURCE_DIR}/src/libraries/storage/bindings.c
     ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/mounts.c
+    ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/devmode.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/sandbox/launcher_linux.c
 )
 set_property(TARGET arsdk PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arsdk PUBLIC

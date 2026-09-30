@@ -53,6 +53,7 @@ register_alrios_test(test_ar_sdk test_ar_sdk.c)
 register_alrios_test(test_seccomp_filter test_seccomp_filter.c)
 register_alrios_test(test_cgroups_init test_cgroups_init.c)
 register_alrios_test(test_ns_unshare test_ns_unshare.c)
+register_alrios_test(test_devmode_escape security/test_devmode_escape.c)
 register_alrios_test(test_manifest_canon test_manifest_canon.c)
 register_alrios_test(test_preimage test_preimage.c)
 
