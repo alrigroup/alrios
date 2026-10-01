@@ -301,6 +301,15 @@ set_target_properties(test_index PROPERTIES
 )
 add_test(NAME test_index COMMAND test_index)
 
+add_executable(test_delta_install integration/deploy/test_delta_install.c)
+target_link_libraries(test_delta_install PRIVATE ardeploy arcrypto OpenSSL::Crypto)
+set_target_properties(test_delta_install PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_delta_install COMMAND test_delta_install)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")

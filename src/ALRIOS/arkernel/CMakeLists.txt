@@ -179,6 +179,8 @@ add_library(ardeploy STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/atomic_swap.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/arapp_index.c
     ${CMAKE_SOURCE_DIR}/src/libraries/deploy/drain.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/deploy/layering.c
+    ${CMAKE_SOURCE_DIR}/src/commands/arpm/delta_install.c
     ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/socket_handover.c
 )
 set_property(TARGET ardeploy PROPERTY POSITION_INDEPENDENT_CODE ON)
