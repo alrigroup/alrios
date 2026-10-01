@@ -219,6 +219,8 @@ endif()
 add_library(arpackage STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_reader.c
     ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_signatures.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/package/index.c
+    ${CMAKE_SOURCE_DIR}/src/commands/armake/index_writer.c
 )
 set_property(TARGET arpackage PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arpackage PUBLIC

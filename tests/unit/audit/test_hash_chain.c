@@ -333,13 +333,11 @@ static void test_header_length_mutation_is_not_crash_tail(void) {
 static void test_tail_with_committed_marker_rejected(void) {
     static const uint8_t payload[] = "tail validation test";
     char path[512];
-    alrios_audit_block_t block;
     alrios_audit_verify_result_t result;
 
     make_path(path, sizeof(path), "tail-with-commit.audit");
     CHECK(alrios_audit_append(path, 3300U, payload,
-                              sizeof(payload) - 1U, &block) == ALRIOS_AUDIT_OK);
-    /* Corrupt header payload size so trailer falls inside supposed payload */
+                              sizeof(payload) - 1U, NULL) == ALRIOS_AUDIT_OK);
     overwrite_byte(path, HEADER_PAYLOAD_SIZE_OFFSET + 3U,
                    (uint8_t)(sizeof(payload) + 10U));
     CHECK(alrios_audit_verify(path, &result) == ALRIOS_AUDIT_ERR_FORMAT);

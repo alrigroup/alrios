@@ -292,6 +292,15 @@ set_target_properties(test_websocket_drain PROPERTIES
 )
 add_test(NAME test_websocket_drain COMMAND test_websocket_drain)
 
+add_executable(test_index unit/package/test_index.c)
+target_link_libraries(test_index PRIVATE arpackage arcrypto OpenSSL::Crypto)
+set_target_properties(test_index PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_index COMMAND test_index)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
