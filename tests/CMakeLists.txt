@@ -50,6 +50,14 @@ register_alrios_test(test_atomic_swap test_atomic_swap.c)
 register_alrios_test(test_arapp_index test_arapp_index.c)
 register_alrios_test(test_profiles test_profiles.c)
 register_alrios_test(test_ar_sdk test_ar_sdk.c)
+add_executable(test_app_lifecycle unit/sdk/test_app_lifecycle.c)
+target_link_libraries(test_app_lifecycle PRIVATE arsdk_core arcrypto OpenSSL::Crypto)
+set_target_properties(test_app_lifecycle PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_app_lifecycle COMMAND test_app_lifecycle)
 register_alrios_test(test_seccomp_filter test_seccomp_filter.c)
 register_alrios_test(test_cgroups_init test_cgroups_init.c)
 register_alrios_test(test_ns_unshare test_ns_unshare.c)

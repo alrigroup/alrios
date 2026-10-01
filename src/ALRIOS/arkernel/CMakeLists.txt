@@ -91,6 +91,7 @@ add_custom_command(TARGET arkernel POST_BUILD
 # 1. arsdk_core (Strict Portable C11 Application SDK)
 add_library(arsdk_core STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/sdk/ar_sdk.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/sdk/app.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/vault/vault.c
 )
 set_property(TARGET arsdk_core PROPERTY POSITION_INDEPENDENT_CODE ON)
@@ -311,6 +312,7 @@ set_target_properties(ar_eventd PROPERTIES
 # ====================================================================
 add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/sdk/ar_sdk.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/sdk/app.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/vault/vault.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/profiles/profiles.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/kernel/memloader.c
