@@ -327,6 +327,17 @@ set_target_properties(test_pubsub PROPERTIES
 )
 add_test(NAME test_pubsub COMMAND test_pubsub)
 
+add_executable(test_arcc integration/toolchain/test_arcc.c)
+set_target_properties(test_arcc PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_arcc COMMAND test_arcc)
+set_tests_properties(test_arcc PROPERTIES
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
