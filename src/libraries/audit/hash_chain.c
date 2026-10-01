@@ -21,6 +21,7 @@
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
+#include <share.h>
 #include <windows.h>
 #else
 #include <fcntl.h>
@@ -306,9 +307,12 @@ static int truncate_fd(audit_fd_t fd, uint64_t length) {
                ? ALRIOS_AUDIT_OK
                : ALRIOS_AUDIT_ERR_IO;
 #else
-    return ftruncate(fd, converted) == 0
-               ? ALRIOS_AUDIT_OK
-               : ALRIOS_AUDIT_ERR_IO;
+    int result;
+
+    do {
+        result = ftruncate(fd, converted);
+    } while (result < 0 && errno == EINTR);
+    return result == 0 ? ALRIOS_AUDIT_OK : ALRIOS_AUDIT_ERR_IO;
 #endif
 }
 
@@ -325,14 +329,19 @@ static int sync_fd(audit_fd_t fd) {
     }
     return ALRIOS_AUDIT_OK;
 #else
-    return fsync(fd) == 0 ? ALRIOS_AUDIT_OK : ALRIOS_AUDIT_ERR_IO;
+    int result;
+
+    do {
+        result = fsync(fd);
+    } while (result < 0 && errno == EINTR);
+    return result == 0 ? ALRIOS_AUDIT_OK : ALRIOS_AUDIT_ERR_IO;
 #endif
 }
 
 static int fd_size(audit_fd_t fd, uint64_t *out_size) {
     audit_stat_t file_status;
 
-    if (audit_fstat(fd, &file_status) != 0 || file_status.st_size < 0) {
+    if (audit_fstat(fd, &file_status) != 0) {
         return ALRIOS_AUDIT_ERR_IO;
     }
 #ifdef _WIN32
@@ -344,6 +353,9 @@ static int fd_size(audit_fd_t fd, uint64_t *out_size) {
         return ALRIOS_AUDIT_ERR_NOT_REGULAR;
     }
 #endif
+    if (file_status.st_size < 0) {
+        return ALRIOS_AUDIT_ERR_IO;
+    }
     *out_size = (uint64_t)file_status.st_size;
     return ALRIOS_AUDIT_OK;
 }
@@ -390,6 +402,101 @@ static int compute_hash_parts(
 cleanup:
     EVP_MD_CTX_free(context);
     return status;
+}
+
+static int compute_hash_from_fd(
+    audit_fd_t fd,
+    const uint8_t header[ALRIOS_AUDIT_RECORD_HEADER_SIZE],
+    uint64_t payload_offset,
+    uint32_t payload_size,
+    uint8_t out_hash[ALRIOS_AUDIT_HASH_SIZE]) {
+    uint8_t payload_buffer[AUDIT_IO_CHUNK_SIZE];
+    size_t remaining = (size_t)payload_size;
+    EVP_MD_CTX *context;
+    unsigned int digest_size = 0U;
+    int status = ALRIOS_AUDIT_ERR_UNAVAILABLE;
+
+    context = EVP_MD_CTX_new();
+    if (!context) {
+        return ALRIOS_AUDIT_ERR_UNAVAILABLE;
+    }
+    if (EVP_DigestInit_ex(context, EVP_sha256(), NULL) != 1 ||
+        digest_update(context, audit_hash_domain,
+                      sizeof(audit_hash_domain) - 1U) != ALRIOS_AUDIT_OK ||
+        digest_header(context, header) != ALRIOS_AUDIT_OK) {
+        goto cleanup;
+    }
+    while (remaining > 0U) {
+        size_t chunk_size = remaining < sizeof(payload_buffer)
+                                ? remaining
+                                : sizeof(payload_buffer);
+
+        status = read_exact_at(fd, payload_offset, payload_buffer, chunk_size);
+        if (status != ALRIOS_AUDIT_OK) {
+            goto cleanup;
+        }
+        status = digest_update(context, payload_buffer, chunk_size);
+        if (status != ALRIOS_AUDIT_OK) {
+            goto cleanup;
+        }
+        payload_offset += (uint64_t)chunk_size;
+        remaining -= chunk_size;
+    }
+    if (EVP_DigestFinal_ex(context, out_hash, &digest_size) != 1 ||
+        digest_size != ALRIOS_AUDIT_HASH_SIZE) {
+        status = ALRIOS_AUDIT_ERR_UNAVAILABLE;
+        goto cleanup;
+    }
+    status = ALRIOS_AUDIT_OK;
+
+cleanup:
+    if (status != ALRIOS_AUDIT_OK) {
+        memset(out_hash, 0, ALRIOS_AUDIT_HASH_SIZE);
+    }
+    EVP_MD_CTX_free(context);
+    return status;
+}
+
+static int contains_commitment(audit_fd_t fd,
+                               uint64_t offset,
+                               uint64_t length,
+                               const uint8_t hash[ALRIOS_AUDIT_HASH_SIZE],
+                               int *out_found) {
+    uint8_t expected[ALRIOS_AUDIT_RECORD_TRAILER_SIZE];
+    uint8_t buffer[AUDIT_IO_CHUNK_SIZE + ALRIOS_AUDIT_RECORD_TRAILER_SIZE - 1U];
+    size_t retained = 0U;
+
+    memcpy(expected, audit_trailer_magic, AUDIT_TRAILER_MAGIC_SIZE);
+    memcpy(expected + AUDIT_TRAILER_HASH_OFFSET, hash, ALRIOS_AUDIT_HASH_SIZE);
+    *out_found = 0;
+    while (length > 0U) {
+        size_t chunk_size = length < AUDIT_IO_CHUNK_SIZE
+                                ? (size_t)length
+                                : AUDIT_IO_CHUNK_SIZE;
+        size_t available;
+        size_t index;
+        int status = read_exact_at(fd, offset, buffer + retained, chunk_size);
+
+        if (status != ALRIOS_AUDIT_OK) {
+            return status;
+        }
+        available = retained + chunk_size;
+        if (available >= sizeof(expected)) {
+            for (index = 0U; index <= available - sizeof(expected); ++index) {
+                if (memcmp(buffer + index, expected, sizeof(expected)) == 0) {
+                    *out_found = 1;
+                    return ALRIOS_AUDIT_OK;
+                }
+            }
+            retained = sizeof(expected) - 1U;
+            memmove(buffer, buffer + available - retained, retained);
+        } else {
+            retained = available;
+        }
+        offset += (uint64_t)chunk_size;
+        length -= (uint64_t)chunk_size;
+    }
+    return ALRIOS_AUDIT_OK;
 }
 
 static void encode_header(uint8_t header[ALRIOS_AUDIT_RECORD_HEADER_SIZE],
@@ -464,7 +571,6 @@ static int verify_fd(audit_fd_t fd, alrios_audit_verify_result_t *out_result) {
     uint8_t trailer[ALRIOS_AUDIT_RECORD_TRAILER_SIZE];
     uint8_t expected_previous_hash[ALRIOS_AUDIT_HASH_SIZE] = {0};
     uint8_t computed_hash[ALRIOS_AUDIT_HASH_SIZE];
-    uint8_t payload_buffer[AUDIT_IO_CHUNK_SIZE];
     uint64_t file_size;
     uint64_t offset = 0U;
     uint64_t block_count = 0U;
@@ -481,11 +587,7 @@ static int verify_fd(audit_fd_t fd, alrios_audit_verify_result_t *out_result) {
         uint32_t payload_size;
         uint64_t sequence;
         uint64_t record_size;
-        uint64_t payload_offset;
         uint64_t trailer_offset;
-        size_t remaining;
-        EVP_MD_CTX *context;
-        unsigned int digest_size = 0U;
 
         if (file_size - offset < ALRIOS_AUDIT_RECORD_HEADER_SIZE) {
             status = validate_partial_header(fd, offset, file_size - offset);
@@ -517,19 +619,39 @@ static int verify_fd(audit_fd_t fd, alrios_audit_verify_result_t *out_result) {
             uint64_t available_after_header =
                 file_size - offset - ALRIOS_AUDIT_RECORD_HEADER_SIZE;
 
-            if (available_after_header >= (uint64_t)payload_size) {
+            if (available_after_header > (uint64_t)payload_size) {
+                size_t partial_trailer_size =
+                    (size_t)(available_after_header - (uint64_t)payload_size);
+
                 trailer_offset = offset + ALRIOS_AUDIT_RECORD_HEADER_SIZE +
                                  (uint64_t)payload_size;
                 status = read_exact_at(fd,
                                        trailer_offset,
                                        trailer,
-                                       (size_t)(file_size - trailer_offset));
+                                       partial_trailer_size);
                 if (status != ALRIOS_AUDIT_OK) {
                     return status;
                 }
                 if (memcmp(trailer,
                            audit_trailer_magic,
-                           (size_t)(file_size - trailer_offset)) != 0) {
+                           partial_trailer_size < AUDIT_TRAILER_MAGIC_SIZE
+                               ? partial_trailer_size
+                               : AUDIT_TRAILER_MAGIC_SIZE) != 0) {
+                    return ALRIOS_AUDIT_ERR_FORMAT;
+                }
+            } else {
+                int found_commit = 0;
+
+                status = contains_commitment(
+                    fd,
+                    offset + ALRIOS_AUDIT_RECORD_HEADER_SIZE,
+                    available_after_header,
+                    header + AUDIT_HEADER_HASH_OFFSET,
+                    &found_commit);
+                if (status != ALRIOS_AUDIT_OK) {
+                    return status;
+                }
+                if (found_commit) {
                     return ALRIOS_AUDIT_ERR_FORMAT;
                 }
             }
@@ -537,42 +659,15 @@ static int verify_fd(audit_fd_t fd, alrios_audit_verify_result_t *out_result) {
             break;
         }
 
-        context = EVP_MD_CTX_new();
-        if (!context) {
-            return ALRIOS_AUDIT_ERR_UNAVAILABLE;
+        status = compute_hash_from_fd(
+            fd,
+            header,
+            offset + ALRIOS_AUDIT_RECORD_HEADER_SIZE,
+            payload_size,
+            computed_hash);
+        if (status != ALRIOS_AUDIT_OK) {
+            return status;
         }
-        if (EVP_DigestInit_ex(context, EVP_sha256(), NULL) != 1 ||
-            digest_update(context, audit_hash_domain,
-                          sizeof(audit_hash_domain) - 1U) != ALRIOS_AUDIT_OK ||
-            digest_header(context, header) != ALRIOS_AUDIT_OK) {
-            EVP_MD_CTX_free(context);
-            return ALRIOS_AUDIT_ERR_UNAVAILABLE;
-        }
-
-        payload_offset = offset + ALRIOS_AUDIT_RECORD_HEADER_SIZE;
-        remaining = (size_t)payload_size;
-        while (remaining > 0U) {
-            size_t chunk_size = remaining < sizeof(payload_buffer)
-                                    ? remaining
-                                    : sizeof(payload_buffer);
-            status = read_exact_at(fd, payload_offset, payload_buffer, chunk_size);
-            if (status != ALRIOS_AUDIT_OK ||
-                digest_update(context, payload_buffer, chunk_size) !=
-                    ALRIOS_AUDIT_OK) {
-                EVP_MD_CTX_free(context);
-                return status != ALRIOS_AUDIT_OK
-                           ? status
-                           : ALRIOS_AUDIT_ERR_UNAVAILABLE;
-            }
-            payload_offset += (uint64_t)chunk_size;
-            remaining -= chunk_size;
-        }
-        if (EVP_DigestFinal_ex(context, computed_hash, &digest_size) != 1 ||
-            digest_size != ALRIOS_AUDIT_HASH_SIZE) {
-            EVP_MD_CTX_free(context);
-            return ALRIOS_AUDIT_ERR_UNAVAILABLE;
-        }
-        EVP_MD_CTX_free(context);
 
         trailer_offset = offset + ALRIOS_AUDIT_RECORD_HEADER_SIZE +
                          (uint64_t)payload_size;
