@@ -222,6 +222,17 @@ set_target_properties(test_profile_enforcement PROPERTIES
 )
 add_test(NAME test_profile_enforcement COMMAND test_profile_enforcement)
 
+add_executable(test_security_epoch
+    integration/policy/test_security_epoch.c
+)
+target_link_libraries(test_security_epoch PRIVATE arpolicy)
+set_target_properties(test_security_epoch PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_security_epoch COMMAND test_security_epoch)
+
 add_executable(test_loader_injection
     integration/vault/test_loader_injection.c
 )

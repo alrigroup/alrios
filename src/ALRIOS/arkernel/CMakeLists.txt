@@ -135,6 +135,7 @@ add_library(arpolicy STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/profiles/profiles.c
     ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/policy.c
     ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/devmode.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/policy/security_epoch.c
 )
 set_property(TARGET arpolicy PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arpolicy PUBLIC
@@ -142,6 +143,12 @@ target_include_directories(arpolicy PUBLIC
     ${CMAKE_SOURCE_DIR}/include/alrios
 )
 target_link_libraries(arpolicy PUBLIC arcrypto)
+
+add_executable(ar_chronod ${CMAKE_SOURCE_DIR}/src/daemons/ar_chronod/main.c)
+target_link_libraries(ar_chronod PRIVATE arpolicy)
+set_target_properties(ar_chronod PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+)
 
 # 4. aripc_v2 (Sovereign Binary Framing & Multiplexing)
 add_library(aripc_v2 STATIC
