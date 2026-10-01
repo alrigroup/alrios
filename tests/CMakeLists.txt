@@ -233,6 +233,17 @@ set_target_properties(test_security_epoch PROPERTIES
 )
 add_test(NAME test_security_epoch COMMAND test_security_epoch)
 
+add_executable(test_supervisor_context
+    unit/supervisor/test_context.c
+)
+target_link_libraries(test_supervisor_context PRIVATE arsupervisor_ctx)
+set_target_properties(test_supervisor_context PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_supervisor_context COMMAND test_supervisor_context)
+
 add_executable(test_core_dump_sanitization
     security/test_core_dump_sanitization.c
 )

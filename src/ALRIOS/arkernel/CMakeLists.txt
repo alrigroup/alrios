@@ -130,7 +130,16 @@ target_include_directories(arcrypto PUBLIC
 )
 target_link_libraries(arcrypto PUBLIC OpenSSL::Crypto)
 
-# 3. arpolicy (Execution Profiles & Compliance Gates)
+# 16. arsupervisor_ctx (Explicit Supervisor Context & Loader)
+add_library(arsupervisor_ctx STATIC
+    ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/context.c
+    ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/loader.c
+)
+set_property(TARGET arsupervisor_ctx PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arsupervisor_ctx PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
 add_library(arpolicy STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/profiles/profiles.c
     ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/policy.c
