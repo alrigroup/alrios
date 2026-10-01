@@ -20,12 +20,18 @@ extern int alrios_supervisor_deploy_swap_and_drain(const char *app_id, const cha
 
 int main(void) {
     const char *slot_dir = "/tmp/alrios_test_hook_slot";
-    (void)system("rm -rf /tmp/alrios_test_hook_slot");
+    int command_status = system("rm -rf /tmp/alrios_test_hook_slot");
+    if (command_status != 0) {
+        return 1;
+    }
     mkdir(slot_dir, 0700);
 
     char pre_swap_dir[512];
     snprintf(pre_swap_dir, sizeof(pre_swap_dir), "%s/hooks.d/pre-swap", slot_dir);
-    (void)system("mkdir -p /tmp/alrios_test_hook_slot/hooks.d/pre-swap /tmp/alrios_test_hook_slot/hooks.d/post-swap");
+    command_status = system("mkdir -p /tmp/alrios_test_hook_slot/hooks.d/pre-swap /tmp/alrios_test_hook_slot/hooks.d/post-swap");
+    if (command_status != 0) {
+        return 1;
+    }
 
     // 1. Acceptance Criterion 1: pre-swap failure aborts
     FILE *f_bad = fopen("/tmp/alrios_test_hook_slot/hooks.d/pre-swap/01_fail.sh", "w");
@@ -61,7 +67,10 @@ int main(void) {
     rc = alrios_armake_run_pipeline("test.app", slot_dir);
     assert(rc == 0);
 
-    (void)system("rm -rf /tmp/alrios_test_hook_slot");
+    command_status = system("rm -rf /tmp/alrios_test_hook_slot");
+    if (command_status != 0) {
+        return 1;
+    }
     printf("TEST_HOOKS_TRANSACTION: PASS\n");
     return 0;
 }

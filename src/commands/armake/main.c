@@ -222,8 +222,12 @@ static int cmd_build_or_pack(const char *dir, const char *output, int legacy) {
         fclose(mf);
         return 1;
     }
-    fread(mjson, 1, (size_t)msz, mf);
+    size_t read_bytes = fread(mjson, 1, (size_t)msz, mf);
     fclose(mf);
+    if (read_bytes != (size_t)msz) {
+        free(mjson);
+        return 1;
+    }
     mjson[msz] = '\0';
 
     uint8_t *payload = NULL;

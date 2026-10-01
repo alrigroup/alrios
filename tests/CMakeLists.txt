@@ -310,6 +310,15 @@ set_target_properties(test_delta_install PROPERTIES
 )
 add_test(NAME test_delta_install COMMAND test_delta_install)
 
+add_executable(test_pubsub integration/events/test_pubsub.c)
+target_link_libraries(test_pubsub PRIVATE arevents Threads::Threads)
+set_target_properties(test_pubsub PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_pubsub COMMAND test_pubsub)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")

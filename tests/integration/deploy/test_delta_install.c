@@ -24,7 +24,10 @@ extern int alrios_arpm_install_delta(const char *old_slot,
 int main(void) {
     const char *old_slot = "/tmp/alrios_test_slot_old";
     const char *new_slot = "/tmp/alrios_test_slot_new";
-    (void)system("rm -rf /tmp/alrios_test_slot_old /tmp/alrios_test_slot_new");
+    int command_status = system("rm -rf /tmp/alrios_test_slot_old /tmp/alrios_test_slot_new");
+    if (command_status != 0) {
+        return 1;
+    }
     mkdir(old_slot, 0755);
 
     // 1. Setup old slot file
@@ -80,7 +83,10 @@ int main(void) {
     (void)s3;
     assert(s3 == 0);
 
-    (void)system("rm -rf /tmp/alrios_test_slot_old /tmp/alrios_test_slot_new /tmp/alrios_test_slot_fail");
+    command_status = system("rm -rf /tmp/alrios_test_slot_old /tmp/alrios_test_slot_new /tmp/alrios_test_slot_fail");
+    if (command_status != 0) {
+        return 1;
+    }
     printf("TEST_DELTA_INSTALL: PASS\n");
     return 0;
 }

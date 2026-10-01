@@ -289,6 +289,23 @@ set_target_properties(ar_resourced PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
 )
 
+# 14. arevents (Authorized In-Memory Event Broker)
+add_library(arevents STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/events/broker.c
+)
+set_property(TARGET arevents PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arevents PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(arevents PUBLIC Threads::Threads)
+
+add_executable(ar_eventd ${CMAKE_SOURCE_DIR}/src/daemons/ar_eventd/main.c)
+target_link_libraries(ar_eventd PRIVATE arevents Threads::Threads)
+set_target_properties(ar_eventd PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+)
+
 # ====================================================================
 # Umbrella Target: libarsdk (Maintains 100% Backward Compatibility)
 # ====================================================================

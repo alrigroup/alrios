@@ -20,7 +20,10 @@ extern int alrios_armake_write_index(const char *source_dir, const char *output_
 int main(void) {
     const char *test_dir = "/tmp/alrios_test_index_dir";
     const char *index_file = "/tmp/alrios_test.index";
-    (void)system("rm -rf /tmp/alrios_test_index_dir && mkdir -p /tmp/alrios_test_index_dir");
+    int command_status = system("rm -rf /tmp/alrios_test_index_dir && mkdir -p /tmp/alrios_test_index_dir");
+    if (command_status != 0) {
+        return 1;
+    }
     unlink(index_file);
 
     // 1. Acceptance Criterion 1: SHA-256 per file computed
@@ -49,7 +52,10 @@ int main(void) {
     rc = alrios_armake_write_index(test_dir, index_file);
     assert(rc == ALRIOS_INDEX_ERR_MUTABLE_FILE); // Mutable files strictly rejected!
 
-    (void)system("rm -rf /tmp/alrios_test_index_dir");
+    command_status = system("rm -rf /tmp/alrios_test_index_dir");
+    if (command_status != 0) {
+        return 1;
+    }
     unlink(index_file);
     printf("TEST_INDEX: PASS\n");
     return 0;
