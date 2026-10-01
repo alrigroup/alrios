@@ -314,6 +314,24 @@ set_target_properties(ar_eventd PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
 )
 
+# 15. arsensitive (Sensitive Memory Registration & Sanitized Crash Reports)
+add_library(arsensitive STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/memory/sensitive.c
+)
+set_property(TARGET arsensitive PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arsensitive PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+    ${OPENSSL_INCLUDE_DIR}
+)
+target_link_libraries(arsensitive PUBLIC arcrypto OpenSSL::Crypto)
+
+add_executable(ar_cored ${CMAKE_SOURCE_DIR}/src/daemons/ar_cored/main.c)
+target_link_libraries(ar_cored PRIVATE arsensitive)
+set_target_properties(ar_cored PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+)
+
 # ====================================================================
 # Umbrella Target: libarsdk (Maintains 100% Backward Compatibility)
 # ====================================================================
