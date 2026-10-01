@@ -57,7 +57,7 @@ dist/
 .vscode/
 .idea/
 # Storage & backups
-storage/
+/storage/
 storage.bak/
 *.db
 *.db.tmp

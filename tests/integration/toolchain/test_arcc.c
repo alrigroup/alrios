@@ -34,7 +34,7 @@ int main(void) {
     FILE *file = fopen(bad_source, "w");
 
     REQUIRE(file != NULL);
-    REQUIRE(fputs("#include <string.h>\nint main(void) { char b[4]; strcpy(b, \"x\"); return 0; }\n", file) >= 0);
+    REQUIRE(fputs("#include <string.h>\nint main(void) { char b[4]; strncpy(b, \"x\", sizeof(b)); return 0; }\n", file) >= 0);
     REQUIRE(fclose(file) == 0);
     status = command_exit_code("./arcore/arcc /tmp/alrios_arcc_banned.c -o /tmp/alrios_arcc_banned 2>/dev/null");
     REQUIRE(status != 0);
