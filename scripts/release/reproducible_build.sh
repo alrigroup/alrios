@@ -47,11 +47,11 @@ cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
   -DCMAKE_EXE_LINKER_FLAGS="-Wl,--build-id=none"
 cmake --build "$BUILD_DIR" --parallel 1
 
-if [[ ! -d "$SOURCE_DIR/arcore" ]]; then
-  printf '%s\n' "reproducible build produced no arcore artifact directory" >&2
+if [[ ! -d "$SOURCE_DIR/alrios-release" ]]; then
+  printf '%s\n' "reproducible build produced no alrios-release artifact directory" >&2
   exit 1
 fi
-cp -a "$SOURCE_DIR/arcore/." "$ARTIFACT_DIR/"
+cp -a "$SOURCE_DIR/alrios-release/." "$ARTIFACT_DIR/"
 
 python3 "$ROOT/scripts/release/sbom.py" \
   --source "$SOURCE_DIR" \
