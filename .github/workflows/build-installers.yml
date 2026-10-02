@@ -1,4 +1,4 @@
-name: Build & Package Installers (Multi-OS)
+name: Build & Package Installers (Linux)
 
 "on":
   push:
@@ -49,7 +49,7 @@ jobs:
         run: |
           cmake --build build-linux --target arcore alrios armake arinstall ar_auditd ar_resourced ar_chronod ar_cored ar_eventd alrios-ca arsign arcc -j$(nproc)
           chmod +x alrios-release/alrios alrios-release/arcore alrios-release/bin/* alrios-release/libexec/* 2>/dev/null || true
-          ln -sf alrios alrios-release/bin/arpm
+          ln -sf ../alrios alrios-release/bin/arpm
           chmod +x alrios-release/bin/arpm 2>/dev/null || true
 
       - name: Package modular .arapp applications
@@ -97,97 +97,7 @@ jobs:
           retention-days: 30
 
   # ============================================================================
-  # 2. WINDOWS BUILD & STANDALONE SETUP EXECUTABLE
-  # ============================================================================
-  build-windows:
-    name: Windows x64 Standalone Setup (.exe)
-    runs-on: windows-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Initialize available submodules
-        shell: bash
-        run: |
-          git submodule sync || true
-          git submodule update --init --recursive || true
-
-      - name: Setup MSVC Developer Command Prompt
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Locate OpenSSL & Build with CMake
-        shell: cmd
-        run: |
-          set "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL"
-          if not exist "%OPENSSL_ROOT_DIR%" set "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL-Win64"
-          if not exist "%OPENSSL_ROOT_DIR%" (
-            choco install openssl.light -y
-            set "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL"
-          )
-          echo OpenSSL located at: %OPENSSL_ROOT_DIR%
-          cmake -S . -B build-win -DCMAKE_BUILD_TYPE=Release -DOPENSSL_ROOT_DIR="%OPENSSL_ROOT_DIR%"
-          cmake --build build-win --config Release --target arcore alrios armake arinstall
-
-      - name: Package modular .arapp applications
-        shell: bash
-        run: |
-          mkdir -p arcore/apps
-          for appdir in src/apps/*/; do
-            if [ -d "$appdir" ]; then
-              appname=$(basename "$appdir")
-              if [ -f "$appdir/${appname}.arappmake" ] || [ -f "$appdir/config.arwe" ] || [ -f "$appdir/CMakeLists.txt" ]; then
-                echo "==> Empacotando app: ${appname}..."
-                ./arcore/armake.exe build "$appdir" "arcore/apps/${appname}.arapp" || {
-                  echo "[AVISO] Falha ao empacotar ${appname}, continuando..."
-                }
-              fi
-            fi
-          done
-          echo "==> Apps gerados no Windows:"
-          ls -lh arcore/apps/
-
-      - name: Assemble Windows Standalone Setup Executable (.exe)
-        shell: bash
-        run: |
-          # Copiar DLLs de runtime do OpenSSL para arcore/
-          for p in "C:/Program Files/OpenSSL/bin" "C:/Program Files/OpenSSL-Win64/bin"; do
-            if [ -d "$p" ]; then
-              cp "$p"/*.dll arcore/ 2>/dev/null || true
-            fi
-          done
-          
-          echo "==> Empacotando payload embutido do Windows..."
-          python -c '
-          import zipfile, os
-          with zipfile.ZipFile("payload.zip", "w", zipfile.ZIP_STORED) as z:
-              for root, dirs, files in os.walk("arcore"):
-                  if ".staging" in root or "programfiles" in root: continue
-                  for f in files:
-                      if f == "arinstall.exe": continue
-                      p = os.path.join(root, f)
-                      z.write(p, p)
-          '
-          cat arcore/arinstall.exe payload.zip > alrios-setup.exe
-          rm -f payload.zip
-          echo "==> Executavel alrios-setup.exe gerado com sucesso:"
-          ls -lh alrios-setup.exe
-
-      - name: Upload Windows Setup Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: alrios-setup.exe
-          path: alrios-setup.exe
-          retention-days: 30
-
-  # ============================================================================
-  # 3. PUBLISH GITHUB RELEASE (Triggered on Tags or beta-v0.2 branch)
+  # 2. PUBLISH GITHUB RELEASE (Triggered on Tags or beta-v0.2 branch)
   # ============================================================================
   release:
     name: Publish Official Release
@@ -214,7 +124,7 @@ jobs:
 
             - Instalação inteligente com persistência universal de PATH e links em /usr/local/bin.
             - CLI com sistema de registro e descoberta dinâmica de comandos por aplicativo.
-            - Toolchain, Arkernel e instaladores únicos para Linux x64 e Windows x64.
+            - Toolchain, Arkernel e instaladores únicos para Linux x64.
             - Binários soberanos prontos para Linux x64.
             - Compatibilidade total com gerenciador nativo `arpm`.
 
