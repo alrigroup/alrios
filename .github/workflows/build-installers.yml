@@ -80,6 +80,7 @@ jobs:
                   for f in files:
                       if f == "arinstall": continue
                       p = os.path.join(root, f)
+                      if os.path.islink(p): continue
                       z.write(p, p)
           '
           cat alrios-release/bin/arinstall payload.zip > alrios-installer-linux-x64
