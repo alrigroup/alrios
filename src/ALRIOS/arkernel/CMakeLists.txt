@@ -49,12 +49,12 @@ target_link_libraries(arkernel PUBLIC arlog)
 find_package(OpenSSL REQUIRED)
 target_include_directories(arkernel PUBLIC ${OPENSSL_INCLUDE_DIR})
 set_target_properties(arkernel PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore/lib"
-    ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore/lib"
-    ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore/lib"
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore/lib"
-    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore/lib"
-    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore/lib"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/alrios-release/lib"
+    ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/alrios-release/lib"
+    ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/alrios-release/lib"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/alrios-release/lib"
+    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/alrios-release/lib"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/alrios-release/lib"
 )
 
 if(WIN32)
@@ -62,26 +62,26 @@ if(WIN32)
 endif()
 
 add_custom_command(TARGET arkernel POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/arcore/include"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/alrios-release/include/alrios"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/os/include/aros_hal.h"
-        "${CMAKE_SOURCE_DIR}/arcore/include/aros_hal.h"
+        "${CMAKE_SOURCE_DIR}/alrios-release/include/alrios/aros_hal.h"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/include/ar_ipc.h"
-        "${CMAKE_SOURCE_DIR}/arcore/include/ar_ipc.h"
+        "${CMAKE_SOURCE_DIR}/alrios-release/include/alrios/ar_ipc.h"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/include/ar_kernel.h"
-        "${CMAKE_SOURCE_DIR}/arcore/include/ar_kernel.h"
+        "${CMAKE_SOURCE_DIR}/alrios-release/include/alrios/ar_kernel.h"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/include/ar_svc.h"
-        "${CMAKE_SOURCE_DIR}/arcore/include/ar_svc.h"
+        "${CMAKE_SOURCE_DIR}/alrios-release/include/alrios/ar_svc.h"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/src/ALRIOS/core/log.h"
-        "${CMAKE_SOURCE_DIR}/arcore/include/log.h"
+        "${CMAKE_SOURCE_DIR}/alrios-release/include/alrios/log.h"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/src/ALRIOS/core/arapp_parser.h"
-        "${CMAKE_SOURCE_DIR}/arcore/include/arapp_parser.h"
-    COMMENT "Installing ALRIOS kernel SDK headers into arcore/include"
+        "${CMAKE_SOURCE_DIR}/alrios-release/include/alrios/arapp_parser.h"
+    COMMENT "Installing ALRIOS kernel SDK headers into alrios-release/include/alrios"
 )
 
 # ====================================================================
@@ -156,7 +156,7 @@ target_link_libraries(arpolicy PUBLIC arcrypto)
 add_executable(ar_chronod ${CMAKE_SOURCE_DIR}/src/daemons/ar_chronod/main.c)
 target_link_libraries(ar_chronod PRIVATE arpolicy)
 set_target_properties(ar_chronod PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/alrios-release/libexec"
 )
 
 # 4. aripc_v2 (Sovereign Binary Framing & Multiplexing)
@@ -287,7 +287,7 @@ target_link_libraries(araudit PUBLIC arcrypto OpenSSL::Crypto)
 add_executable(ar_auditd ${CMAKE_SOURCE_DIR}/src/daemons/ar_auditd/main.c)
 target_link_libraries(ar_auditd PRIVATE araudit arcrypto OpenSSL::Crypto)
 set_target_properties(ar_auditd PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/alrios-release/libexec"
 )
 
 # 13. arresources (PSI Memory Governance & Cooperative Shedding)
@@ -303,7 +303,7 @@ target_include_directories(arresources PUBLIC
 add_executable(ar_resourced ${CMAKE_SOURCE_DIR}/src/daemons/ar_resourced/main.c)
 target_link_libraries(ar_resourced PRIVATE arresources)
 set_target_properties(ar_resourced PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/alrios-release/libexec"
 )
 
 # 14. arevents (Authorized In-Memory Event Broker)
@@ -320,7 +320,7 @@ target_link_libraries(arevents PUBLIC Threads::Threads)
 add_executable(ar_eventd ${CMAKE_SOURCE_DIR}/src/daemons/ar_eventd/main.c)
 target_link_libraries(ar_eventd PRIVATE arevents Threads::Threads)
 set_target_properties(ar_eventd PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/alrios-release/libexec"
 )
 
 # 15. arsensitive (Sensitive Memory Registration & Sanitized Crash Reports)
@@ -338,7 +338,7 @@ target_link_libraries(arsensitive PUBLIC arcrypto OpenSSL::Crypto)
 add_executable(ar_cored ${CMAKE_SOURCE_DIR}/src/daemons/ar_cored/main.c)
 target_link_libraries(ar_cored PRIVATE arsensitive)
 set_target_properties(ar_cored PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/alrios-release/libexec"
 )
 
 # ====================================================================
@@ -388,17 +388,17 @@ target_include_directories(arsdk PUBLIC
 )
 target_link_libraries(arsdk PUBLIC OpenSSL::Crypto)
 set_target_properties(arsdk PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore/lib"
-    ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore/lib"
-    ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore/lib"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/alrios-release/lib"
+    ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/alrios-release/lib"
+    ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/alrios-release/lib"
 )
 
 add_custom_command(TARGET arsdk POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/arcore/include/alrios"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/alrios-release/include/alrios"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_SOURCE_DIR}/include/alrios"
-        "${CMAKE_SOURCE_DIR}/arcore/include/alrios"
-    COMMENT "Installing ALRIOS Native SDK (ar.h, profiles.h, etc.) into arcore/include/alrios"
+        "${CMAKE_SOURCE_DIR}/alrios-release/include/alrios"
+    COMMENT "Installing ALRIOS Native SDK (ar.h, profiles.h, etc.) into alrios-release/include/alrios"
 )
 
 add_executable(supervisor_policy

@@ -18,6 +18,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 int alrios_deploy_provision_delta(const char *old_slot,
                                  const char *new_slot,
@@ -63,7 +64,15 @@ int alrios_deploy_verify_slot(const char *slot_path,
 int alrios_deploy_rollback_slot(const char *new_slot) {
     if (!new_slot) return -1;
     // Deletes the failed new slot cleanly, leaving active old slot untouched
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "rm -rf \"%s\"", new_slot);
-    return system(cmd);
+    // Replaced system() with safe execve wrapper for rollback isolation
+    char *const rollback_argv[] = {"/bin/rm", "-rf", (char *)new_slot, NULL};
+    pid_t pid = fork();
+    if (pid == 0) {
+        execve("/bin/rm", rollback_argv, NULL);
+        _exit(127);
+    } else if (pid > 0) {
+        int status = 0;
+        waitpid(pid, &status, 0);
+    }
+    return 0;
 }

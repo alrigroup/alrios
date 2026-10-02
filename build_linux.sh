@@ -25,13 +25,12 @@ echo "[1/2] Configuring CMake (Release) in ${BUILD_DIR}"
 cmake -S "${ROOT}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release
 
 echo "[2/2] Compiling sovereign kernel + developer tools"
-cmake --build "${BUILD_DIR}" --target arcore alrios armake arsdk -- -j"${NPROC}"
+cmake --build "${BUILD_DIR}" --target arcore alrios armake arsdk ar_auditd ar_resourced ar_chronod ar_cored ar_eventd arinstall alrios-ca arsign arcc -- -j"${NPROC}"
 
-ln -sf arcore/alrios "${ROOT}/alrios"
-ln -sf alrios "${ROOT}/arcore/arpm"
-chmod +x "${ROOT}/arcore/alrios" "${ROOT}/arcore/arpm" "${ROOT}/arcore/armake" "${ROOT}/arcore/arcore" "${ROOT}/alrios" 2>/dev/null || true
+ln -sf alrios-release/alrios "${ROOT}/alrios"
+chmod +x "${ROOT}/alrios-release/alrios" "${ROOT}/alrios-release/bin/"* "${ROOT}/alrios-release/libexec/"* "${ROOT}/alrios" 2>/dev/null || true
 
 echo ""
-echo "== OK. ALRIOS core binaries ready in ${ROOT}/arcore"
+echo "== OK. ALRIOS core binaries ready in ${ROOT}/alrios-release"
 echo "   Run supervisor: ./alrios power on"
 echo "   Inspect status: ./alrios status"

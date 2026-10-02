@@ -4,7 +4,7 @@ import re
 import sys
 from pathlib import Path
 
-BANNED_APIS = ("strcpy", "strcat", "sprintf", "gets")
+BANNED_APIS = ("strcpy", "strcat", "sprintf", "gets", "system")
 PATTERN = re.compile(r"\b(" + "|".join(BANNED_APIS) + r")\s*\(")
 SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".h"}
 

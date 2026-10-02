@@ -1,0 +1,11 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/alexsar/Documents/ALRIGROUP/services/alrios/build-qa/cmake_install.cmake",
+		"/home/alexsar/Documents/ALRIGROUP/services/alrios/build-qa/src/ALRIOS/arkernel/cmake_install.cmake",
+		"/home/alexsar/Documents/ALRIGROUP/services/alrios/build-qa/src/ALRIOS/core/cmake_install.cmake",
+		"/home/alexsar/Documents/ALRIGROUP/services/alrios/build-qa/src/tools/cmake_install.cmake",
+		"/home/alexsar/Documents/ALRIGROUP/services/alrios/build-qa/src/installer/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
