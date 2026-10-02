@@ -47,27 +47,27 @@ jobs:
 
       - name: Compile kernel, CLI, tools & master installer
         run: |
-          cmake --build build-linux --target arcore alrios armake arinstall -j$(nproc)
-          chmod +x arcore/arcore arcore/alrios arcore/armake arcore/arinstall 2>/dev/null || true
-          ln -sf alrios arcore/arpm
-          chmod +x arcore/arpm 2>/dev/null || true
+          cmake --build build-linux --target arcore alrios armake arinstall ar_auditd ar_resourced ar_chronod ar_cored ar_eventd alrios-ca arsign arcc -j$(nproc)
+          chmod +x alrios-release/alrios alrios-release/arcore alrios-release/bin/* alrios-release/libexec/* 2>/dev/null || true
+          ln -sf alrios alrios-release/bin/arpm
+          chmod +x alrios-release/bin/arpm 2>/dev/null || true
 
       - name: Package modular .arapp applications
         run: |
-          mkdir -p arcore/apps
+          mkdir -p alrios-release/apps
           for appdir in src/apps/*/; do
             if [ -d "$appdir" ]; then
               appname=$(basename "$appdir")
               if [ -f "$appdir/${appname}.arappmake" ] || [ -f "$appdir/config.arwe" ] || [ -f "$appdir/CMakeLists.txt" ]; then
                 echo "==> Empacotando app: ${appname}..."
-                ./arcore/armake build "$appdir" "arcore/apps/${appname}.arapp" || {
+                ./alrios-release/bin/armake build "$appdir" "alrios-release/apps/${appname}.arapp" || {
                   echo "[AVISO] Falha ao empacotar ${appname}, continuando..."
                 }
               fi
             fi
           done
           echo "==> Apps gerados:"
-          ls -lh arcore/apps/
+          ls -lh alrios-release/apps/
 
       - name: Assemble Linux Standalone Installer Executable
         run: |
@@ -75,14 +75,14 @@ jobs:
           python3 -c '
           import zipfile, os
           with zipfile.ZipFile("payload.zip", "w", zipfile.ZIP_STORED) as z:
-              for root, dirs, files in os.walk("arcore"):
+              for root, dirs, files in os.walk("alrios-release"):
                   if ".staging" in root or "programfiles" in root: continue
                   for f in files:
                       if f == "arinstall": continue
                       p = os.path.join(root, f)
                       z.write(p, p)
           '
-          cat arcore/arinstall payload.zip > alrios-installer-linux-x64
+          cat alrios-release/bin/arinstall payload.zip > alrios-installer-linux-x64
           chmod +x alrios-installer-linux-x64
           rm -f payload.zip
           echo "==> Instalador executavel unico do Linux gerado:"
