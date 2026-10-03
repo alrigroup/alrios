@@ -1044,11 +1044,26 @@ int armake_build_v2_envelope_buffer(const char *canon_manifest, const uint8_t *p
         return -1;
     }
 
+    uint32_t container_flags = 0;
+    if (strstr(canon_manifest, "\"execution_profile\":\"sovereign\"")) {
+        container_flags |= ARAPP_V2_FLAG_PROFILE_SOVEREIGN;
+    } else if (strstr(canon_manifest, "\"execution_profile\":\"performance\"")) {
+        container_flags |= ARAPP_V2_FLAG_PROFILE_PERFORMANCE;
+    } else {
+        container_flags |= ARAPP_V2_FLAG_PROFILE_ENTERPRISE;
+    }
+
+    if (strstr(canon_manifest, "\"execution_ring\":\"sovereign_trust\"")) {
+        container_flags |= ARAPP_V2_FLAG_RING_SOVEREIGN;
+    } else {
+        container_flags |= ARAPP_V2_FLAG_RING_DEVMODE;
+    }
+
     memset(out_buf, 0, ARAPP_V2_HEADER_PREFIX_SIZE);
     memcpy(out_buf, "ALRIGROUP@ARAPP\0", ARAPP_V2_MAGIC_LEN);
     store_u16_be(out_buf + 16U, ARAPP_V2_FORMAT_VERSION);
     store_u16_be(out_buf + 18U, ARAPP_V2_ARCH_X86_64);
-    store_u32_be(out_buf + 20U, ARAPP_V2_FLAG_PROFILE_ENTERPRISE | ARAPP_V2_FLAG_RING_DEVMODE);
+    store_u32_be(out_buf + 20U, container_flags);
     store_u64_be(out_buf + 24U, 1700000000ULL);
     store_u64_be(out_buf + 32U, 1800000000ULL);
     store_u32_be(out_buf + 40U, ARAPP_V2_HEADER_PREFIX_SIZE);

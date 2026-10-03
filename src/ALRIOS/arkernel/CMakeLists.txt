@@ -342,6 +342,45 @@ set_target_properties(ar_cored PROPERTIES
 )
 
 # ====================================================================
+# Enterprise Root of Trust Ingestion (Build-Time)
+# ====================================================================
+# Pass an exact 32-byte raw Ed25519 public key with:
+# -DENTERPRISE_ROOT_PUBKEY_FILE=/secure/path/enterprise-root.ed25519.pub
+set(ENTERPRISE_ROOT_PUBKEY_FILE "" CACHE FILEPATH "Exact 32-byte raw Ed25519 enterprise root public key")
+set(ALRIOS_ROOT_PUBKEY_HEADER "${CMAKE_CURRENT_BINARY_DIR}/generated_root_pubkey.h")
+
+if(ENTERPRISE_ROOT_PUBKEY_FILE)
+    if(NOT EXISTS "${ENTERPRISE_ROOT_PUBKEY_FILE}")
+        message(FATAL_ERROR "ENTERPRISE_ROOT_PUBKEY_FILE does not exist: ${ENTERPRISE_ROOT_PUBKEY_FILE}")
+    endif()
+    file(SIZE "${ENTERPRISE_ROOT_PUBKEY_FILE}" ENTERPRISE_ROOT_PUBKEY_SIZE)
+    if(NOT ENTERPRISE_ROOT_PUBKEY_SIZE EQUAL 32)
+        message(FATAL_ERROR "ENTERPRISE_ROOT_PUBKEY_FILE must contain exactly 32 raw Ed25519 public-key bytes")
+    endif()
+    file(READ "${ENTERPRISE_ROOT_PUBKEY_FILE}" ENTERPRISE_ROOT_PUBKEY_HEX HEX)
+    string(REGEX MATCHALL ".." ENTERPRISE_ROOT_PUBKEY_BYTES "${ENTERPRISE_ROOT_PUBKEY_HEX}")
+    string(JOIN ", " ENTERPRISE_ROOT_PUBKEY_INITIALIZER ${ENTERPRISE_ROOT_PUBKEY_BYTES})
+    string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1" ENTERPRISE_ROOT_PUBKEY_INITIALIZER "${ENTERPRISE_ROOT_PUBKEY_INITIALIZER}")
+    message(STATUS "ALRIOS enterprise Ed25519 root public key ingested at build time")
+else()
+    set(ENTERPRISE_ROOT_PUBKEY_INITIALIZER
+        "0xaa, 0xbb, 0xcc, 0xdd, 0x00, 0x11, 0x22, 0x33,\n"
+        "    0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb,\n"
+        "    0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11, 0x22, 0x33,\n"
+        "    0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb")
+    message(WARNING "ALRIOS uses the non-production fallback root key; set ENTERPRISE_ROOT_PUBKEY_FILE for production")
+endif()
+
+file(WRITE "${ALRIOS_ROOT_PUBKEY_HEADER}"
+    "/* Generated at build time. Never commit enterprise key material. */\n"
+    "#ifndef ALRIOS_GENERATED_ROOT_PUBKEY_H\n"
+    "#define ALRIOS_GENERATED_ROOT_PUBKEY_H\n"
+    "static const unsigned char ALRIOS_ROOT_PUBKEY[32] = { ${ENTERPRISE_ROOT_PUBKEY_INITIALIZER} };\n"
+    "#endif\n")
+
+include_directories("${CMAKE_CURRENT_BINARY_DIR}")
+
+# ====================================================================
 # Umbrella Target: libarsdk (Maintains 100% Backward Compatibility)
 # ====================================================================
 add_library(arsdk STATIC

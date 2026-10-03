@@ -21,8 +21,15 @@ command -v make  >/dev/null || { echo "[ERROR] make not found";  exit 1; }
 
 NPROC="$(nproc 2>/dev/null || echo 4)"
 
+ENTERPRISE_KEY_ARG=""
+if [[ -n "${ENTERPRISE_ROOT_PUBKEY_FILE:-}" ]]; then
+    ENTERPRISE_KEY_ARG="-DENTERPRISE_ROOT_PUBKEY_FILE=${ENTERPRISE_ROOT_PUBKEY_FILE}"
+elif [[ -f "${ROOT}/enterprise_root.ed25519.pub" ]]; then
+    ENTERPRISE_KEY_ARG="-DENTERPRISE_ROOT_PUBKEY_FILE=${ROOT}/enterprise_root.ed25519.pub"
+fi
+
 echo "[1/2] Configuring CMake (Release) in ${BUILD_DIR}"
-cmake -S "${ROOT}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release
+cmake -S "${ROOT}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release ${ENTERPRISE_KEY_ARG}
 
 echo "[2/2] Compiling sovereign kernel + developer tools"
 cmake --build "${BUILD_DIR}" --target arcore alrios armake arsdk ar_auditd ar_resourced ar_chronod ar_cored ar_eventd arinstall alrios-ca arsign arcc -- -j"${NPROC}"

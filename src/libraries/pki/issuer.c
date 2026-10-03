@@ -100,6 +100,9 @@ int alrios_pki_issue_root(const char *subject,
     memcpy(out_cert->public_key, raw_pub, 32);
     out_cert->signature_len = 64;
 
+    /* A root certificate is self-issued: its issuer key id is its own public key id. */
+    memcpy(out_cert->issuer_key_id, raw_pub, ALRIOS_CERTIFICATE_KEY_ID_SIZE);
+
     /* Compute key id */
     if (alrios_certificate_public_key_id(out_cert, out_cert->issuer_key_id) != 0) {
         EVP_PKEY_free(pkey);
