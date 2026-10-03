@@ -1,11 +1,7 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
-
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
 #include "zip.h"
 #include <stdlib.h>
 #include <string.h>
@@ -71,9 +67,25 @@ static unsigned int crc32(unsigned int crc, const void *buf, int len) {
     return crc ^ 0xFFFFFFFF;
 }
 
+static int read_exact(FILE *file, void *buffer, size_t length) {
+    if (!file || (!buffer && length > 0U)) return -1;
+
+    unsigned char *cursor = (unsigned char *)buffer;
+    size_t total = 0U;
+    while (total < length) {
+        size_t count = fread(cursor + total, 1U, length - total, file);
+        if (count == 0U) {
+            return -1;
+        }
+        total += count;
+    }
+    return 0;
+}
+
 /* --- Helpers --- */
-void ar_write_le16(unsigned char *p, unsigned short v) {
-    p[0] = v & 0xFF; p[1] = (v >> 8) & 0xFF;
+void ar_write_le16(unsigned char *p, unsigned int v) {
+    p[0] = (unsigned char)(v & 0xFFU);
+    p[1] = (unsigned char)((v >> 8U) & 0xFFU);
 }
 static void write_le32(unsigned char *p, unsigned int v) {
     p[0] = v & 0xFF; p[1] = (v >> 8) & 0xFF;
@@ -125,21 +137,34 @@ int zip_add_entry(zip_writer_t *z, const char *filename, int method) {
     ar_write_le16(hdr + 8, method);            /* compression method */
     ar_write_le16(hdr + 26, (unsigned short)name_len); /* filename len */
 
-    int padding = 0; /* no data descriptor; we know sizes up front (STORED) */
     long offset = ftell(z->fp);
 
     fwrite(hdr, 1, 30, z->fp);
     fwrite(filename, 1, name_len, z->fp);
 
     /* grow metadata arrays */
+    size_t new_count = (size_t)z->file_count + 1;
+    void *tmp_offsets = realloc(z->offsets, new_count * sizeof(long));
+    if (!tmp_offsets) return -1;
+    z->offsets = (long *)tmp_offsets;
+
+    void *tmp_names = realloc(z->names, new_count * sizeof(char *));
+    if (!tmp_names) return -1;
+    z->names = (char **)tmp_names;
+
+    void *tmp_crcs = realloc(z->crcs, new_count * sizeof(int));
+    if (!tmp_crcs) return -1;
+    z->crcs = (int *)tmp_crcs;
+
+    void *tmp_sizes_c = realloc(z->sizes_comp, new_count * sizeof(int));
+    if (!tmp_sizes_c) return -1;
+    z->sizes_comp = (int *)tmp_sizes_c;
+
+    void *tmp_sizes_u = realloc(z->sizes_uncomp, new_count * sizeof(int));
+    if (!tmp_sizes_u) return -1;
+    z->sizes_uncomp = (int *)tmp_sizes_u;
+
     z->file_count++;
-    z->offsets = realloc(z->offsets, z->file_count * sizeof(long));
-    z->names = realloc(z->names, z->file_count * sizeof(char *));
-    z->crcs = realloc(z->crcs, z->file_count * sizeof(int));
-    z->sizes_comp = realloc(z->sizes_comp, z->file_count * sizeof(int));
-    z->sizes_uncomp = realloc(z->sizes_uncomp, z->file_count * sizeof(int));
-    if (!z->offsets || !z->names || !z->crcs || !z->sizes_comp || !z->sizes_uncomp)
-        return -1;
 
     z->offsets[z->file_count - 1] = offset;
     z->names[z->file_count - 1] = strdup(filename);
@@ -166,7 +191,6 @@ int zip_close(zip_writer_t *z) {
 
     /* patch local headers with correct CRC and sizes */
     for (int i = 0; i < z->file_count; i++) {
-        long pos = ftell(z->fp);
         fseek(z->fp, z->offsets[i] + 14, SEEK_SET);
         unsigned char buf[12];
         write_le32(buf, (unsigned int)z->crcs[i]);
@@ -270,7 +294,11 @@ int ar_write_header_file(const char *path) {
     fseek(f, 0, SEEK_SET);
     unsigned char *content = (unsigned char *)malloc((size_t)len + 1);
     if (!content) { fclose(f); return -1; }
-    fread(content, 1, (size_t)len, f);
+    if (read_exact(f, content, (size_t)len) != 0) {
+        fclose(f);
+        free(content);
+        return -1;
+    }
     fclose(f);
 
     unsigned char hdr[16];
@@ -305,7 +333,11 @@ int ar_write_armake_header_file(const char *path) {
     fseek(f, 0, SEEK_SET);
     unsigned char *content = (unsigned char *)malloc((size_t)len + 1);
     if (!content) { fclose(f); return -1; }
-    fread(content, 1, (size_t)len, f);
+    if (read_exact(f, content, (size_t)len) != 0) {
+        fclose(f);
+        free(content);
+        return -1;
+    }
     fclose(f);
 
     unsigned char hdr[20];
@@ -360,7 +392,12 @@ zip_reader_t *zip_reader_open(const char *path) {
     if (!buf) { fclose(z->fp); free(z); return NULL; }
     int search = (filesize > 66000) ? 66000 : (int)filesize;
     fseek(z->fp, filesize - search, SEEK_SET);
-    fread(buf, 1, search, z->fp);
+    if (read_exact(z->fp, buf, (size_t)search) != 0) {
+        free(buf);
+        fclose(z->fp);
+        free(z);
+        return NULL;
+    }
 
     int eocd_pos = -1;
     for (int i = search - 22; i >= 0; i--) {
@@ -393,6 +430,18 @@ zip_reader_t *zip_reader_open(const char *path) {
     z->sizes_comp = calloc(z->entry_count, sizeof(int));
     z->sizes_uncomp = calloc(z->entry_count, sizeof(int));
 
+    if (!z->offsets || !z->names || !z->methods || !z->crcs || !z->sizes_comp || !z->sizes_uncomp) {
+        free(z->offsets);
+        free(z->names);
+        free(z->methods);
+        free(z->crcs);
+        free(z->sizes_comp);
+        free(z->sizes_uncomp);
+        fclose(z->fp);
+        free(z);
+        return NULL;
+    }
+
     fseek(z->fp, (long)cd_offset, SEEK_SET);
     for (int i = 0; i < z->entry_count; i++) {
         unsigned char cd[46];
@@ -411,8 +460,17 @@ zip_reader_t *zip_reader_open(const char *path) {
 
         if (name_len > 255) name_len = 255;
         char name[256] = {0};
-        fread(name, 1, name_len, z->fp);
+        if (read_exact(z->fp, name, (size_t)name_len) != 0) {
+            z->entry_count = i;
+            zip_reader_close(z);
+            return NULL;
+        }
         z->names[i] = strdup(name);
+        if (!z->names[i]) {
+            z->entry_count = i;
+            zip_reader_close(z);
+            return NULL;
+        }
 
         fseek(z->fp, extra_len + comment_len, SEEK_CUR);
     }
@@ -437,7 +495,7 @@ int zip_reader_entry(zip_reader_t *z, int idx, zip_entry_t *out) {
 
 static void mkdirp(const char *path) {
     char tmp[1024];
-    strncpy(tmp, path, sizeof(tmp) - 1);
+    snprintf(tmp, sizeof(tmp), "%s", path);
     for (char *p = tmp + 1; *p; p++) {
         if (*p == '/' || *p == '\\') {
             *p = '\0';
@@ -481,7 +539,7 @@ int zip_reader_extract(zip_reader_t *z, int idx, const char *outdir) {
     /* seek to file data: skip local file header */
     fseek(z->fp, z->offsets[idx], SEEK_SET);
     unsigned char lfh[30];
-    fread(lfh, 1, 30, z->fp);
+    if (read_exact(z->fp, lfh, sizeof(lfh)) != 0) return -1;
     int lfname_len = read_le16(lfh + 26);
     int lfextra_len = read_le16(lfh + 28);
     fseek(z->fp, lfname_len + lfextra_len, SEEK_CUR);
@@ -494,24 +552,25 @@ int zip_reader_extract(zip_reader_t *z, int idx, const char *outdir) {
     int remaining = z->sizes_comp[idx];
     while (remaining > 0) {
         int chunk = (remaining > 4096) ? 4096 : remaining;
-        fread(data, 1, chunk, z->fp);
-        fwrite(data, 1, chunk, out);
+        if (read_exact(z->fp, data, (size_t)chunk) != 0 ||
+            fwrite(data, 1, (size_t)chunk, out) != (size_t)chunk) {
+            fclose(out);
+            remove(outpath);
+            return -1;
+        }
         remaining -= chunk;
     }
-    fclose(out);
-
 #ifndef _WIN32
-    /* set executable bit for .exe files */
+    /* Set executable bit directly on the open file descriptor BEFORE fclose()
+       to eliminate Time-of-Check Time-of-Use (TOCTOU) race conditions (CWE-367) */
     size_t nlen = strlen(outpath);
-    if (nlen >= 4 && (strcmp(outpath + nlen - 4, ".exe") == 0 ||
-                      strcmp(outpath + nlen - 4, ".bin") == 0)) {
-        chmod(outpath, 0755);
-    }
-    /* runtime binaries live under bin/ — make them executable */
-    if (strstr(outpath, "/bin/") != NULL) {
-        chmod(outpath, 0755);
+    if ((nlen >= 4 && (strcmp(outpath + nlen - 4, ".exe") == 0 ||
+                       strcmp(outpath + nlen - 4, ".bin") == 0)) ||
+        strstr(outpath, "/bin/") != NULL) {
+        fchmod(fileno(out), 0755);
     }
 #endif
+    fclose(out);
 
     return 0;
 }

@@ -1,10 +1,11 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
 
 #include "ar_kernel.h"
 #include "ar_svc.h"
@@ -48,7 +49,7 @@ static void get_base_dir(char *buf, int size) {
 int ar_init(void) {
     if (initialized) return 0;
 
-    for (int i = 0; i < VM_DIRS_COUNT; i++) {
+    for (size_t i = 0; i < VM_DIRS_COUNT; i++) {
         if (ar_fs_mkdir(vm_dirs[i]) != 0) {
         }
         printf("[kernel] VM dir: /%s\n", vm_dirs[i]);

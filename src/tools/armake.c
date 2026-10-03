@@ -1,13 +1,15 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
 
 #include "zip.h"
 #include "arapp_parser.h"
+#include "aros_hal.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -26,6 +28,10 @@
     #include <dirent.h>
     #include <unistd.h>
     #include <sys/stat.h>
+    #include <sys/wait.h>
+    #include <limits.h>
+    #include <errno.h>
+    #include <ctype.h>
     #define SEPARATOR '/'
     #define OTHER_SEP '\\'
     #define mkdir_p_(p) mkdir(p, 0755)
@@ -33,9 +39,130 @@
     #define remove_dir_(p) rmdir(p)
 #endif
 
+static int safe_exec_shell(const char *cmd) {
+#ifdef _WIN32
+    return system(cmd);
+#else
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+        _exit(127);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    return (WIFEXITED(status)) ? WEXITSTATUS(status) : -1;
+#endif
+}
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
+static int make_absolute_path(const char *path, char *out, size_t out_cap) {
+    if (!path || !out || out_cap == 0U) return -1;
+#ifdef _WIN32
+    DWORD n = GetFullPathNameA(path, (DWORD)out_cap, out, NULL);
+    if (n == 0 || n >= out_cap) return -1;
+    return 0;
+#else
+    char resolved[PATH_MAX];
+    if (realpath(path, resolved)) {
+        snprintf(out, out_cap, "%s", resolved);
+        return 0;
+    }
+    if (errno == ENOENT) {
+        char parent[PATH_MAX];
+        char *last;
+        snprintf(parent, sizeof(parent), "%s", path);
+        last = strrchr(parent, SEPARATOR);
+        if (last) {
+            *last = '\0';
+            if (parent[0] == '\0') snprintf(parent, sizeof(parent), "%c", SEPARATOR);
+            if (!realpath(parent, resolved)) return -1;
+            snprintf(out, out_cap, "%s%c%s", resolved, SEPARATOR, last + 1);
+            return 0;
+        }
+    }
+    return -1;
+#endif
+}
+
+static int path_is_within_root(const char *path, const char *root) {
+    size_t root_len;
+    if (!path || !root || !path[0] || !root[0]) return 0;
+    root_len = strlen(root);
+    if (strncmp(path, root, root_len) != 0) return 0;
+    return path[root_len] == '\0' || path[root_len] == SEPARATOR;
+}
+
+static int armake_enable_packaging_fs_boundary(const char *manifest_dir,
+                                               const char *packaging_dir,
+                                               const char *output_path) {
+#ifndef _WIN32
+    char manifest_abs[PATH_MAX];
+    char packaging_abs[PATH_MAX];
+    char output_abs[PATH_MAX];
+    char output_parent[PATH_MAX];
+    const char *read_roots[2];
+    const char *write_roots[2];
+    size_t read_count = 0U;
+    size_t write_count = 0U;
+    char *last;
+
+    if (make_absolute_path(manifest_dir, manifest_abs, sizeof(manifest_abs)) != 0 ||
+        make_absolute_path(packaging_dir ? packaging_dir : manifest_dir, packaging_abs, sizeof(packaging_abs)) != 0 ||
+        make_absolute_path(output_path, output_abs, sizeof(output_abs)) != 0) {
+        return -1;
+    }
+
+    snprintf(output_parent, sizeof(output_parent), "%s", output_abs);
+    last = strrchr(output_parent, SEPARATOR);
+    if (!last) {
+        return -1;
+    }
+    if (last == output_parent) {
+        output_parent[1] = '\0';
+    } else {
+        *last = '\0';
+    }
+
+    read_roots[read_count++] = manifest_abs;
+    if (!path_is_within_root(packaging_abs, manifest_abs) &&
+        !path_is_within_root(manifest_abs, packaging_abs)) {
+        read_roots[read_count++] = packaging_abs;
+    }
+
+    write_roots[write_count++] = output_parent;
+    if (path_is_within_root(output_abs, manifest_abs)) {
+        write_roots[write_count++] = manifest_abs;
+    }
+    return ar_fs_restrict_to_paths(read_roots, read_count, write_roots, write_count);
+#else
+    (void)manifest_dir;
+    (void)packaging_dir;
+    (void)output_path;
+    return -ENOTSUP;
+#endif
+}
+
+static int armake_try_enable_packaging_fs_boundary(const char *manifest_dir,
+                                                   const char *packaging_dir,
+                                                   const char *output_path) {
+    int rc = armake_enable_packaging_fs_boundary(manifest_dir, packaging_dir, output_path);
+    if (rc == 0) {
+        return 0;
+    }
+    if (rc == -ENOTSUP || rc == -EINVAL || rc == -EPERM || rc == -EACCES) {
+        printf("[AVISO] Isolamento Landlock indisponivel para empacotamento (rc=%d); usando validacao canonica de caminhos.\n", rc);
+        return 0;
+    }
+    return rc;
+}
+
 static void mkdir_p(const char *path) {
     char tmp[1024];
-    strncpy(tmp, path, sizeof(tmp) - 1);
+    snprintf(tmp, sizeof(tmp), "%s", path);
     for (char *p = tmp + 1; *p; p++) {
         if (*p == SEPARATOR) {
             *p = '\0';
@@ -139,6 +266,8 @@ static void walker_close(walker_t *w) {
 #endif
 }
 
+static int is_abs_path(const char *p);
+
 static int should_skip(const char *name) {
     if (strcmp(name, "CMakeLists.txt") == 0 || strcmp(name, "CMakeCache.txt") == 0)
         return 1;
@@ -154,6 +283,131 @@ static int should_skip(const char *name) {
     return 0;
 }
 
+static int is_private_key_material_name(const char *name) {
+    const char *ext;
+    if (!name || !name[0]) return 1;
+    if (strstr(name, "..") != NULL) return 1;
+    if (strstr(name, "id_rsa") != NULL || strstr(name, "id_ed25519") != NULL) return 1;
+    if (strstr(name, "private") != NULL || strstr(name, "secret") != NULL) return 1;
+    ext = strrchr(name, '.');
+    if (!ext) return 0;
+    return strcmp(ext, ".pem") == 0 || strcmp(ext, ".key") == 0 ||
+           strcmp(ext, ".p12") == 0 || strcmp(ext, ".pfx") == 0;
+}
+
+static int validate_manifest_relative_path(const char *file) {
+    if (!file || !file[0]) return -1;
+    if (is_abs_path(file)) return -1;
+    if (file[0] == '/' || file[0] == '\\') return -1;
+    if (strstr(file, "..") != NULL) return -1;
+    if (is_private_key_material_name(file)) return -2;
+    return 0;
+}
+
+static int validate_pack_file_path(const char *root, const char *file) {
+    char fullpath[PATH_MAX];
+    char abs_path[PATH_MAX];
+    char abs_root[PATH_MAX];
+    int rc;
+    if (validate_manifest_relative_path(file) != 0) return -1;
+    snprintf(fullpath, sizeof(fullpath), "%s%c%s", root, SEPARATOR, file);
+    rc = make_absolute_path(root, abs_root, sizeof(abs_root));
+    if (rc != 0) return -1;
+    rc = make_absolute_path(fullpath, abs_path, sizeof(abs_path));
+    if (rc != 0) return -1;
+    if (!path_is_within_root(abs_path, abs_root)) return -1;
+    return 0;
+}
+
+static long file_size(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+    fseek(f, 0, SEEK_END);
+    long s = ftell(f);
+    fclose(f);
+    return s;
+}
+
+static unsigned file_hash(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    unsigned h = 2166136261u;
+    unsigned char buf[8192];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+        for (size_t i = 0; i < n; i++) {
+            h ^= buf[i];
+            h *= 16777619u;
+        }
+    }
+    fclose(f);
+    return h;
+}
+
+static int stream_file_to_zip(FILE *file, zip_writer_t *zip, size_t size) {
+    unsigned char buffer[4096];
+    size_t remaining = size;
+
+    while (remaining > 0U) {
+        size_t chunk = remaining > sizeof(buffer) ? sizeof(buffer) : remaining;
+        size_t count = fread(buffer, 1U, chunk, file);
+        if (count != chunk) return -1;
+        if (zip_write(zip, buffer, (int)count) != 0) return -1;
+        remaining -= count;
+    }
+    return 0;
+}
+
+static int is_cache_busting_eligible(const char *name) {
+    if (!name) return 0;
+    const char *ext = strrchr(name, '.');
+    if (!ext) return 0;
+    if (strcmp(ext, ".arweb") == 0 ||
+        strcmp(ext, ".js") == 0 ||
+        strcmp(ext, ".css") == 0 ||
+        strcmp(ext, ".wasm") == 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int already_has_hash(const char *name, const char *ext) {
+    if (!name || !ext || ext <= name + 9) return 0;
+    if (*(ext - 9) != '.') return 0;
+    for (int i = 8; i >= 1; i--) {
+        char c = *(ext - i);
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
+            return 0;
+    }
+    return 1;
+}
+
+static void pack_cache_busting_alias(zip_writer_t *z, const char *fullpath, const char *zipname) {
+    const char *ext = strrchr(zipname, '.');
+    if (!ext || !is_cache_busting_eligible(zipname) || already_has_hash(zipname, ext)) {
+        return;
+    }
+
+    FILE *f = fopen(fullpath, "rb");
+    if (!f) return;
+
+    unsigned h = file_hash(fullpath);
+    char hashed_name[1024];
+    size_t base_len = (size_t)(ext - zipname);
+    snprintf(hashed_name, sizeof(hashed_name), "%.*s.%08x%s", (int)base_len, zipname, h, ext);
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (size < 0 || zip_add_entry(z, hashed_name, ZIP_METHOD_STORED) != 0 ||
+        stream_file_to_zip(f, z, (size_t)size) != 0) {
+        fclose(f);
+        return;
+    }
+    fclose(f);
+    printf("  \033[1;35m[ARWE-CACHE-BUSTING]\033[0m %s -> \033[1;32m%s\033[0m (Cloudflare immutable asset)\n", zipname, hashed_name);
+}
+
 static int walk_dir(const char *base, const char *rel_prefix,
                     zip_writer_t *z, char *path_buf, int path_size) {
     walker_t w;
@@ -163,6 +417,7 @@ static int walk_dir(const char *base, const char *rel_prefix,
     int is_dir;
     while (walker_next(&w, name, &is_dir)) {
         if (is_dir && (strcmp(name, ".git") == 0 || strcmp(name, ".svn") == 0)) continue;
+        if (is_private_key_material_name(name)) continue;
         if (!is_dir && should_skip(name)) continue;
         char fullpath[1024];
         snprintf(fullpath, sizeof(fullpath), "%s%c%s", base, SEPARATOR, name);
@@ -184,18 +439,17 @@ static int walk_dir(const char *base, const char *rel_prefix,
             FILE *f = fopen(fullpath, "rb");
             if (!f) continue;
             fseek(f, 0, SEEK_END);
-            int size = (int)ftell(f);
+            long size = ftell(f);
             fseek(f, 0, SEEK_SET);
 
-            zip_add_entry(z, zipname, ZIP_METHOD_STORED);
-            unsigned char buf[4096];
-            while (size > 0) {
-                int chunk = (size > 4096) ? 4096 : size;
-                fread(buf, 1, chunk, f);
-                zip_write(z, buf, chunk);
-                size -= chunk;
+            if (size < 0 || zip_add_entry(z, zipname, ZIP_METHOD_STORED) != 0 ||
+                stream_file_to_zip(f, z, (size_t)size) != 0) {
+                fclose(f);
+                walker_close(&w);
+                return -1;
             }
             fclose(f);
+            pack_cache_busting_alias(z, fullpath, zipname);
         }
     }
     walker_close(&w);
@@ -228,31 +482,7 @@ static char g_appdir[SNAP_PATH_MAX] = {0};
 static rm_entry_t g_rm[RM_CAP];
 static int g_rm_count = 0;
 
-static long file_size(const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (!f) return -1;
-    fseek(f, 0, SEEK_END);
-    long s = ftell(f);
-    fclose(f);
-    return s;
-}
-
-static unsigned file_hash(const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (!f) return 0;
-    unsigned h = 2166136261u;
-    unsigned char buf[8192];
-    size_t n;
-    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
-        for (size_t i = 0; i < n; i++) {
-            h ^= buf[i];
-            h *= 16777619u;
-        }
-    }
-    fclose(f);
-    return h;
-}
-
+static int is_abs_path(const char *p);
 static int is_abs_path(const char *p) {
 #ifdef _WIN32
     return (p[0] && p[1] == ':') || p[0] == '\\' || p[0] == '/';
@@ -558,6 +788,14 @@ static int cmd_pack(int argc, char **argv) {
     const char *input_dir = argv[2];
     const char *output = argv[3];
 
+    {
+        int iso_rc = armake_try_enable_packaging_fs_boundary(input_dir, input_dir, output);
+        if (iso_rc != 0) {
+            printf("[ERRO] Isolamento de filesystem indisponivel para pack (rc=%d)\n", iso_rc);
+            return 1;
+        }
+    }
+
     zip_writer_t *z = zip_open_arapp(output);
     if (!z) {
         printf("[ERRO] Nao foi possivel criar: %s\n", output);
@@ -578,9 +816,14 @@ static int read_manifest(const char *path, ar_app_manifest_t *m) {
     fseek(f, 0, SEEK_END);
     long len = ftell(f);
     fseek(f, 0, SEEK_SET);
-    char *json = (char *)malloc((size_t)len + 1);
+    if (len < 0) { fclose(f); return -1; }
+    char *json = (char *)malloc((size_t)len + 1U);
     if (!json) { fclose(f); return -1; }
-    fread(json, 1, (size_t)len, f);
+    if (fread(json, 1U, (size_t)len, f) != (size_t)len) {
+        fclose(f);
+        free(json);
+        return -1;
+    }
     fclose(f);
     json[len] = '\0';
 
@@ -684,6 +927,10 @@ static int pack_file(zip_writer_t *z, const char *dir, const char *file) {
         walk_dir(fullpath, prefix, z, fullpath, sizeof(fullpath));
         return 0;
     }
+    if (validate_pack_file_path(dir, file) != 0) {
+        printf("[ERRO] Caminho de manifesto rejeitado por politica de isolamento: %s\n", file);
+        return -1;
+    }
     snprintf(fullpath, sizeof(fullpath), "%s%c%s", dir, SEPARATOR, file);
     FILE *f = fopen(fullpath, "rb");
     if (!f) {
@@ -691,18 +938,16 @@ static int pack_file(zip_writer_t *z, const char *dir, const char *file) {
         return -1;
     }
     fseek(f, 0, SEEK_END);
-    int size = (int)ftell(f);
+    long size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    zip_add_entry(z, file, ZIP_METHOD_STORED);
-    unsigned char buf[4096];
-    while (size > 0) {
-        int chunk = (size > 4096) ? 4096 : size;
-        fread(buf, 1, chunk, f);
-        zip_write(z, buf, chunk);
-        size -= chunk;
+    if (size < 0 || zip_add_entry(z, file, ZIP_METHOD_STORED) != 0 ||
+        stream_file_to_zip(f, z, (size_t)size) != 0) {
+        fclose(f);
+        return -1;
     }
     fclose(f);
+    pack_cache_busting_alias(z, fullpath, file);
     return 0;
 }
 
@@ -710,9 +955,17 @@ static int pack_file_list(zip_writer_t *z, const char *dir,
                           char files[AR_MAX_FILES][AR_FILE_PATH_MAX],
                           int count) {
     int packed = 0;
-    for (int i = 0; i < count; i++)
-        if (pack_file(z, dir, files[i]) == 0)
+    for (int i = 0; i < count; i++) {
+        if (validate_manifest_relative_path(files[i]) != 0) {
+            printf("[ERRO] Caminho de manifesto rejeitado por politica de isolamento: %s\n", files[i]);
+            return -1;
+        }
+        if (pack_file(z, dir, files[i]) == 0) {
             packed++;
+        } else {
+            return -1;
+        }
+    }
     return packed;
 }
 
@@ -724,15 +977,25 @@ static int is_platform(const char *target, const char *name) {
 /* Build steps engine                                                   */
 /* ------------------------------------------------------------------ */
 
+static int validate_build_command_security(const char *cmd) {
+    if (!cmd || cmd[0] == '\0') return -1;
+    for (const char *p = cmd; *p; p++) {
+        if (*p == '\n' || *p == '\r' || (unsigned char)*p < 0x20) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
 /* Expande variáveis simples em 'tpl' -> 'out':
-   $APP_NAME, $APP_DIR, $ARCORE, $STAGING, $ARWN_BUILD                  */
+   $APP_NAME, $APP_DIR, $ARCORE, $STAGING, $ARWE_BUILD                  */
 static void expand_vars(char *out, int cap,
                         const char *tpl,
                         const char *app_name,
                         const char *app_dir,
                         const char *arcore_dir,
                         const char *staging,
-                        const char *arwn_build) {
+                        const char *arwe_build) {
     int wi = 0;
     const char *p = tpl;
     while (*p && wi < cap - 1) {
@@ -743,7 +1006,8 @@ static void expand_vars(char *out, int cap,
         else if (strncmp(p, "APP_DIR",  7) == 0) { sub = app_dir;    p += 7; }
         else if (strncmp(p, "ARCORE",   6) == 0) { sub = arcore_dir; p += 6; }
         else if (strncmp(p, "STAGING",  7) == 0) { sub = staging;    p += 7; }
-        else if (strncmp(p, "ARWN_BUILD", 10) == 0) { sub = arwn_build; p += 10; }
+        else if (strncmp(p, "ARWE_BUILD", 10) == 0) { sub = arwe_build; p += 10; }
+        else if (strncmp(p, "ARWN_BUILD", 10) == 0) { sub = arwe_build; p += 10; }
         else { out[wi++] = '$'; continue; }
         if (sub) {
             int sl = (int)strlen(sub);
@@ -755,9 +1019,9 @@ static void expand_vars(char *out, int cap,
     out[wi] = '\0';
 }
 
-/* Resolve o path do binário arwn_build. Usa --arwn-build, senão
-   <arcore>/.staging/arwn/arwn_build. Retorna 0 em sucesso.         */
-static int resolve_arwn_build(const char *arcore_dir, const char *override,
+/* Resolve o path do binário arwe_build. Usa --arwe-build, senão
+   <arcore>/.staging/arwe/arwe_build. Retorna 0 em sucesso.         */
+static int resolve_arwe_build(const char *arcore_dir, const char *override,
                               char *out, int cap) {
     if (override && override[0]) {
         snprintf(out, cap, "%s", override);
@@ -765,9 +1029,11 @@ static int resolve_arwn_build(const char *arcore_dir, const char *override,
     }
     if (arcore_dir[0]) {
 #ifdef _WIN32
-        snprintf(out, cap, "%s\\.staging\\arwn\\arwn_build.exe", arcore_dir);
+        snprintf(out, cap, "%s\\.staging\\arwe\\arwe_build.exe", arcore_dir);
 #else
-        snprintf(out, cap, "%s/.staging/arwn/arwn_build", arcore_dir);
+        snprintf(out, cap, "%s/.staging/arwe/arwe_build", arcore_dir);
+        if (access(out, 0) != 0)
+            snprintf(out, cap, "%s/.staging/arwe/arwe_build", arcore_dir);
 #endif
         return 0;
     }
@@ -824,13 +1090,45 @@ static int get_self_dir(char *out, int cap) {
     return -1;
 }
 
+/* Encodes and sanitizes paths passed into command line shells (prevents CWE-78) */
+static void encode_shell_path(const char *in, char *out, size_t out_cap) {
+    if (!in || out_cap == 0) {
+        if (out && out_cap > 0) out[0] = '\0';
+        return;
+    }
+    size_t j = 0;
+    for (size_t i = 0; in[i] && j < out_cap - 1; i++) {
+        char c = in[i];
+        if (isalnum((unsigned char)c) || c == '/' || c == '\\' || c == '.' || c == '_' || c == '-' || c == ':') {
+            out[j++] = c;
+        }
+    }
+    out[j] = '\0';
+}
+
+/* Validates that path from environment variables contains only safe filesystem characters */
+static int is_safe_env_path(const char *path) {
+    if (!path || !path[0]) return 0;
+    for (const char *p = path; *p; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (!isalnum(c) && c != '/' && c != '\\' && c != '.' && c != '_' && c != '-' && c != ':') {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 /* Sobe dirs a partir de 'start' procurando o diretorio 'arcore/'. */
 static int find_arcore_dir(const char *start, char *out, int cap) {
+    char safe_env[1024] = {0};
     const char *env = getenv("ARCORE_HOME");
     if (!env || !env[0]) env = getenv("ARCORE");
-    if (env && env[0] && probe_arcore_candidate(env)) {
-        snprintf(out, cap, "%s", env);
-        return 0;
+    if (env && env[0] && is_safe_env_path(env)) {
+        encode_shell_path(env, safe_env, sizeof(safe_env));
+        if (safe_env[0] && probe_arcore_candidate(safe_env)) {
+            snprintf(out, cap, "%s", safe_env);
+            return 0;
+        }
     }
 
     /* 1. Procura no diretorio do proprio binario armake */
@@ -902,7 +1200,7 @@ static int find_arcore_dir(const char *start, char *out, int cap) {
 static int run_build_steps_from_manifest(ar_app_manifest_t *m,
                                          const char *app_dir,
                                          const char *staging_override,
-                                         const char *arwn_build_override) {
+                                         const char *arwe_build_override) {
     int has_steps  = (m->build.step_count > 0);
     int has_legacy = (m->build.command[0] != '\0');
     if (!has_steps && !has_legacy) return 0;
@@ -910,8 +1208,15 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
     char arcore_dir[1024] = {0};
     find_arcore_dir(app_dir, arcore_dir, sizeof(arcore_dir));
 
-    char arwn_build[1024] = {0};
-    resolve_arwn_build(arcore_dir, arwn_build_override, arwn_build, sizeof(arwn_build));
+    char arwe_build[1024] = {0};
+    resolve_arwe_build(arcore_dir, arwe_build_override, arwe_build, sizeof(arwe_build));
+
+    char safe_arcore[1024] = {0}, safe_arwe[1024] = {0};
+    char safe_app[128] = {0}, safe_appdir[1024] = {0};
+    encode_shell_path(arcore_dir, safe_arcore, sizeof(safe_arcore));
+    encode_shell_path(arwe_build, safe_arwe, sizeof(safe_arwe));
+    encode_shell_path(m->name, safe_app, sizeof(safe_app));
+    encode_shell_path(app_dir, safe_appdir, sizeof(safe_appdir));
 
     char staging_tpl[AR_BUILD_STAGING_MAX];
     if (staging_override && staging_override[0]) {
@@ -923,29 +1228,25 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
     }
     char staging[1024] = {0};
     expand_vars(staging, sizeof(staging), staging_tpl,
-                m->name, app_dir, arcore_dir, "", arwn_build);
+                safe_app, safe_appdir, safe_arcore, "", safe_arwe);
     if (staging[0] == '/' && staging[1] == '.' && (staging[2] == 's' || staging[2] == '/')) {
         char fixed[1024];
         snprintf(fixed, sizeof(fixed), ".%s", staging);
-        strncpy(staging, fixed, sizeof(staging) - 1);
+        snprintf(staging, sizeof(staging), "%s", fixed);
     }
+
+    char safe_staging[1024] = {0};
+    encode_shell_path(staging, safe_staging, sizeof(safe_staging));
 
     char saved_cwd[1024] = {0};
 #ifdef _WIN32
     if (!_getcwd(saved_cwd, sizeof(saved_cwd))) saved_cwd[0] = '\0';
-    if (staging[0]) {
-        char mk[1100];
-        snprintf(mk, sizeof(mk), "if not exist \"%s\" mkdir \"%s\"", staging, staging);
-        system(mk);
-    }
 #else
     if (!getcwd(saved_cwd, sizeof(saved_cwd))) saved_cwd[0] = '\0';
-    if (staging[0]) {
-        char mk[1100];
-        snprintf(mk, sizeof(mk), "mkdir -p \"%s\"", staging);
-        system(mk);
-    }
 #endif
+    if (staging[0]) {
+        mkdir_p(staging);
+    }
 
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
@@ -955,7 +1256,7 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
             ar_build_step_t *step = &m->build.steps[i];
             char cmd_exp[AR_BUILD_STEP_CMD_MAX];
             expand_vars(cmd_exp, sizeof(cmd_exp), step->cmd,
-                        m->name, app_dir, arcore_dir, staging, arwn_build);
+                        safe_app, safe_appdir, safe_arcore, safe_staging, safe_arwe);
 #ifdef _WIN32
             if (!strstr(cmd_exp, "-lws2_32") && (strstr(cmd_exp, "-larkernel") || strstr(cmd_exp, "-lssl") || strstr(cmd_exp, "-lcrypto") || strstr(cmd_exp, "gcc ") || strstr(cmd_exp, "cc "))) {
                 strncat(cmd_exp, " -lws2_32", sizeof(cmd_exp) - strlen(cmd_exp) - 1);
@@ -965,7 +1266,7 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
             if (step->cwd[0]) {
                 char cwd_exp[AR_BUILD_STEP_CWD_MAX];
                 expand_vars(cwd_exp, sizeof(cwd_exp), step->cwd,
-                            m->name, app_dir, arcore_dir, staging, arwn_build);
+                            m->name, app_dir, arcore_dir, staging, arwe_build);
                 snprintf(step_cwd, sizeof(step_cwd), "%s%c%s",
                          app_dir, SEPARATOR, cwd_exp);
             } else {
@@ -981,19 +1282,28 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
                 printf("[ERRO] step '%s': chdir(%s) falhou\n", step->name, step_cwd);
                 if (saved_cwd[0]) {
 #ifdef _WIN32
-                    _chdir(saved_cwd);
+                    (void)_chdir(saved_cwd);
 #else
-                    chdir(saved_cwd);
+                    if (chdir(saved_cwd) != 0) {
+                        fprintf(stderr, "[AVISO] nao foi possivel restaurar cwd: %s\n", saved_cwd);
+                    }
 #endif
                 }
                 return 1;
             }
-            int ret = system(cmd_exp);
+            if (validate_build_command_security(cmd_exp) != 0) {
+                printf("[ERRO] step '%s': comando com caracteres invalidos de controle\n", step->name);
+                return 1;
+            }
+            int ret = safe_exec_shell(cmd_exp);
             if (saved_cwd[0]) {
 #ifdef _WIN32
-                _chdir(saved_cwd);
+                (void)_chdir(saved_cwd);
 #else
-                chdir(saved_cwd);
+                if (chdir(saved_cwd) != 0) {
+                    fprintf(stderr, "[AVISO] nao foi possivel restaurar cwd: %s\n", saved_cwd);
+                    return 1;
+                }
 #endif
             }
             if (ret != 0) {
@@ -1012,12 +1322,19 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
             printf("[ERRO] chdir(%s) falhou\n", app_dir);
             return 1;
         }
-        int ret = system(m->build.command);
+        if (validate_build_command_security(m->build.command) != 0) {
+            printf("[ERRO] comando com caracteres invalidos de controle\n");
+            return 1;
+        }
+        int ret = safe_exec_shell(m->build.command);
         if (saved_cwd[0]) {
 #ifdef _WIN32
-            _chdir(saved_cwd);
+            (void)_chdir(saved_cwd);
 #else
-            chdir(saved_cwd);
+            if (chdir(saved_cwd) != 0) {
+                fprintf(stderr, "[AVISO] nao foi possivel restaurar cwd: %s\n", saved_cwd);
+                return 1;
+            }
 #endif
         }
         if (ret != 0) { printf("[ERRO] Build command falhou (exit %d)\n", ret); return 1; }
@@ -1028,7 +1345,7 @@ static int run_build_steps_from_manifest(ar_app_manifest_t *m,
     for (int i = 0; i < m->build.cleanup_count; i++) {
         char path_exp[1024];
         expand_vars(path_exp, sizeof(path_exp), m->build.cleanup[i],
-                    m->name, app_dir, arcore_dir, staging, arwn_build);
+                    m->name, app_dir, arcore_dir, staging, arwe_build);
         char full_path[1300];
         if (path_exp[0] == '/'
 #ifdef _WIN32
@@ -1092,35 +1409,36 @@ static int find_static_src(const char *app_dir, const char *file,
     return -1;
 }
 
-/* True se o manifesto usa ARWN (build.steps referencia $ARWN_BUILD ou
-   empacota config.arwn). Apps ARWN-native têm o entry = cópia de
-   arwn_build; apps nativos (ex: cdn compilado por cc) não.          */
-static int manifest_is_arwn(ar_app_manifest_t *m) {
+/* True se o manifesto usa ARWE (build.steps referencia $ARWE_BUILD ou
+   empacota config.arwe). Apps ARWE-native têm o entry = cópia de
+   arwe_build; apps nativos (ex: cdn compilado por cc) não.          */
+static int manifest_is_arwe(ar_app_manifest_t *m) {
     if (!m) return 0;
     for (int i = 0; i < m->build.step_count; i++) {
-        if (strstr(m->build.steps[i].cmd, "ARWN_BUILD") != NULL) return 1;
+        if (strstr(m->build.steps[i].cmd, "ARWE_BUILD") != NULL ||
+            strstr(m->build.steps[i].cmd, "ARWE_BUILD") != NULL) return 1;
     }
     for (int i = 0; i < m->file_count; i++) {
-        if (strcmp(m->files[i], "config.arwn") == 0) return 1;
+        if (strcmp(m->files[i], "config.arwe") == 0) return 1;
     }
     return 0;
 }
 
 /* Popula o staging com os arquivos estáticos do manifesto que ainda
    não existem lá (copiados do app_dir). O binário de entrada, se
-   apontado via --arwn-build e o app for ARWN-native, é SEMPRE copiado
-   para o staging (sempre reflete o arwn_build atual, mesmo em
-   rebuilds). Apps não-ARWN (ex: cdn compilado por cc) NÃO recebem a
+   apontado via --arwe-build e o app for ARWE-native, é SEMPRE copiado
+   para o staging (sempre reflete o arwe_build atual, mesmo em
+   rebuilds). Apps não-ARWE (ex: cdn compilado por cc) NÃO recebem a
    cópia, preservando o binário produzido pelo build.steps.          */
 static void prepare_staging(ar_app_manifest_t *m,
                             const char *app_dir,
                             const char *staging,
-                            const char *arwn_build) {
+                            const char *arwe_build) {
     if (!staging || !staging[0]) return;
     mkdir_p(staging);
 
-    /* 1) Copia o binário de entrada (platform entry) do arwn_build */
-    if (arwn_build && arwn_build[0] && manifest_is_arwn(m)) {
+    /* 1) Copia o binário de entrada (platform entry) do arwe_build */
+    if (arwe_build && arwe_build[0] && manifest_is_arwe(m)) {
         char entry[AR_ENTRY_MAX] = {0};
         char platform[32] = {0};
         ar_platform_detect(platform, sizeof(platform));
@@ -1130,10 +1448,10 @@ static void prepare_staging(ar_app_manifest_t *m,
             char dst[1300];
             snprintf(dst, sizeof(dst), "%s%c%s", staging, SEPARATOR, entry);
             normalize_path(dst);
-            if (copy_file_into(arwn_build, dst) == 0)
+            if (copy_file_into(arwe_build, dst) == 0)
                 printf("[STAGING] binário de entrada: %s\n", dst);
             else
-                printf("[AVISO] nao foi possivel copiar %s para %s\n", arwn_build, dst);
+                printf("[AVISO] nao foi possivel copiar %s para %s\n", arwe_build, dst);
         }
     }
 
@@ -1219,7 +1537,7 @@ static int cmd_build(int argc, char **argv) {
     const char *dir = ".";
     const char *output_arg = NULL;
     const char *staging_override = NULL;
-    const char *arwn_build_override = NULL;
+    const char *arwe_build_override = NULL;
     char target[32] = {0};
     int universal = 0;
     int force_build = 0;
@@ -1234,8 +1552,8 @@ static int cmd_build(int argc, char **argv) {
             force_build = 1;
         } else if (strcmp(argv[i], "--staging") == 0 && i + 1 < argc) {
             staging_override = argv[++i];
-        } else if (strcmp(argv[i], "--arwn-build") == 0 && i + 1 < argc) {
-            arwn_build_override = argv[++i];
+        } else if (strcmp(argv[i], "--arwe-build") == 0 && i + 1 < argc) {
+            arwe_build_override = argv[++i];
         } else if (argv[i][0] == '-') {
             printf("[ERRO] Opcao desconhecida: %s\n", argv[i]);
             return 1;
@@ -1305,13 +1623,20 @@ static int cmd_build(int argc, char **argv) {
 
     /* --- Execute build steps / legacy command if specified --- */
     int has_build = (m.build.step_count > 0 || m.build.command[0]);
+    if (!has_build) {
+        int iso_rc = armake_try_enable_packaging_fs_boundary(app_dir_buf, app_dir_buf, output);
+        if (iso_rc != 0) {
+            printf("[ERRO] Isolamento de filesystem indisponivel para empacotamento (rc=%d)\n", iso_rc);
+            return 1;
+        }
+    }
     if (has_build) {
         set_g_appdir(app_dir_buf);
         g_snap_count = 0;
         g_snap = NULL;
         snap_dir(app_dir_buf, "", &g_snap, &g_snap_count);
 
-        if (run_build_steps_from_manifest(&m, app_dir_buf, staging_override, arwn_build_override) != 0) {
+        if (run_build_steps_from_manifest(&m, app_dir_buf, staging_override, arwe_build_override) != 0) {
             cleanup_and_report();
             return 1;
         }
@@ -1340,8 +1665,21 @@ static int cmd_build(int argc, char **argv) {
             long alen = ftell(af);
             fseek(af, 0, SEEK_SET);
             unsigned char *arm_content = (unsigned char *)malloc((size_t)alen + 1);
-            fread(arm_content, 1, (size_t)alen, af);
+            if (!arm_content) {
+                fclose(af);
+                zip_close(z);
+                cleanup_and_report();
+                return 1;
+            }
+            size_t read_bytes = fread(arm_content, 1, (size_t)alen, af);
             fclose(af);
+            if (read_bytes != (size_t)alen) {
+                free(arm_content);
+                zip_close(z);
+                cleanup_and_report();
+                return 1;
+            }
+            arm_content[alen] = '\0';
 
             unsigned char *json_data = arm_content;
             while ((long)(json_data - arm_content) < alen &&
@@ -1373,6 +1711,7 @@ static int cmd_build(int argc, char **argv) {
     }
 
     int total_packed = 0;
+    int pack_failed = 0;
 
     if (has_build && m.file_count > 0) {
         /* Resolve staging e tenta empacotar de lá; fallback = dir do manifesto */
@@ -1385,8 +1724,8 @@ static int cmd_build(int argc, char **argv) {
         char arcore_buf[1024] = {0};
         find_arcore_dir(app_dir_buf2, arcore_buf, sizeof(arcore_buf));
 
-        char arwn_build_buf[1024] = {0};
-        resolve_arwn_build(arcore_buf, arwn_build_override, arwn_build_buf, sizeof(arwn_build_buf));
+        char arwe_build_buf[1024] = {0};
+        resolve_arwe_build(arcore_buf, arwe_build_override, arwe_build_buf, sizeof(arwe_build_buf));
 
         char stg_tpl[AR_BUILD_STAGING_MAX];
         if (staging_override && staging_override[0])
@@ -1397,10 +1736,10 @@ static int cmd_build(int argc, char **argv) {
             snprintf(stg_tpl, sizeof(stg_tpl), "$ARCORE/.staging/$APP_NAME");
         char staging_resolved[1024] = {0};
         expand_vars(staging_resolved, sizeof(staging_resolved), stg_tpl,
-                    m.name, app_dir_buf2, arcore_buf, "", arwn_build_buf);
+                    m.name, app_dir_buf2, arcore_buf, "", arwe_build_buf);
 
         /* Prepara o staging com o binário de entrada + arquivos estáticos */
-        prepare_staging(&m, app_dir_buf2, staging_resolved, arwn_build_buf);
+        prepare_staging(&m, app_dir_buf2, staging_resolved, arwe_build_buf);
 
         /* Verifica se o primeiro file do manifesto existe no staging */
         int staging_ok = 0;
@@ -1414,7 +1753,11 @@ static int cmd_build(int argc, char **argv) {
 
         const char *pack_dir = staging_ok ? staging_resolved : app_dir_buf2;
         printf("[INFO] Empacotando de: %s\n", pack_dir);
-        total_packed += pack_file_list(z, pack_dir, m.files, m.file_count);
+        {
+            int packed_now = pack_file_list(z, pack_dir, m.files, m.file_count);
+            if (packed_now < 0) pack_failed = 1;
+            else total_packed += packed_now;
+        }
     } else if (has_build) {
         /* build.command legado sem files[]: pack dir inteiro */
         char path_buf[1024];
@@ -1433,41 +1776,64 @@ static int cmd_build(int argc, char **argv) {
                 ar_manifest_get_platform_entry(&m, "linux", platform_entry, sizeof(platform_entry));
 
             if (!platform_entry[0] && m.entry[0])
-                strncpy(platform_entry, m.entry, sizeof(platform_entry) - 1);
+                snprintf(platform_entry, sizeof(platform_entry), "%s", m.entry);
 
             if (platform_entry[0]) {
                 if (pack_file(z, dir, platform_entry) == 0)
                     total_packed++;
+                else
+                    pack_failed = 1;
             }
 
             if (universal) {
                 char win_entry[AR_ENTRY_MAX] = {0}, lin_entry[AR_ENTRY_MAX] = {0};
                 ar_manifest_get_platform_entry(&m, "windows", win_entry, sizeof(win_entry));
                 ar_manifest_get_platform_entry(&m, "linux", lin_entry, sizeof(lin_entry));
-                if (win_entry[0] && pack_file(z, dir, win_entry) == 0) total_packed++;
-                if (lin_entry[0] && strcmp(lin_entry, win_entry) != 0 &&
-                    pack_file(z, dir, lin_entry) == 0) total_packed++;
+                if (win_entry[0]) {
+                    if (pack_file(z, dir, win_entry) == 0) total_packed++;
+                    else pack_failed = 1;
+                }
+                if (lin_entry[0] && strcmp(lin_entry, win_entry) != 0) {
+                    if (pack_file(z, dir, lin_entry) == 0) total_packed++;
+                    else pack_failed = 1;
+                }
             }
         }
 
         /* pack common files */
-        total_packed += pack_file_list(z, dir, m.files, m.file_count);
+        {
+            int packed_now = pack_file_list(z, dir, m.files, m.file_count);
+            if (packed_now < 0) pack_failed = 1;
+            else total_packed += packed_now;
+        }
 
         /* pack platform-specific files */
         if (universal) {
-            total_packed += pack_file_list(z, dir, m.files_windows, m.files_windows_count);
-            total_packed += pack_file_list(z, dir, m.files_linux, m.files_linux_count);
+            int packed_win = pack_file_list(z, dir, m.files_windows, m.files_windows_count);
+            int packed_lin = pack_file_list(z, dir, m.files_linux, m.files_linux_count);
+            if (packed_win < 0 || packed_lin < 0) pack_failed = 1;
+            else total_packed += packed_win + packed_lin;
             printf("[INFO] Alvo: universal (windows + linux)\n");
         } else {
             int is_win = is_platform(target, "windows");
+            int packed_now;
             if (is_win) {
-                total_packed += pack_file_list(z, dir, m.files_windows, m.files_windows_count);
+                packed_now = pack_file_list(z, dir, m.files_windows, m.files_windows_count);
                 printf("[INFO] Alvo: windows\n");
             } else {
-                total_packed += pack_file_list(z, dir, m.files_linux, m.files_linux_count);
+                packed_now = pack_file_list(z, dir, m.files_linux, m.files_linux_count);
                 printf("[INFO] Alvo: %s\n", target);
             }
+            if (packed_now < 0) pack_failed = 1;
+            else total_packed += packed_now;
         }
+    }
+
+    if (pack_failed) {
+        zip_close(z);
+        cleanup_and_report();
+        remove_file_(output);
+        return 1;
     }
 
     zip_close(z);
@@ -1678,5 +2044,5 @@ int main(int argc, char **argv) {
     else
         print_usage();
 
-    return 0;
+    return 1;
 }

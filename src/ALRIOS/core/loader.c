@@ -1,10 +1,11 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
 
 #include "loader.h"
 #include "arapp_parser.h"
@@ -42,31 +43,29 @@
 static char temp_dirs[MAX_TEMP_DIRS][1024];
 static int temp_dir_count = 0;
 
-static void *proc_group = NULL;
+static ar_supervisor_t g_supervisor_ctx;
+static int g_supervisor_ctx_ready = 0;
 
-#define AR_MAX_APPS 64
-typedef enum {
-    APP_STOPPED,
-    APP_RUNNING,
-    APP_CRASHED
-} loader_app_state_t;
+static void ensure_supervisor_context(void) {
+    if (!g_supervisor_ctx_ready) {
+        memset(&g_supervisor_ctx, 0, sizeof(g_supervisor_ctx));
+        g_supervisor_ctx.app_mutex = ar_mutex_create();
+        g_supervisor_ctx_ready = 1;
+    }
+}
 
-typedef struct {
-    char name[AR_APP_NAME_MAX];
-    char dir[1024];
-    ar_app_manifest_t m;
-    int pid;
-    loader_app_state_t state;
-    int is_native_service;
-} loader_app_t;
+ar_supervisor_t *loader_get_supervisor_context(void) {
+    ensure_supervisor_context();
+    return &g_supervisor_ctx;
+}
 
-static loader_app_t apps[AR_MAX_APPS];
-static int app_count = 0;
-static void *app_mutex = NULL;
-static int g_refresh_scan = 0;
-
-static char autostart_apps[AR_MAX_APPS][AR_APP_NAME_MAX];
-static int autostart_count = 0;
+#define apps (loader_get_supervisor_context()->apps)
+#define app_count (loader_get_supervisor_context()->app_count)
+#define app_mutex (loader_get_supervisor_context()->app_mutex)
+#define proc_group (loader_get_supervisor_context()->proc_group)
+#define g_refresh_scan (loader_get_supervisor_context()->refresh_scan)
+#define autostart_apps (loader_get_supervisor_context()->autostart_apps)
+#define autostart_count (loader_get_supervisor_context()->autostart_count)
 
 static void app_lock(void) {
     if (!app_mutex) app_mutex = ar_mutex_create();
@@ -92,8 +91,8 @@ static loader_app_t *app_register(const ar_app_manifest_t *m, const char *app_di
     if (app_count >= AR_MAX_APPS) { app_unlock(); return NULL; }
     loader_app_t *a = &apps[app_count++];
     memset(a, 0, sizeof(*a));
-    strncpy(a->name, m->name, sizeof(a->name) - 1);
-    strncpy(a->dir, app_dir, sizeof(a->dir) - 1);
+    snprintf(a->name, sizeof(a->name), "%s", m->name);
+    snprintf(a->dir, sizeof(a->dir), "%s", app_dir);
     a->m = *m;
     a->state = APP_STOPPED;
     app_unlock();
@@ -116,6 +115,24 @@ loader_app_t *loader_find_app(const char *name) {
     }
     app_unlock();
     return NULL;
+}
+
+int loader_update_app_process(const char *name, int new_pid, const char *new_dir) {
+    if (!name) return -1;
+    app_lock();
+    for (int i = 0; i < app_count; i++) {
+        if (strcmp(apps[i].name, name) == 0) {
+            apps[i].pid = new_pid;
+            apps[i].state = APP_RUNNING;
+            if (new_dir && new_dir[0]) {
+                snprintf(apps[i].dir, sizeof(apps[i].dir), "%s", new_dir);
+            }
+            app_unlock();
+            return 0;
+        }
+    }
+    app_unlock();
+    return -1;
 }
 
 static void rm_rf(const char *path) {
@@ -281,16 +298,16 @@ static void load_native(const ar_app_manifest_t *m, const char *app_dir, loader_
     if (!file_exists(libpath)) {
         char alt_path[1024];
         if (is_exe_file(libpath)) {
-            strncpy(alt_path, libpath, sizeof(alt_path) - 1);
+            snprintf(alt_path, sizeof(alt_path), "%s", libpath);
             char *dot = strrchr(alt_path, '.');
             if (dot) *dot = '\0';
             if (file_exists(alt_path)) {
-                strncpy(libpath, alt_path, sizeof(libpath) - 1);
+                snprintf(libpath, sizeof(libpath), "%s", alt_path);
             }
         } else {
             snprintf(alt_path, sizeof(alt_path), "%s.exe", libpath);
             if (file_exists(alt_path)) {
-                strncpy(libpath, alt_path, sizeof(libpath) - 1);
+                snprintf(libpath, sizeof(libpath), "%s", alt_path);
             }
         }
     }
@@ -332,12 +349,13 @@ static void load_native(const ar_app_manifest_t *m, const char *app_dir, loader_
 
     for (int i = 0; i < m->service_count; i++) {
         const ar_service_def_t *svc = &m->services[i];
-        int (*entry)(void) = (int (*)(void))ar_module_sym(handle, svc->entry);
-        if (!entry) {
+        int (*service_entry)(void) = NULL;
+        *(void **)(&service_entry) = ar_module_sym(handle, svc->entry);
+        if (!service_entry) {
             alri_printf("    " YLW "!" RST " Symbol '" DIM "%s" RST "' not found in " BLD "%s" RST "\n", svc->entry, m->entry);
             continue;
         }
-        ar_svc_register(svc->name, entry);
+        ar_svc_register(svc->name, service_entry);
         alri_printf("    " GRN "✓" RST " Service " CYN "%s" RST " registered\n", svc->name);
     }
 }
@@ -442,23 +460,6 @@ static void spawn_survive_check(loader_app_t *a) {
         }
         ar_sleep_ms(50);
     }
-}
-
-static int has_manifest_magic(const char *path) {
-    unsigned char hdr[20];
-    FILE *f = fopen(path, "rb");
-    if (!f) return 0;
-    int n = (int)fread(hdr, 1, 20, f);
-    fclose(f);
-    for (int i = 0; i < n; i++) {
-        if (hdr[i] == ' ' || hdr[i] == '\t' || hdr[i] == '\n' || hdr[i] == '\r')
-            continue;
-        if (hdr[i] == '{') return 1;
-        if (i + 17 <= n && memcmp(hdr + i, "ALRIGROUP@APPMAKE", 17) == 0) return 1;
-        if (i + 13 <= n && memcmp(hdr + i, "ALRIGROUP@APP", 13) == 0) return 1;
-        break;
-    }
-    return 0;
 }
 
 static int try_read_manifest(const char *path, char *json, int json_size, ar_app_manifest_t *m) {
@@ -736,8 +737,7 @@ void loader_load_autostart(void) {
             while (end > p && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r')) end--;
             *end = '\0';
             if (*p) {
-                strncpy(autostart_apps[autostart_count], p, AR_APP_NAME_MAX - 1);
-                autostart_apps[autostart_count][AR_APP_NAME_MAX - 1] = '\0';
+                snprintf(autostart_apps[autostart_count], AR_APP_NAME_MAX, "%s", p);
                 autostart_count++;
             }
         }
@@ -875,6 +875,7 @@ void loader_overlay_storage(const char *apps_dir, const char *app_name, const ch
 /* Scan a single .arapp file: extract and process */
 static void scan_arapp_file(const char *arapp_path, const char *apps_dir,
                              const char *subdir_name, int phase) {
+    (void)subdir_name;
     char cache_dir[1024];
     const char *base = strrchr(arapp_path, '/');
 #ifdef _WIN32

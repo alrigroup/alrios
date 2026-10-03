@@ -19,11 +19,11 @@ jobs:
         with:
           repository: alrigroup/alrios
           path: alrios
-          ref: beta-v0.2.0
+          ref: beta-v0.2.03
 
-      - name: Checkout ARWN Web Runtime
+      - name: Checkout ARWE Web Runtime
         run: |
-          git clone --depth 1 https://github.com/alrigroup/arwn.git alrios/src/apps/arwn
+          git clone --depth 1 https://github.com/alrigroup/arwe.git alrios/src/apps/arwe
 
       - name: Checkout app repository
         uses: actions/checkout@v4
@@ -41,8 +41,11 @@ jobs:
           sudo apt-get install -y build-essential cmake gcc make libssl-dev pkg-config
           cd alrios
           cmake -S . -B build-tools -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-tools --target arkernel armake arwn_build -j$(nproc)
-          chmod +x arcore/armake arcore/arcore arcore/arwn 2>/dev/null || true
+          cmake --build build-tools --target arkernel armake -j$(nproc)
+          chmod +x arcore/armake arcore/arcore 2>/dev/null || true
+          ./arcore/armake build src/apps/arwe
+          chmod +x arcore/.staging/arwe/arwe_build 2>/dev/null || true
+          cp arcore/.staging/arwe/arwe_build arcore/arwe 2>/dev/null || true
 
       - name: Package into Sovereign .arapp
         run: |
@@ -58,8 +61,8 @@ jobs:
       - name: Publish Official GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.2.0-beta' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.2.0-beta' }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.2.03-beta' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.2.03-beta' }}
           files: |
             *.arapp
           generate_release_notes: false
@@ -71,7 +74,7 @@ jobs:
             - Pacote compilado e validado pela pipeline ALRIOS.
             - Compatibilidade com gerenciador `arpm`.
 
-            **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.2.0-beta' }}
+            **Full Changelog**: https://github.com/${{ github.repository }}/commits/${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v0.2.03-beta' }}
           draft: false
           prerelease: false
           make_latest: true

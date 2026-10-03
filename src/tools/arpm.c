@@ -1,10 +1,11 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
 
 #include "ar_ipc.h"
 #include "aros_hal.h"
@@ -39,8 +40,8 @@
 
 #include <openssl/evp.h>
 
-#define ARPM_VERSION "0.2.0"
-#define DEFAULT_REGISTRY_URL "https://raw.githubusercontent.com/alrigroup/alrios/main/arcore/registry.json"
+#define ARPM_VERSION "0.2.03"
+#define DEFAULT_REGISTRY_URL "https://raw.githubusercontent.com/alrigroup/alrios/beta-v0.2.03/arcore/registry.json"
 
 /* ANSI Colors */
 #define CLR_RESET   "\033[0m"
@@ -100,15 +101,77 @@ static void mkdir_p(const char *dir) {
     mkdir_p_(tmp);
 }
 
+/* Safe process execution helper without invoking an OS shell (prevents CWE-78) */
+static int safe_run_cmd(const char *prog, char *const argv[]) {
+#ifdef _WIN32
+    (void)prog;
+    STARTUPINFOA si = { sizeof(si) };
+    PROCESS_INFORMATION pi = { 0 };
+    char cmdline[4096] = { 0 };
+    for (int i = 0; argv[i]; i++) {
+        if (i > 0) strncat(cmdline, " ", sizeof(cmdline) - strlen(cmdline) - 1);
+        strncat(cmdline, "\"", sizeof(cmdline) - strlen(cmdline) - 1);
+        strncat(cmdline, argv[i], sizeof(cmdline) - strlen(cmdline) - 1);
+        strncat(cmdline, "\"", sizeof(cmdline) - strlen(cmdline) - 1);
+    }
+    if (!CreateProcessA(NULL, cmdline, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+        return -1;
+    }
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD code = 0;
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return (code == 0) ? 0 : -1;
+#else
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        execvp(prog, argv);
+        _exit(127);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    return (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? 0 : -1;
+#endif
+}
+
+static int copy_file_native(const char *src, const char *dst) {
+    FILE *in = fopen(src, "rb");
+    if (!in) return -1;
+    FILE *out = fopen(dst, "wb");
+    if (!out) { fclose(in); return -1; }
+    char buf[8192];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+        if (fwrite(buf, 1, n, out) != n) {
+            fclose(in);
+            fclose(out);
+            return -1;
+        }
+    }
+    fclose(in);
+    fclose(out);
+    return 0;
+}
+
+static int is_safe_param(const char *s) {
+    if (!s) return 0;
+    for (const char *p = s; *p; p++) {
+        if (*p == ';' || *p == '&' || *p == '|' || *p == '`' || *p == '$' ||
+            *p == '\n' || *p == '\r' || *p == '"' || *p == '\'')
+            return 0;
+    }
+    return 1;
+}
+
 static void remove_recursive(const char *path) {
 #ifdef _WIN32
-    char cmd[1200];
-    snprintf(cmd, sizeof(cmd), "rmdir /S /Q \"%s\" >nul 2>nul", path);
-    system(cmd);
+    char *const rmdir_argv[] = {"cmd.exe", "/c", "rmdir", "/S", "/Q", (char *)path, NULL};
+    safe_run_cmd("cmd.exe", rmdir_argv);
 #else
-    char cmd[1200];
-    snprintf(cmd, sizeof(cmd), "rm -rf \"%s\"", path);
-    (void)system(cmd);
+    char *const rm_argv[] = {"rm", "-rf", (char *)path, NULL};
+    safe_run_cmd("rm", rm_argv);
 #endif
 }
 
@@ -191,14 +254,15 @@ static int calc_file_sha256(const char *path, char *out_hex) {
     EVP_MD_CTX_free(ctx);
 
     for (unsigned int i = 0; i < md_len; i++) {
-        sprintf(out_hex + (i * 2), "%02x", md[i]);
+        snprintf(out_hex + (i * 2), 3, "%02x", md[i]);
     }
     out_hex[md_len * 2] = '\0';
     return 0;
 }
 
-/* HTTP/HTTPS Downloader com suporte a repositórios privados */
+/* HTTP/HTTPS Downloader com suporte a repositórios privados (CWE-78 Immune) */
 static int download_file(const char *url, const char *dest, int show_progress) {
+    if (!is_safe_param(url) || !is_safe_param(dest)) return -1;
     if (show_progress) {
         printf("  %sBaixando:%s %s\n", CLR_CYAN, CLR_RESET, url);
     }
@@ -206,23 +270,22 @@ static int download_file(const char *url, const char *dest, int show_progress) {
     if (!token || !token[0]) token = getenv("GITHUB_TOKEN");
 
     char auth_header[256] = {0};
-    if (token && token[0]) {
-        snprintf(auth_header, sizeof(auth_header), "-H \"Authorization: token %s\" ", token);
+    if (token && token[0] && is_safe_param(token)) {
+        snprintf(auth_header, sizeof(auth_header), "Authorization: token %s", token);
     }
 
-#ifdef _WIN32
-    char cmd[2048];
-    snprintf(cmd, sizeof(cmd), "curl.exe -f -L %s-s -S -o \"%s\" \"%s\"", auth_header, dest, url);
-    if (system(cmd) == 0 && file_exists(dest) && file_size(dest) > 0) {
-        return 0;
+    /* Execute curl via safe_run_cmd without shell invocation */
+    if (auth_header[0]) {
+        char *const curl_argv[] = {"curl", "-f", "-L", "-H", auth_header, "-s", "-S", "-o", (char *)dest, (char *)url, NULL};
+        if (safe_run_cmd("curl", curl_argv) == 0 && file_exists(dest) && file_size(dest) > 0) {
+            return 0;
+        }
+    } else {
+        char *const curl_argv[] = {"curl", "-f", "-L", "-s", "-S", "-o", (char *)dest, (char *)url, NULL};
+        if (safe_run_cmd("curl", curl_argv) == 0 && file_exists(dest) && file_size(dest) > 0) {
+            return 0;
+        }
     }
-#else
-    char cmd[2048];
-    snprintf(cmd, sizeof(cmd), "curl -f -L %s-s -S -o \"%s\" \"%s\"", auth_header, dest, url);
-    if (system(cmd) == 0 && file_exists(dest) && file_size(dest) > 0) {
-        return 0;
-    }
-#endif
 
     /* Fallback para repositórios privados usando GitHub CLI (gh) se disponível */
     if (strstr(url, "github.com/")) {
@@ -250,16 +313,20 @@ static int download_file(const char *url, const char *dest, int show_progress) {
                     const char *a = strrchr(url, '/');
                     if (a) {
                         strncpy(asset, a + 1, sizeof(asset) - 1);
-                        char gh_cmd[2048];
-                        if (tag[0] != '\0') {
-                            snprintf(gh_cmd, sizeof(gh_cmd), "gh release download %s -R %s/%s -p \"%s\" -O \"%s\" --clobber",
-                                     tag, owner, repo, asset, dest);
-                        } else {
-                            snprintf(gh_cmd, sizeof(gh_cmd), "gh release download -R %s/%s -p \"%s\" -O \"%s\" --clobber",
-                                     owner, repo, asset, dest);
-                        }
-                        if (system(gh_cmd) == 0 && file_exists(dest) && file_size(dest) > 0) {
-                            return 0;
+                        char repo_spec[256];
+                        snprintf(repo_spec, sizeof(repo_spec), "%s/%s", owner, repo);
+                        if (is_safe_param(owner) && is_safe_param(repo) && is_safe_param(asset)) {
+                            if (tag[0] != '\0' && is_safe_param(tag)) {
+                                char *const gh_argv[] = {"gh", "release", "download", tag, "-R", repo_spec, "-p", asset, "-O", (char *)dest, "--clobber", NULL};
+                                if (safe_run_cmd("gh", gh_argv) == 0 && file_exists(dest) && file_size(dest) > 0) {
+                                    return 0;
+                                }
+                            } else {
+                                char *const gh_argv[] = {"gh", "release", "download", "-R", repo_spec, "-p", asset, "-O", (char *)dest, "--clobber", NULL};
+                                if (safe_run_cmd("gh", gh_argv) == 0 && file_exists(dest) && file_size(dest) > 0) {
+                                    return 0;
+                                }
+                            }
                         }
                     }
                 }
@@ -409,7 +476,7 @@ static void record_package(const char *name, const char *version, const char *so
     strftime(tbuf, sizeof(tbuf), "%Y-%m-%d %H:%M:%S", localtime(&now));
 
     fprintf(f, "pkg:%s|ver:%s|src:%s|type:%s|auto:%d|sha:%s|date:%s\n",
-            name, version ? version : "0.2.0", source ? source : "remote",
+            name, version ? version : "0.2.03", source ? source : "remote",
             type ? type : "binary", autostart, sha ? sha : "", tbuf);
     fclose(f);
 }
@@ -462,9 +529,14 @@ static int read_manifest_info(const char *manifest_file, char *name_out, size_t 
     long sz = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    char *buf = (char *)malloc((size_t)sz + 1);
+    if (sz < 0) { fclose(f); return -1; }
+    char *buf = (char *)malloc((size_t)sz + 1U);
     if (!buf) { fclose(f); return -1; }
-    fread(buf, 1, sz, f);
+    if (fread(buf, 1U, (size_t)sz, f) != (size_t)sz) {
+        fclose(f);
+        free(buf);
+        return -1;
+    }
     buf[sz] = '\0';
     fclose(f);
 
@@ -520,8 +592,9 @@ static int resolve_registry_package(const char *app, char *url_out, size_t url_m
 
     const char *reg_path = file_exists(local_reg) ? local_reg : g_ctx.registry_cache;
 
-    if (!file_exists(reg_path)) {
-        download_file(DEFAULT_REGISTRY_URL, g_ctx.registry_cache, 0);
+    /* Refresh the remote registry first; retain the bundled registry as an offline fallback. */
+    if (download_file(DEFAULT_REGISTRY_URL, g_ctx.registry_cache, 0) == 0 &&
+        file_exists(g_ctx.registry_cache) && file_size(g_ctx.registry_cache) > 0) {
         reg_path = g_ctx.registry_cache;
     }
 
@@ -531,9 +604,13 @@ static int resolve_registry_package(const char *app, char *url_out, size_t url_m
             fseek(f, 0, SEEK_END);
             long sz = ftell(f);
             fseek(f, 0, SEEK_SET);
-            char *json = (char *)malloc(sz + 1);
+            char *json = sz >= 0 ? (char *)malloc((size_t)sz + 1U) : NULL;
             if (json) {
-                fread(json, 1, sz, f);
+                if (fread(json, 1U, (size_t)sz, f) != (size_t)sz) {
+                    free(json);
+                    fclose(f);
+                    return -1;
+                }
                 json[sz] = '\0';
 
                 char search_key[128];
@@ -575,6 +652,22 @@ static int resolve_registry_package(const char *app, char *url_out, size_t url_m
 /* COMMANDS                                                                  */
 /* ========================================================================= */
 
+static void normalize_package_name(const char *input, char *output, size_t output_size) {
+    if (!output || output_size == 0) return;
+    output[0] = '\0';
+    if (!input) return;
+    snprintf(output, output_size, "%s", input);
+    const char *suffixes[] = {"-linux-x64", "-linux-arm64", "-windows-x64", NULL};
+    for (int i = 0; suffixes[i]; i++) {
+        size_t name_len = strlen(output);
+        size_t suffix_len = strlen(suffixes[i]);
+        if (name_len > suffix_len && strcmp(output + name_len - suffix_len, suffixes[i]) == 0) {
+            output[name_len - suffix_len] = '\0';
+            return;
+        }
+    }
+}
+
 /* arpm install <target> [flags] */
 static int cmd_install(int argc, char **argv) {
     if (argc < 3) {
@@ -598,7 +691,7 @@ static int cmd_install(int argc, char **argv) {
     char app_name[128] = {0};
     char download_url_buf[1024] = {0};
     char expected_sha[128] = {0};
-    char version[64] = "0.2.0";
+    char version[64] = "0.2.03";
     char local_tmp[1024];
 
     /* Check if target is a local file */
@@ -635,7 +728,7 @@ static int cmd_install(int argc, char **argv) {
             }
             const char *repo_name = strrchr(repo_path, '/');
             repo_name = repo_name ? repo_name + 1 : repo_path;
-            strncpy(app_name, repo_name, sizeof(app_name) - 1);
+            snprintf(app_name, sizeof(app_name), "%s", repo_name);
 
             if (strcmp(tag, "latest") == 0) {
                 snprintf(download_url_buf, sizeof(download_url_buf),
@@ -645,8 +738,11 @@ static int cmd_install(int argc, char **argv) {
                          "https://github.com/%s/releases/download/%s/%s.arapp", repo_path, tag, repo_name);
             }
         } else {
-            /* Simple package name (ardcbot) */
-            strncpy(app_name, target, sizeof(app_name) - 1);
+            /* Simple package name; platform suffixes identify assets, not package repositories. */
+            normalize_package_name(target, app_name, sizeof(app_name));
+            if (strcmp(app_name, target) != 0) {
+                printf("  %s[INFO]%s Nome normalizado: '%s' -> '%s'.\n", CLR_BLUE, CLR_RESET, target, app_name);
+            }
             if (resolve_registry_package(app_name, download_url_buf, sizeof(download_url_buf),
                                          expected_sha, sizeof(expected_sha), version, sizeof(version)) != 0) {
                 printf("%s[ERRO]%s Pacote '%s' nao encontrado no registry.\n", CLR_RED, CLR_RESET, app_name);
@@ -659,8 +755,14 @@ static int cmd_install(int argc, char **argv) {
         /* Download to staging */
         snprintf(local_tmp, sizeof(local_tmp), "%s%c%s.arapp.download", g_ctx.staging_dir, SEPARATOR, app_name);
         printf("-> Baixando pacote '%s'...\n", app_name);
+        remove(local_tmp);
         if (download_file(download_url_buf, local_tmp, 1) != 0) {
             printf("%s[ERRO]%s Falha no download do pacote a partir de: %s\n", CLR_RED, CLR_RESET, download_url_buf);
+            remove(local_tmp);
+            return 1;
+        }
+        if (!file_exists(local_tmp) || file_size(local_tmp) <= 0) {
+            printf("%s[ERRO]%s Download nao produziu um pacote valido. Instalacao cancelada.\n", CLR_RED, CLR_RESET);
             remove(local_tmp);
             return 1;
         }
@@ -676,7 +778,11 @@ static int cmd_install(int argc, char **argv) {
 
     /* Verify SHA256 if expected */
     char actual_sha[128] = {0};
-    calc_file_sha256(local_tmp, actual_sha);
+    if (calc_file_sha256(local_tmp, actual_sha) != 0 || actual_sha[0] == '\0') {
+        printf("%s[ERRO]%s Nao foi possivel calcular o checksum SHA-256 do pacote.\n", CLR_RED, CLR_RESET);
+        if (local_tmp != target) remove(local_tmp);
+        return 1;
+    }
     if (expected_sha[0] && strcasecmp(expected_sha, actual_sha) != 0) {
         printf("%s[ERRO]%s Divergencia de checksum SHA-256!\n  Esperado: %s\n  Obtido:   %s\n",
                CLR_RED, CLR_RESET, expected_sha, actual_sha);
@@ -702,14 +808,7 @@ static int cmd_install(int argc, char **argv) {
     remove(final_arapp);
 #endif
     if (local_tmp == target) {
-        /* Copy local file */
-        char cmd[2048];
-#ifdef _WIN32
-        snprintf(cmd, sizeof(cmd), "copy /Y \"%s\" \"%s\" >nul", local_tmp, final_arapp);
-#else
-        snprintf(cmd, sizeof(cmd), "cp -f \"%s\" \"%s\"", local_tmp, final_arapp);
-#endif
-        (void)system(cmd);
+        copy_file_native(local_tmp, final_arapp);
     } else {
         rename(local_tmp, final_arapp);
     }
@@ -797,9 +896,8 @@ static int cmd_install_src(int argc, char **argv) {
         remove_recursive(build_dir);
 
         printf("-> Clonando codigo-fonte remoto:\n   %s%s%s...\n", CLR_CYAN, clone_url, CLR_RESET);
-        char cmd[2048];
-        snprintf(cmd, sizeof(cmd), "git clone --depth 1 \"%s\" \"%s\"", clone_url, build_dir);
-        if (system(cmd) != 0) {
+        char *const git_argv[] = {"git", "clone", "--depth", "1", (char *)clone_url, (char *)build_dir, NULL};
+        if (!is_safe_param(clone_url) || safe_run_cmd("git", git_argv) != 0) {
             printf("%s[ERRO]%s Falha ao clonar repositorio git: %s\n", CLR_RED, CLR_RESET, clone_url);
             remove_recursive(build_dir);
             return 1;
@@ -816,16 +914,15 @@ static int cmd_install_src(int argc, char **argv) {
     }
 
     char app_name[128] = {0};
-    char version[64] = "0.2.0";
+    char version[64] = "0.2.03";
     read_manifest_info(manifest_path, app_name, sizeof(app_name), version, sizeof(version));
     if (app_name[0] == '\0') {
-        strncpy(app_name, app_hint[0] ? app_hint : "app", sizeof(app_name) - 1);
+        snprintf(app_name, sizeof(app_name), "%s", app_hint[0] ? app_hint : "app");
     }
 
     printf("-> Compilando e empacotando aplicativo '%s' (v%s) via armake...\n", app_name, version);
-    char cmd_build[2048];
-    snprintf(cmd_build, sizeof(cmd_build), "\"%s\" buildapp -s \"%s\" -o apps", g_ctx.armake_bin, build_dir);
-    if (system(cmd_build) != 0) {
+    char *const armake_argv[] = {(char *)g_ctx.armake_bin, "buildapp", "-s", (char *)build_dir, "-o", "apps", NULL};
+    if (safe_run_cmd(g_ctx.armake_bin, armake_argv) != 0) {
         printf("%s[ERRO]%s Falha na compilacao/empacotamento via armake!\n", CLR_RED, CLR_RESET);
         if (strcmp(clone_url, "local") != 0) remove_recursive(build_dir);
         return 1;
@@ -944,7 +1041,7 @@ static int cmd_update(int argc, char **argv) {
                 const char *ext = strrchr(ent->d_name, '.');
                 if (ext && strcmp(ext, ".arapp") == 0) {
                     char app[128];
-                    strncpy(app, ent->d_name, sizeof(app) - 1);
+                    snprintf(app, sizeof(app), "%s", ent->d_name);
                     char *dot = strstr(app, ".arapp");
                     if (dot) *dot = '\0';
                     char *sub_argv[] = {"arpm", "install", app, "--force"};
@@ -1000,7 +1097,7 @@ static int cmd_list(void) {
             const char *ext = strrchr(ent->d_name, '.');
             if (ext && strcmp(ext, ".arapp") == 0) {
                 char app[128];
-                strncpy(app, ent->d_name, sizeof(app) - 1);
+                snprintf(app, sizeof(app), "%s", ent->d_name);
                 char *dot = strstr(app, ".arapp");
                 if (dot) *dot = '\0';
 

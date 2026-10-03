@@ -1,10 +1,6 @@
-/*
- * Copyright (c) ALRIGROUP and its affiliates.
- *
- * This code is licensed under the ARGLR - ALRI GROUP LICENSE RESERVED
- * found in the LICENSE file in the root directory of this source tree
- * and at: https://github.com/alrigroup/licenses/tree/main
- */
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * ==================================================================== */
 
 #include "cli_ui.h"
 #include <stdio.h>
@@ -68,7 +64,7 @@ int run_cli_installer(installer_config_t *cfg) {
             size_t len = strlen(input);
             if (len > 0 && input[len - 1] == '\n') input[len - 1] = '\0';
             if (strlen(input) > 0) {
-                strncpy(cfg->dest_dir, input, sizeof(cfg->dest_dir) - 1);
+                snprintf(cfg->dest_dir, sizeof(cfg->dest_dir), "%s", input);
             }
         }
 

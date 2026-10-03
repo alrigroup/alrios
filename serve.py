@@ -21,10 +21,10 @@ import sys
 import time
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-ARWS = os.path.join(ROOT, "arcore")
-CFG = os.path.join(ARWS, "storage", "arws", "arws.cfg")
-BAKCFG = os.path.join(ARWS, "storage", "arws", "arws.cfg.production")
-LOG = os.path.join(ARWS, "persist_serve.log")
+ARCORE_DIR = os.path.join(ROOT, "arcore")
+CFG = os.path.join(ARCORE_DIR, "storage", "arws", "arws.cfg")
+BAKCFG = os.path.join(ARCORE_DIR, "storage", "arws", "arws.cfg.production")
+LOG = os.path.join(ARCORE_DIR, "persist_serve.log")
 
 TEST_CFG_CONTENT = (
     "# ALRI Web Services Config - TEST mode (persistent, for local browsing)\n"
@@ -111,8 +111,8 @@ def main():
         flags = subprocess.CREATE_NO_WINDOW
         logf = open(LOG, "wb")
         proc = subprocess.Popen(
-            [os.path.join(ARWS, "arcore.exe")],
-            cwd=ARWS, stdout=logf, stderr=subprocess.STDOUT,
+            [os.path.join(ARCORE_DIR, "arcore.exe")],
+            cwd=ARCORE_DIR, stdout=logf, stderr=subprocess.STDOUT,
             creationflags=flags)
         print("      arcore pid=%d" % proc.pid)
 
