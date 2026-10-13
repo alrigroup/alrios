@@ -159,6 +159,7 @@ target_link_libraries(arpki PUBLIC arcrypto arhal_isolation)
 # 6. arpackage (Canonical .arapp v2 Reader and Structural Validator)
 add_library(arpackage STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_reader.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_signatures.c
 )
 set_property(TARGET arpackage PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arpackage PUBLIC

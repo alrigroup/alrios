@@ -119,6 +119,15 @@ set_target_properties(test_memory_pressure PROPERTIES
 )
 add_test(NAME test_memory_pressure COMMAND test_memory_pressure)
 
+add_executable(test_signed_arapp integration/package/test_signed_arapp.c)
+target_link_libraries(test_signed_arapp PRIVATE arpackage arcrypto OpenSSL::Crypto)
+set_target_properties(test_signed_arapp PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_signed_arapp COMMAND test_signed_arapp)
+
 add_executable(test_ca_chain integration/pki/test_ca_chain.c)
 target_link_libraries(test_ca_chain PRIVATE arpki OpenSSL::Crypto)
 set_target_properties(test_ca_chain PROPERTIES
