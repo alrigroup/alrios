@@ -262,6 +262,8 @@ add_library(ardeploy STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/atomic_swap.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/arapp_index.c
     ${CMAKE_SOURCE_DIR}/src/libraries/deploy/layering.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/deploy/drain.c
+    ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/socket_handover.c
 )
 set_property(TARGET ardeploy PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(ardeploy PUBLIC
@@ -382,6 +384,9 @@ add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/fd_pass.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/atomic_swap.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/arapp_index.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/deploy/layering.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/deploy/drain.c
+    ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/socket_handover.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/crypto/utils.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/crypto/sha512.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/crypto/ed25519.c

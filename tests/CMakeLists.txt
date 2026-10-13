@@ -388,6 +388,15 @@ set_tests_properties(test_arcc PROPERTIES ENVIRONMENT
     "ALRIOS_ARCC_BIN=$<TARGET_FILE:arcc>;ALRIOS_BANNED_APIS_PY=${CMAKE_SOURCE_DIR}/scripts/gates/banned_apis.py"
 )
 
+add_executable(test_websocket_drain integration/deploy/test_websocket_drain.c)
+target_link_libraries(test_websocket_drain PRIVATE ardeploy arkernel Threads::Threads)
+set_target_properties(test_websocket_drain PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_websocket_drain COMMAND test_websocket_drain)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")

@@ -12,6 +12,7 @@
 #include "ar_ipc.h"
 #include "arapp_parser.h"
 #include "aros_hal.h"
+#include "alrios/deploy/drain.h"
 #include "zip.h"
 #include "log.h"
 
@@ -295,12 +296,19 @@ int ar_hotreload_deploy(const char *app_name, const char *arapp_path, char *out_
     /* Atualiza o status no loader oficial */
     loader_update_app_process(app_name, cand->pid, cand->staging_dir);
 
-    /* Drenagem graciosa de conexões no slot antecessor */
+    /* Drenagem graciosa de conexões no slot antecessor via drain timeout configuravel */
     if (old_slot_idx != candidate_idx && old_slot->pid > 0 && old_slot->state == HOTRELOAD_ACTIVE) {
         old_slot->state = HOTRELOAD_DRAINING;
-        /* Sinaliza o processo antigo para encerrar após tolerância de drenagem */
-        ar_sleep_ms(100);
-        ar_process_kill(old_slot->pid);
+        /*
+         * Evita SIGKILL cego em 100ms:
+         * Aguarda a drenagem graciosa das conexões ativas pelo tempo limite
+         * configurado (AR_DEFAULT_DRAIN_TIMEOUT_MS) com período de graça.
+         */
+        int exit_status = 0;
+        (void)alrios_drain_process_await((pid_t)old_slot->pid,
+                                         AR_DEFAULT_DRAIN_TIMEOUT_MS,
+                                         500U,
+                                         &exit_status);
         old_slot->state = HOTRELOAD_TERMINATED;
         old_slot->pid = 0;
     }
