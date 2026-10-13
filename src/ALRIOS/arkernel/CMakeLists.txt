@@ -345,6 +345,17 @@ target_include_directories(arsecurity_epoch PUBLIC
 )
 target_link_libraries(arsecurity_epoch PUBLIC arcrypto OpenSSL::Crypto)
 
+# 21. arsdk_app (Extended Application Lifecycle, Networking, Storage & Logging SDK)
+add_library(arsdk_app STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/sdk/app.c
+)
+set_property(TARGET arsdk_app PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arsdk_app PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(arsdk_app PUBLIC arcrypto)
+
 # ====================================================================
 # Umbrella Target: libarsdk (Maintains 100% Backward Compatibility)
 # ====================================================================
@@ -376,6 +387,7 @@ add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/pki/certificate.c
     ${CMAKE_SOURCE_DIR}/src/libraries/pki/issuer.c
     ${CMAKE_SOURCE_DIR}/src/libraries/sandbox/mounts.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/sdk/app.c
 )
 set_property(TARGET arsdk PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arsdk PUBLIC

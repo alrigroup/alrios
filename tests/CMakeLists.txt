@@ -353,6 +353,15 @@ set_tests_properties(test_security_epoch PROPERTIES ENVIRONMENT
     "ALRIOS_CHRONOD_BIN=$<TARGET_FILE:ar_chronod>"
 )
 
+add_executable(test_app_lifecycle unit/sdk/test_app_lifecycle.c)
+target_link_libraries(test_app_lifecycle PRIVATE arsdk_app arsdk arkernel OpenSSL::Crypto OpenSSL::SSL Threads::Threads)
+set_target_properties(test_app_lifecycle PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_app_lifecycle COMMAND test_app_lifecycle)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
