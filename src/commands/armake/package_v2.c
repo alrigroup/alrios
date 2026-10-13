@@ -184,21 +184,25 @@ static int read_canonical_manifest(const char *path, uint8_t **out_manifest,
     return ALRIOS_ARMAKE_V2_OK;
 }
 
-static void write_u16_le(uint8_t *output, uint16_t value) {
-    output[0] = (uint8_t)value;
-    output[1] = (uint8_t)(value >> 8U);
+static void write_u16_be(uint8_t *output, uint16_t value) {
+    output[0] = (uint8_t)(value >> 8U);
+    output[1] = (uint8_t)value;
 }
 
-static void write_u32_le(uint8_t *output, uint32_t value) {
-    output[0] = (uint8_t)value;
-    output[1] = (uint8_t)(value >> 8U);
-    output[2] = (uint8_t)(value >> 16U);
-    output[3] = (uint8_t)(value >> 24U);
+static void write_u32_be(uint8_t *output, uint32_t value) {
+    output[0] = (uint8_t)(value >> 24U);
+    output[1] = (uint8_t)(value >> 16U);
+    output[2] = (uint8_t)(value >> 8U);
+    output[3] = (uint8_t)value;
 }
 
-static void write_u64_le(uint8_t *output, uint64_t value) {
-    write_u32_le(output, (uint32_t)value);
-    write_u32_le(output + 4U, (uint32_t)(value >> 32U));
+static void write_u64_be(uint8_t *output, uint64_t value) {
+    size_t index;
+
+    for (index = 8U; index > 0U; --index) {
+        output[index - 1U] = (uint8_t)value;
+        value >>= 8U;
+    }
 }
 
 static int write_all(FILE *output, const uint8_t *data, size_t length) {
@@ -279,35 +283,33 @@ int alrios_armake_package_v2(
     }
 
     errno = 0;
-    output = fopen(output_path, "rb");
-    if (output) {
-        (void)fclose(output);
-        (void)fclose(payload);
-        free(manifest);
-        return ALRIOS_ARMAKE_V2_ERR_OUTPUT_EXISTS;
-    }
-    if (errno != ENOENT) {
-        (void)fclose(payload);
-        free(manifest);
-        return ALRIOS_ARMAKE_V2_ERR_IO;
-    }
-    output = fopen(output_path, "wb");
+    output = fopen(output_path, "wbx");
     if (!output) {
+        int open_error = errno;
+
         (void)fclose(payload);
         free(manifest);
-        return ALRIOS_ARMAKE_V2_ERR_IO;
+        return open_error == EEXIST ? ALRIOS_ARMAKE_V2_ERR_OUTPUT_EXISTS :
+                                     ALRIOS_ARMAKE_V2_ERR_IO;
     }
 
     memset(header, 0, sizeof(header));
     memcpy(header, arapp_v2_magic, sizeof(arapp_v2_magic));
-    write_u16_le(header + 16U, ALRIOS_ARAPP_V2_VERSION);
-    write_u16_le(header + 18U, options->target_arch);
-    write_u32_le(header + 20U, options->container_flags);
-    write_u64_le(header + 24U, options->issued_at);
-    write_u64_le(header + 32U, options->expires_at);
-    write_u32_le(header + 40U, ALRIOS_ARAPP_V2_HEADER_SIZE);
-    write_u32_le(header + 44U, manifest_length);
-    write_u64_le(header + 48U, payload_length);
+    if (payload_length > UINT32_MAX) {
+        (void)fclose(output);
+        (void)fclose(payload);
+        free(manifest);
+        (void)unlink_file(output_path);
+        return ALRIOS_ARMAKE_V2_ERR_CAPACITY;
+    }
+    write_u16_be(header + 16U, ALRIOS_ARAPP_V2_VERSION);
+    write_u16_be(header + 18U, options->target_arch);
+    write_u32_be(header + 20U, options->container_flags);
+    write_u64_be(header + 24U, options->issued_at);
+    write_u64_be(header + 32U, options->expires_at);
+    write_u32_be(header + 40U, ALRIOS_ARAPP_V2_HEADER_SIZE);
+    write_u32_be(header + 44U, manifest_length);
+    write_u32_be(header + 48U, (uint32_t)payload_length);
 
     status = write_all(output, header, sizeof(header));
     if (status == ALRIOS_ARMAKE_V2_OK) {

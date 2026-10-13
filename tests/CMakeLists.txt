@@ -92,6 +92,15 @@ set_target_properties(test_arapp_v2_reader PROPERTIES
 )
 add_test(NAME test_arapp_v2_reader COMMAND test_arapp_v2_reader)
 
+add_executable(test_armake_v2 integration/package/test_armake_v2.c)
+target_link_libraries(test_armake_v2 PRIVATE armake_package_v2 arpackage)
+set_target_properties(test_armake_v2 PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_armake_v2 COMMAND test_armake_v2)
+
 add_executable(test_hash_chain unit/audit/test_hash_chain.c)
 target_link_libraries(test_hash_chain PRIVATE araudit OpenSSL::Crypto)
 set_target_properties(test_hash_chain PROPERTIES

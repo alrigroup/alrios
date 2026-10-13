@@ -2157,7 +2157,7 @@ static int dispatch_legacy_command(int argc, char **argv) {
     return 1;
 }
 
-int main(int argc, char **argv) {
+int alrios_armake_main(int argc, char **argv) {
     if (argc >= 2 && strcmp(argv[1], "package-v2") == 0) {
         return cmd_package_v2(argc, argv);
     }

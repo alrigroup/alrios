@@ -7,6 +7,7 @@ target_include_directories(armake_package_v2 PUBLIC
 )
 
 add_executable(armake
+    ${CMAKE_SOURCE_DIR}/src/commands/armake/main.c
     armake.c
 )
 target_include_directories(armake PRIVATE
