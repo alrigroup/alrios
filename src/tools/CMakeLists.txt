@@ -16,7 +16,7 @@ target_include_directories(armake PRIVATE
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
 )
-target_link_libraries(armake PRIVATE ararchive armanifest arhal_isolation armake_package_v2)
+target_link_libraries(armake PRIVATE ararchive armanifest arhal_isolation armake_package_v2 arindex)
 set_target_properties(armake PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"

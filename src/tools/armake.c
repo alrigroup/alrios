@@ -12,6 +12,7 @@
 #include "aros_hal.h"
 #include "alrios/armake/package_v2.h"
 #include "alrios/package/arapp_v2.h"
+#include "alrios/package/index.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -189,6 +190,11 @@ static void print_usage(void) {
     printf("  armake snapshot <dir> [-o <file>]          Map tree BEFORE compiling (cleanup base)\n");
     printf("  armake cleanup <dir> -f <file>             Remove build residue AFTER compiling\n");
     printf("  armake package-v2 --manifest <json> --payload <file> --out <file.arapp> [options]\n");
+    printf("  armake index --dir <dir> --out <file> --key <key_file>\n");
+    printf("\n");
+    printf("  index options:      --dir <directory>     Directory to index\n");
+    printf("                      --out <manifest_file> Output .arapp.index file\n");
+    printf("                      --key <private_key>   Ed25519 private key (file/raw/hex/pem)\n");
     printf("\n");
     printf("  package-v2 options: --arch <x86_64|aarch64|riscv64>\n");
     printf("                      --profile <enterprise|performance>\n");
@@ -1964,6 +1970,54 @@ invalid:
     return 1;
 }
 
+static int cmd_index(int argc, char **argv) {
+    const char *dir_path = NULL;
+    const char *out_path = NULL;
+    const char *key_path = NULL;
+    uint8_t private_key[ALRIOS_PACKAGE_INDEX_ED25519_PRIVATE_KEY_SIZE];
+    int status;
+    int i;
+
+    for (i = 2; i < argc; ++i) {
+        if ((strcmp(argv[i], "--dir") == 0 || strcmp(argv[i], "-d") == 0) && i + 1 < argc) {
+            dir_path = argv[++i];
+        } else if ((strcmp(argv[i], "--out") == 0 || strcmp(argv[i], "-o") == 0) && i + 1 < argc) {
+            out_path = argv[++i];
+        } else if ((strcmp(argv[i], "--key") == 0 || strcmp(argv[i], "--private-key") == 0 ||
+                    strcmp(argv[i], "--key-file") == 0 || strcmp(argv[i], "-k") == 0) && i + 1 < argc) {
+            key_path = argv[++i];
+        } else {
+            fprintf(stderr, "[ERRO] argumento desconhecido para index: %s\n", argv[i]);
+            print_usage();
+            return 1;
+        }
+    }
+
+    if (!dir_path || !out_path || !key_path) {
+        fprintf(stderr, "[ERRO] index exige --dir, --out e --key\n");
+        print_usage();
+        return 1;
+    }
+
+    status = alrios_package_index_load_private_key_file(key_path, private_key);
+    if (status != ALRIOS_PACKAGE_INDEX_OK) {
+        fprintf(stderr, "[ERRO] falha ao carregar chave privada Ed25519 de %s: %s (rc=%d)\n",
+                key_path, alrios_package_index_error_string(status), status);
+        return 1;
+    }
+
+    status = alrios_package_index_write_directory(dir_path, out_path, private_key);
+    memset(private_key, 0, sizeof(private_key));
+    if (status != ALRIOS_PACKAGE_INDEX_OK) {
+        fprintf(stderr, "[ERRO] falha ao gerar index: %s (rc=%d)\n",
+                alrios_package_index_error_string(status), status);
+        return 1;
+    }
+
+    printf("[OK] manifest index assinado gerado em: %s\n", out_path);
+    return 0;
+}
+
 static int cmd_extract(int argc, char **argv) {
     if (argc < 4) { print_usage(); return 1; }
     const char *archive = argv[2];
@@ -2153,6 +2207,8 @@ static int dispatch_legacy_command(int argc, char **argv) {
         return cmd_list(argc, argv);
     if (strcmp(argv[1], "header") == 0)
         return cmd_header(argc, argv);
+    if (strcmp(argv[1], "index") == 0 || strcmp(argv[1], "package-index") == 0)
+        return cmd_index(argc, argv);
     print_usage();
     return 1;
 }
@@ -2160,6 +2216,9 @@ static int dispatch_legacy_command(int argc, char **argv) {
 int alrios_armake_main(int argc, char **argv) {
     if (argc >= 2 && strcmp(argv[1], "package-v2") == 0) {
         return cmd_package_v2(argc, argv);
+    }
+    if (argc >= 2 && (strcmp(argv[1], "index") == 0 || strcmp(argv[1], "package-index") == 0)) {
+        return cmd_index(argc, argv);
     }
     if (argc >= 2 && strcmp(argv[1], "--legacy") == 0) {
         char **legacy_argv = argv + 1;

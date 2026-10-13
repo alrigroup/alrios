@@ -14,6 +14,8 @@
 #include <fcntl.h>
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -278,7 +280,8 @@ static int collect_directory(int directory_fd, const char *prefix,
         struct stat file_stat;
         int child_fd = -1;
 
-        if (strcmp(item->d_name, ".") == 0 || strcmp(item->d_name, "..") == 0) {
+        if (strcmp(item->d_name, ".") == 0 || strcmp(item->d_name, "..") == 0 ||
+            strcmp(item->d_name, ".arapp.index") == 0) {
             continue;
         }
         result = join_relative_path(prefix, item->d_name, &relative_path);
@@ -589,5 +592,223 @@ done:
     free(temporary_path);
     OPENSSL_cleanse(wire, wire_size);
     free(wire);
+    return result;
+}
+
+static int hex_char_to_val(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+int alrios_package_index_load_private_key_file(
+    const char *key_path,
+    uint8_t out_private_key[ALRIOS_PACKAGE_INDEX_ED25519_PRIVATE_KEY_SIZE]
+) {
+    FILE *file;
+    long file_size;
+    uint8_t *buffer = NULL;
+    size_t read_bytes;
+    EVP_PKEY *pkey = NULL;
+    int result = ALRIOS_PACKAGE_INDEX_ERR_CRYPTO;
+
+    if (!key_path || key_path[0] == '\0' || !out_private_key) {
+        return ALRIOS_PACKAGE_INDEX_ERR_ARGUMENT;
+    }
+    file = fopen(key_path, "rb");
+    if (!file) {
+        return ALRIOS_PACKAGE_INDEX_ERR_IO;
+    }
+    if (fseek(file, 0, SEEK_END) != 0) {
+        (void)fclose(file);
+        return ALRIOS_PACKAGE_INDEX_ERR_IO;
+    }
+    file_size = ftell(file);
+    if (file_size < 0 || file_size > 65536) {
+        (void)fclose(file);
+        return ALRIOS_PACKAGE_INDEX_ERR_LIMIT;
+    }
+    if (fseek(file, 0, SEEK_SET) != 0) {
+        (void)fclose(file);
+        return ALRIOS_PACKAGE_INDEX_ERR_IO;
+    }
+    buffer = malloc((size_t)file_size > 0 ? (size_t)file_size : 1U);
+    if (!buffer) {
+        (void)fclose(file);
+        return ALRIOS_PACKAGE_INDEX_ERR_MEMORY;
+    }
+    read_bytes = fread(buffer, 1U, (size_t)file_size, file);
+    (void)fclose(file);
+    if (read_bytes != (size_t)file_size) {
+        OPENSSL_cleanse(buffer, (size_t)file_size);
+        free(buffer);
+        return ALRIOS_PACKAGE_INDEX_ERR_IO;
+    }
+
+    if (read_bytes == 32U) {
+        memcpy(out_private_key, buffer, 32U);
+        result = ALRIOS_PACKAGE_INDEX_OK;
+        goto cleanup;
+    }
+
+    if (read_bytes == 64U) {
+        /* Could be 64 raw bytes (seed+pub or raw priv) or 64 hex chars */
+        int is_hex = 1;
+        size_t i;
+        for (i = 0U; i < 64U; ++i) {
+            if (hex_char_to_val((char)buffer[i]) < 0) {
+                is_hex = 0;
+                break;
+            }
+        }
+        if (is_hex) {
+            for (i = 0U; i < 32U; ++i) {
+                int hi = hex_char_to_val((char)buffer[i * 2U]);
+                int lo = hex_char_to_val((char)buffer[i * 2U + 1U]);
+                out_private_key[i] = (uint8_t)((hi << 4) | lo);
+            }
+            result = ALRIOS_PACKAGE_INDEX_OK;
+            goto cleanup;
+        } else {
+            memcpy(out_private_key, buffer, 32U);
+            result = ALRIOS_PACKAGE_INDEX_OK;
+            goto cleanup;
+        }
+    }
+
+    /* Try PEM parsing */
+    {
+        BIO *bio = BIO_new_mem_buf(buffer, (int)read_bytes);
+        if (bio) {
+            pkey = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
+            BIO_free(bio);
+        }
+    }
+    if (pkey) {
+        size_t key_len = ALRIOS_PACKAGE_INDEX_ED25519_PRIVATE_KEY_SIZE;
+        if (EVP_PKEY_get_raw_private_key(pkey, out_private_key, &key_len) == 1 &&
+            key_len == ALRIOS_PACKAGE_INDEX_ED25519_PRIVATE_KEY_SIZE) {
+            result = ALRIOS_PACKAGE_INDEX_OK;
+        }
+        EVP_PKEY_free(pkey);
+    }
+
+cleanup:
+    OPENSSL_cleanse(buffer, (size_t)file_size);
+    free(buffer);
+    return result;
+}
+
+int alrios_package_index_load_public_key_file(
+    const char *key_path,
+    uint8_t out_public_key[ALRIOS_PACKAGE_INDEX_ED25519_PUBLIC_KEY_SIZE]
+) {
+    FILE *file;
+    long file_size;
+    uint8_t *buffer = NULL;
+    size_t read_bytes;
+    EVP_PKEY *pkey = NULL;
+    int result = ALRIOS_PACKAGE_INDEX_ERR_CRYPTO;
+
+    if (!key_path || key_path[0] == '\0' || !out_public_key) {
+        return ALRIOS_PACKAGE_INDEX_ERR_ARGUMENT;
+    }
+    file = fopen(key_path, "rb");
+    if (!file) {
+        return ALRIOS_PACKAGE_INDEX_ERR_IO;
+    }
+    if (fseek(file, 0, SEEK_END) != 0) {
+        (void)fclose(file);
+        return ALRIOS_PACKAGE_INDEX_ERR_IO;
+    }
+    file_size = ftell(file);
+    if (file_size < 0 || file_size > 65536) {
+        (void)fclose(file);
+        return ALRIOS_PACKAGE_INDEX_ERR_LIMIT;
+    }
+    if (fseek(file, 0, SEEK_SET) != 0) {
+        (void)fclose(file);
+        return ALRIOS_PACKAGE_INDEX_ERR_IO;
+    }
+    buffer = malloc((size_t)file_size > 0 ? (size_t)file_size : 1U);
+    if (!buffer) {
+        (void)fclose(file);
+        return ALRIOS_PACKAGE_INDEX_ERR_MEMORY;
+    }
+    read_bytes = fread(buffer, 1U, (size_t)file_size, file);
+    (void)fclose(file);
+    if (read_bytes != (size_t)file_size) {
+        free(buffer);
+        return ALRIOS_PACKAGE_INDEX_ERR_IO;
+    }
+
+    if (read_bytes == 32U) {
+        memcpy(out_public_key, buffer, 32U);
+        result = ALRIOS_PACKAGE_INDEX_OK;
+        goto cleanup;
+    }
+
+    if (read_bytes == 64U) {
+        int is_hex = 1;
+        size_t i;
+        for (i = 0U; i < 64U; ++i) {
+            if (hex_char_to_val((char)buffer[i]) < 0) {
+                is_hex = 0;
+                break;
+            }
+        }
+        if (is_hex) {
+            for (i = 0U; i < 32U; ++i) {
+                int hi = hex_char_to_val((char)buffer[i * 2U]);
+                int lo = hex_char_to_val((char)buffer[i * 2U + 1U]);
+                out_public_key[i] = (uint8_t)((hi << 4) | lo);
+            }
+            result = ALRIOS_PACKAGE_INDEX_OK;
+            goto cleanup;
+        }
+    }
+
+    {
+        BIO *bio = BIO_new_mem_buf(buffer, (int)read_bytes);
+        if (bio) {
+            pkey = PEM_read_bio_PUBKEY(bio, NULL, NULL, NULL);
+            BIO_free(bio);
+        }
+    }
+    if (pkey) {
+        size_t key_len = ALRIOS_PACKAGE_INDEX_ED25519_PUBLIC_KEY_SIZE;
+        if (EVP_PKEY_get_raw_public_key(pkey, out_public_key, &key_len) == 1 &&
+            key_len == ALRIOS_PACKAGE_INDEX_ED25519_PUBLIC_KEY_SIZE) {
+            result = ALRIOS_PACKAGE_INDEX_OK;
+        }
+        EVP_PKEY_free(pkey);
+    }
+
+cleanup:
+    free(buffer);
+    return result;
+}
+
+int alrios_package_index_public_key_from_private(
+    const uint8_t private_key[ALRIOS_PACKAGE_INDEX_ED25519_PRIVATE_KEY_SIZE],
+    uint8_t out_public_key[ALRIOS_PACKAGE_INDEX_ED25519_PUBLIC_KEY_SIZE]
+) {
+    EVP_PKEY *key;
+    size_t pub_len = ALRIOS_PACKAGE_INDEX_ED25519_PUBLIC_KEY_SIZE;
+    int result = ALRIOS_PACKAGE_INDEX_ERR_CRYPTO;
+
+    if (!private_key || !out_public_key) {
+        return ALRIOS_PACKAGE_INDEX_ERR_ARGUMENT;
+    }
+    key = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, NULL, private_key,
+                                      ALRIOS_PACKAGE_INDEX_ED25519_PRIVATE_KEY_SIZE);
+    if (key) {
+        if (EVP_PKEY_get_raw_public_key(key, out_public_key, &pub_len) == 1 &&
+            pub_len == ALRIOS_PACKAGE_INDEX_ED25519_PUBLIC_KEY_SIZE) {
+            result = ALRIOS_PACKAGE_INDEX_OK;
+        }
+        EVP_PKEY_free(key);
+    }
     return result;
 }

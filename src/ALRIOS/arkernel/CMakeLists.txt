@@ -237,6 +237,7 @@ target_include_directories(arresources PUBLIC
 # 11. arindex (Package Index)
 add_library(arindex STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/package/index.c
+    ${CMAKE_SOURCE_DIR}/src/commands/armake/index_writer.c
 )
 set_property(TARGET arindex PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arindex PUBLIC

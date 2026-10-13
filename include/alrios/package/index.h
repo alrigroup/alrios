@@ -80,6 +80,23 @@ int alrios_package_index_write_directory(
     const uint8_t private_key[ALRIOS_PACKAGE_INDEX_ED25519_PRIVATE_KEY_SIZE]
 );
 
+int alrios_package_index_load_private_key_file(
+    const char *key_path,
+    uint8_t out_private_key[ALRIOS_PACKAGE_INDEX_ED25519_PRIVATE_KEY_SIZE]
+);
+
+int alrios_package_index_load_public_key_file(
+    const char *key_path,
+    uint8_t out_public_key[ALRIOS_PACKAGE_INDEX_ED25519_PUBLIC_KEY_SIZE]
+);
+
+int alrios_package_index_public_key_from_private(
+    const uint8_t private_key[ALRIOS_PACKAGE_INDEX_ED25519_PRIVATE_KEY_SIZE],
+    uint8_t out_public_key[ALRIOS_PACKAGE_INDEX_ED25519_PUBLIC_KEY_SIZE]
+);
+
+const char *alrios_package_index_error_string(int code);
+
 /* expected_public_key is mandatory; self-authenticating keys are not accepted. */
 int alrios_package_index_parse_and_verify(
     const uint8_t *wire,

@@ -511,3 +511,40 @@ int alrios_package_index_verify_directory(
     (void)close(root_fd);
     return ALRIOS_PACKAGE_INDEX_OK;
 }
+
+const char *alrios_package_index_error_string(int code) {
+    switch (code) {
+    case ALRIOS_PACKAGE_INDEX_OK:
+        return "success";
+    case ALRIOS_PACKAGE_INDEX_ERR_ARGUMENT:
+        return "invalid argument";
+    case ALRIOS_PACKAGE_INDEX_ERR_IO:
+        return "I/O error";
+    case ALRIOS_PACKAGE_INDEX_ERR_MEMORY:
+        return "out of memory";
+    case ALRIOS_PACKAGE_INDEX_ERR_LIMIT:
+        return "size or file limit exceeded";
+    case ALRIOS_PACKAGE_INDEX_ERR_PATH:
+        return "invalid or non-canonical file path";
+    case ALRIOS_PACKAGE_INDEX_ERR_MUTABLE:
+        return "forbidden mutable file extension";
+    case ALRIOS_PACKAGE_INDEX_ERR_SYMLINK:
+        return "symlink encountered or symlink loop detected";
+    case ALRIOS_PACKAGE_INDEX_ERR_FILE_TYPE:
+        return "unsupported file type";
+    case ALRIOS_PACKAGE_INDEX_ERR_CRYPTO:
+        return "cryptographic operation failed";
+    case ALRIOS_PACKAGE_INDEX_ERR_FORMAT:
+        return "malformed index format or wire corruption";
+    case ALRIOS_PACKAGE_INDEX_ERR_SIGNATURE:
+        return "Ed25519 signature verification failed";
+    case ALRIOS_PACKAGE_INDEX_ERR_HASH:
+        return "content hash mismatch";
+    case ALRIOS_PACKAGE_INDEX_ERR_UNSUPPORTED:
+        return "unsupported version or flags";
+    case ALRIOS_PACKAGE_INDEX_ERR_CHANGED:
+        return "file modified during index creation or validation";
+    default:
+        return "unknown index error";
+    }
+}

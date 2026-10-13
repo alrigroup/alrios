@@ -101,6 +101,15 @@ set_target_properties(test_armake_v2 PROPERTIES
 )
 add_test(NAME test_armake_v2 COMMAND test_armake_v2)
 
+add_executable(test_index unit/package/test_index.c)
+target_link_libraries(test_index PRIVATE arindex OpenSSL::Crypto)
+set_target_properties(test_index PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_index COMMAND test_index)
+
 add_executable(test_hash_chain unit/audit/test_hash_chain.c)
 target_link_libraries(test_hash_chain PRIVATE araudit OpenSSL::Crypto)
 set_target_properties(test_hash_chain PROPERTIES
