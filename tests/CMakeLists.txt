@@ -128,6 +128,15 @@ set_target_properties(test_signed_arapp PROPERTIES
 )
 add_test(NAME test_signed_arapp COMMAND test_signed_arapp)
 
+add_executable(test_zero_disk_exec integration/loader/test_zero_disk_exec.c)
+target_link_libraries(test_zero_disk_exec PRIVATE arloader arcrypto OpenSSL::Crypto)
+set_target_properties(test_zero_disk_exec PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_zero_disk_exec COMMAND test_zero_disk_exec)
+
 add_executable(test_ca_chain integration/pki/test_ca_chain.c)
 target_link_libraries(test_ca_chain PRIVATE arpki OpenSSL::Crypto)
 set_target_properties(test_ca_chain PROPERTIES

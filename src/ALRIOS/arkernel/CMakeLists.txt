@@ -168,6 +168,17 @@ target_include_directories(arpackage PUBLIC
 )
 target_link_libraries(arpackage PUBLIC arpki)
 
+# 7. arloader (Verified Sovereign Zero-Disk Loader)
+add_library(arloader STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/loader/sovereign_loader.c
+)
+set_property(TARGET arloader PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arloader PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(arloader PUBLIC arpackage arcrypto OpenSSL::Crypto)
+
 # 7. araudit (Append-Only Cryptographic Audit Chain)
 add_library(araudit STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/audit/hash_chain.c
