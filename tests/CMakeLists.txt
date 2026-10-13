@@ -388,6 +388,19 @@ set_tests_properties(test_arcc PROPERTIES ENVIRONMENT
     "ALRIOS_ARCC_BIN=$<TARGET_FILE:arcc>;ALRIOS_BANNED_APIS_PY=${CMAKE_SOURCE_DIR}/scripts/gates/banned_apis.py"
 )
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_test(
+        NAME test_reproducibility
+        COMMAND bash ${CMAKE_SOURCE_DIR}/tests/integration/supply_chain/test_reproducibility.sh ${CMAKE_SOURCE_DIR}
+    )
+    set_tests_properties(test_reproducibility PROPERTIES
+        ENVIRONMENT "ALRIOS_CMAKE_BIN=${CMAKE_COMMAND}"
+        LABELS "integration;supply-chain"
+        RUN_SERIAL TRUE
+        TIMEOUT 600
+    )
+endif()
+
 add_executable(test_websocket_drain integration/deploy/test_websocket_drain.c)
 target_link_libraries(test_websocket_drain PRIVATE ardeploy arkernel Threads::Threads)
 set_target_properties(test_websocket_drain PROPERTIES
