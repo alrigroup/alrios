@@ -255,7 +255,8 @@ int alrios_drain_begin(alrios_drain_tracker_t *tracker) {
 
     if (tracker->notify_pipe[1] >= 0) {
         char sig = 'D';
-        (void)write(tracker->notify_pipe[1], &sig, 1);
+        ssize_t written = write(tracker->notify_pipe[1], &sig, 1);
+        (void)written;
     }
 
     atomic_flag_clear(&tracker->lock);
