@@ -1,12 +1,21 @@
+add_library(armake_package_v2 STATIC
+    ${CMAKE_SOURCE_DIR}/src/commands/armake/package_v2.c
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/manifest_canon.c
+)
+target_include_directories(armake_package_v2 PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
 add_executable(armake
     armake.c
 )
 target_include_directories(armake PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
 )
-target_link_libraries(armake PRIVATE ararchive armanifest arhal_isolation)
+target_link_libraries(armake PRIVATE ararchive armanifest arhal_isolation armake_package_v2)
 set_target_properties(armake PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"

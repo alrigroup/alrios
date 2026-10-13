@@ -10,6 +10,8 @@
 #include "zip.h"
 #include "arapp_parser.h"
 #include "aros_hal.h"
+#include "alrios/armake/package_v2.h"
+#include "alrios/package/arapp_v2.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -186,6 +188,12 @@ static void print_usage(void) {
     printf("  armake header <file>                       Prepend ALRIGROUP@APP header\n");
     printf("  armake snapshot <dir> [-o <file>]          Map tree BEFORE compiling (cleanup base)\n");
     printf("  armake cleanup <dir> -f <file>             Remove build residue AFTER compiling\n");
+    printf("  armake package-v2 --manifest <json> --payload <file> --out <file.arapp> [options]\n");
+    printf("\n");
+    printf("  package-v2 options: --arch <x86_64|aarch64|riscv64>\n");
+    printf("                      --profile <enterprise|performance>\n");
+    printf("                      --issued-at <uint64> --expires-at <uint64>\n");
+    printf("  package-v2 is deterministic, unsigned, DevMode-only, and never accepts key options.\n");
     printf("\n");
     printf("  --target <os>   (windows|linux)  Default: auto-detect\n");
     printf("  --universal     Inclui files + files_windows + files_linux (para runtimes)\n");
@@ -1849,6 +1857,113 @@ static int cmd_build(int argc, char **argv) {
     return 0;
 }
 
+static int parse_u64_decimal(const char *text, uint64_t *out_value) {
+    char *end = NULL;
+    unsigned long long value;
+
+    if (!text || !out_value || text[0] == '\0' || text[0] == '-') {
+        return -1;
+    }
+    errno = 0;
+    value = strtoull(text, &end, 10);
+    if (errno == ERANGE || !end || *end != '\0') {
+        return -1;
+    }
+    *out_value = (uint64_t)value;
+    return 0;
+}
+
+static int parse_v2_architecture(const char *name, uint16_t *out_architecture) {
+    if (!name || !out_architecture) return -1;
+    if (strcmp(name, "x86_64") == 0 || strcmp(name, "amd64") == 0) {
+        *out_architecture = ALRIOS_ARAPP_V2_ARCH_X86_64;
+        return 0;
+    }
+    if (strcmp(name, "aarch64") == 0 || strcmp(name, "arm64") == 0) {
+        *out_architecture = ALRIOS_ARAPP_V2_ARCH_AARCH64;
+        return 0;
+    }
+    if (strcmp(name, "riscv64") == 0) {
+        *out_architecture = ALRIOS_ARAPP_V2_ARCH_RISCV64;
+        return 0;
+    }
+    return -1;
+}
+
+static int parse_v2_profile(const char *name, uint32_t *out_profile_flag) {
+    if (!name || !out_profile_flag) return -1;
+    if (strcmp(name, "enterprise") == 0) {
+        *out_profile_flag = ALRIOS_ARAPP_V2_FLAG_PROFILE_ENTERPRISE;
+        return 0;
+    }
+    if (strcmp(name, "performance") == 0) {
+        *out_profile_flag = ALRIOS_ARAPP_V2_FLAG_PROFILE_PERFORMANCE;
+        return 0;
+    }
+    return -1;
+}
+
+static int set_v2_option_once(const char **slot, const char *value) {
+    if (!slot || !value || *slot) return -1;
+    *slot = value;
+    return 0;
+}
+
+static int cmd_package_v2(int argc, char **argv) {
+    const char *manifest = NULL;
+    const char *payload = NULL;
+    const char *output = NULL;
+    const char *arch_name = "x86_64";
+    const char *profile_name = "enterprise";
+    alrios_armake_v2_options_t options;
+    int index;
+    int status;
+
+    memset(&options, 0, sizeof(options));
+    options.issued_at = ALRIOS_ARMAKE_V2_DEFAULT_ISSUED_AT;
+    options.expires_at = ALRIOS_ARMAKE_V2_DEFAULT_EXPIRES_AT;
+
+    for (index = 2; index < argc; ++index) {
+        if (strcmp(argv[index], "--manifest") == 0 && index + 1 < argc) {
+            if (set_v2_option_once(&manifest, argv[++index]) != 0) goto invalid;
+        } else if (strcmp(argv[index], "--payload") == 0 && index + 1 < argc) {
+            if (set_v2_option_once(&payload, argv[++index]) != 0) goto invalid;
+        } else if (strcmp(argv[index], "--out") == 0 && index + 1 < argc) {
+            if (set_v2_option_once(&output, argv[++index]) != 0) goto invalid;
+        } else if (strcmp(argv[index], "--arch") == 0 && index + 1 < argc) {
+            arch_name = argv[++index];
+        } else if (strcmp(argv[index], "--profile") == 0 && index + 1 < argc) {
+            profile_name = argv[++index];
+        } else if (strcmp(argv[index], "--issued-at") == 0 && index + 1 < argc) {
+            if (parse_u64_decimal(argv[++index], &options.issued_at) != 0) goto invalid;
+        } else if (strcmp(argv[index], "--expires-at") == 0 && index + 1 < argc) {
+            if (parse_u64_decimal(argv[++index], &options.expires_at) != 0) goto invalid;
+        } else {
+            goto invalid;
+        }
+    }
+    if (!manifest || !payload || !output ||
+        parse_v2_architecture(arch_name, &options.target_arch) != 0 ||
+        parse_v2_profile(profile_name, &options.container_flags) != 0) {
+        goto invalid;
+    }
+    options.container_flags |= ALRIOS_ARAPP_V2_FLAG_RING_DEVMODE;
+
+    status = alrios_armake_package_v2(manifest, payload, output, &options);
+    if (status != ALRIOS_ARMAKE_V2_OK) {
+        fprintf(stderr, "[ERRO] package-v2: %s (rc=%d)\n",
+                alrios_armake_v2_error_string(status), status);
+        return 1;
+    }
+    printf("[OK] envelope .arapp v2 unsigned criado: %s\n", output);
+    return 0;
+
+invalid:
+    fprintf(stderr, "[ERRO] argumentos invalidos para package-v2\n");
+    print_usage();
+    return 1;
+}
+
 static int cmd_extract(int argc, char **argv) {
     if (argc < 4) { print_usage(); return 1; }
     const char *archive = argv[2];
@@ -2011,38 +2126,50 @@ static int cmd_buildapp(int argc, char **argv) {
     return cmd_build(4, new_argv);
 }
 
-int main(int argc, char **argv) {
-    /* default: "build" when called with --target or no args */
+static int dispatch_legacy_command(int argc, char **argv) {
     if (argc < 2) {
         char *fake[] = { argv[0], "build", NULL };
         return cmd_build(2, fake);
     }
     if (strcmp(argv[1], "--target") == 0) {
-        /* armake --target windows  →  build with target, current dir */
-        /* rebuild argv: [prog, "build", "--target", <os>] */
-        char *new_argv[5] = { argv[0], "build", "--target", argc > 2 ? argv[2] : "windows", NULL };
+        char *new_argv[5] = { argv[0], "build", "--target",
+                              argc > 2 ? argv[2] : "windows", NULL };
         int new_argc = (argc > 2 && argv[2][0] != '-') ? 4 : 3;
         return cmd_build(new_argc, new_argv);
     }
-
     if (strcmp(argv[1], "build") == 0)
         return cmd_build(argc, argv);
-    else if (strcmp(argv[1], "buildapp") == 0)
+    if (strcmp(argv[1], "buildapp") == 0)
         return cmd_buildapp(argc, argv);
-    else if (strcmp(argv[1], "snapshot") == 0)
+    if (strcmp(argv[1], "snapshot") == 0)
         return cmd_snapshot(argc, argv);
-    else if (strcmp(argv[1], "cleanup") == 0)
+    if (strcmp(argv[1], "cleanup") == 0)
         return cmd_cleanup(argc, argv);
-    else if (strcmp(argv[1], "pack") == 0)
+    if (strcmp(argv[1], "pack") == 0)
         return cmd_pack(argc, argv);
-    else if (strcmp(argv[1], "extract") == 0)
+    if (strcmp(argv[1], "extract") == 0)
         return cmd_extract(argc, argv);
-    else if (strcmp(argv[1], "list") == 0)
+    if (strcmp(argv[1], "list") == 0)
         return cmd_list(argc, argv);
-    else if (strcmp(argv[1], "header") == 0)
+    if (strcmp(argv[1], "header") == 0)
         return cmd_header(argc, argv);
-    else
-        print_usage();
-
+    print_usage();
     return 1;
+}
+
+int main(int argc, char **argv) {
+    if (argc >= 2 && strcmp(argv[1], "package-v2") == 0) {
+        return cmd_package_v2(argc, argv);
+    }
+    if (argc >= 2 && strcmp(argv[1], "--legacy") == 0) {
+        char **legacy_argv = argv + 1;
+        legacy_argv[0] = argv[0];
+        return dispatch_legacy_command(argc - 1, legacy_argv);
+    }
+    if (argc >= 2 && strcmp(argv[1], "--help") == 0) {
+        print_usage();
+        return 0;
+    }
+    /* Backward compatibility: dispatch legacy commands directly */
+    return dispatch_legacy_command(argc, argv);
 }
