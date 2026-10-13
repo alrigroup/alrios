@@ -409,6 +409,21 @@ set_target_properties(test_websocket_drain PROPERTIES
 )
 add_test(NAME test_websocket_drain COMMAND test_websocket_drain)
 
+add_executable(test_supervisor_context unit/supervisor/test_context.c)
+target_include_directories(test_supervisor_context PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/platform/core
+    ${CMAKE_SOURCE_DIR}/src/platform/hal/include
+)
+target_link_libraries(test_supervisor_context PRIVATE
+    arsupervisor arcore_runtime arpolicy arpki arcrypto OpenSSL::Crypto Threads::Threads
+)
+set_target_properties(test_supervisor_context PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_supervisor_context COMMAND test_supervisor_context)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")

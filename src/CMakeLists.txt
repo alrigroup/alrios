@@ -306,7 +306,21 @@ alrios_pic(arvault_legacy)
 target_include_directories(arvault_legacy PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}" "${ALRIOS_CORE_DIR}")
 target_link_libraries(arvault_legacy PUBLIC arvault)
 
-add_library(arcore_runtime STATIC platform/core/loader.c platform/core/ar_path.c)
+add_library(arsupervisor STATIC daemons/supervisor/context.c daemons/supervisor/loader.c platform/core/ar_path.c)
+alrios_pic(arsupervisor)
+target_include_directories(arsupervisor PUBLIC
+    "${ALRIOS_PUBLIC_INCLUDE_DIR}"
+    "${ALRIOS_CORE_DIR}"
+    "${ALRIOS_PLATFORM_INCLUDE_DIR}"
+    "${ALRIOS_HAL_INCLUDE_DIR}"
+    "${ALRIOS_ARCHIVE_DIR}"
+)
+target_link_libraries(arsupervisor PUBLIC
+    arkernel arlog ararchive armanifest arsupervisor_policy arguest_router ardeploy
+    OpenSSL::SSL OpenSSL::Crypto Threads::Threads ${CMAKE_DL_LIBS}
+)
+
+add_library(arcore_runtime STATIC platform/core/loader.c)
 alrios_pic(arcore_runtime)
 target_include_directories(arcore_runtime PUBLIC
     "${ALRIOS_CORE_DIR}"
@@ -315,6 +329,7 @@ target_include_directories(arcore_runtime PUBLIC
     "${ALRIOS_ARCHIVE_DIR}"
 )
 target_link_libraries(arcore_runtime PUBLIC
+    arsupervisor
     arkernel arlog ararchive armanifest arvault_legacy arsupervisor_policy arpackage arpki
     OpenSSL::SSL OpenSSL::Crypto Threads::Threads ${CMAKE_DL_LIBS}
 )
