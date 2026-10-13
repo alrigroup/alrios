@@ -285,6 +285,20 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     )
 endif()
 
+# 17. ardevmode_jail (DevMode Namespace/Cgroup/Seccomp Quarantine Jail)
+add_library(ardevmode_jail STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/sandbox/devmode_jail.c
+)
+set_property(TARGET ardevmode_jail PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(ardevmode_jail PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(ardevmode_jail PUBLIC arpolicy)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_libraries(ardevmode_jail PUBLIC arsandbox_linux)
+endif()
+
 # ====================================================================
 # Umbrella Target: libarsdk (Maintains 100% Backward Compatibility)
 # ====================================================================
@@ -309,6 +323,7 @@ add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/sandbox/seccomp_filter.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/sandbox/cgroups_init.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/sandbox/ns_unshare.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/sandbox/devmode_jail.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/manifest_canon.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/preimage.c
     ${CMAKE_SOURCE_DIR}/src/libraries/pki/certificate.c

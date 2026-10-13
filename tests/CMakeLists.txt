@@ -299,6 +299,18 @@ set_tests_properties(test_arsign_rejects_unknown_policy PROPERTIES WILL_FAIL TRU
 add_test(NAME test_arsign_rejects_pqc_policy COMMAND arsign sign --policy pqc)
 set_tests_properties(test_arsign_rejects_pqc_policy PROPERTIES WILL_FAIL TRUE)
 
+add_executable(test_devmode_jail integration/sandbox/test_devmode_jail.c)
+target_link_libraries(test_devmode_jail PRIVATE ardevmode_jail arpolicy)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_libraries(test_devmode_jail PRIVATE arsandbox_linux)
+endif()
+set_target_properties(test_devmode_jail PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_devmode_jail COMMAND test_devmode_jail)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
