@@ -273,12 +273,15 @@ target_link_libraries(ardeploy PUBLIC arindex OpenSSL::Crypto)
 # 8. arhooks (Deterministic Lifecycle Event Execution)
 add_library(arhooks STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/hooks/hooks_executor.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/hooks/lifecycle.c
 )
 set_property(TARGET arhooks PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arhooks PUBLIC
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/alrios
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
 )
+target_link_libraries(arhooks PUBLIC arkernel ardeploy)
 
 # 9. arsandbox_linux (Seccomp-BPF, Cgroups v2 & Namespace Quarantine)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -319,6 +322,7 @@ add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/profiles/profiles.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/kernel/memloader.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/hooks/hooks_executor.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/hooks/lifecycle.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/fd_pass.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/atomic_swap.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/arapp_index.c

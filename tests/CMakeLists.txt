@@ -320,6 +320,18 @@ set_target_properties(test_devmode_jail PROPERTIES
 )
 add_test(NAME test_devmode_jail COMMAND test_devmode_jail)
 
+add_executable(test_lifecycle_hooks integration/hooks/test_lifecycle_hooks.c)
+target_include_directories(test_lifecycle_hooks PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
+)
+target_link_libraries(test_lifecycle_hooks PRIVATE arhooks ardeploy arkernel)
+set_target_properties(test_lifecycle_hooks PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_lifecycle_hooks COMMAND test_lifecycle_hooks)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
