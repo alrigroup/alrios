@@ -83,6 +83,15 @@ set_target_properties(test_ml_kem_768_kat PROPERTIES
 )
 add_test(NAME test_ml_kem_768_kat COMMAND test_ml_kem_768_kat)
 
+add_executable(test_arapp_v2_reader unit/package/test_arapp_v2_reader.c)
+target_link_libraries(test_arapp_v2_reader PRIVATE arpackage)
+set_target_properties(test_arapp_v2_reader PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_arapp_v2_reader COMMAND test_arapp_v2_reader)
+
 add_executable(test_ca_chain integration/pki/test_ca_chain.c)
 target_link_libraries(test_ca_chain PRIVATE arpki OpenSSL::Crypto)
 set_target_properties(test_ca_chain PROPERTIES
@@ -175,6 +184,21 @@ if(ALRIOS_ENABLE_FUZZING)
         -fno-omit-frame-pointer
     )
     target_link_options(fuzz_certificate PRIVATE
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer
+    )
+
+    add_executable(fuzz_arapp_v2_reader
+        fuzz/fuzz_arapp_v2_reader.c
+        ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_reader.c
+        ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/manifest_canon.c
+    )
+    target_include_directories(fuzz_arapp_v2_reader PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_options(fuzz_arapp_v2_reader PRIVATE
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer
+    )
+    target_link_options(fuzz_arapp_v2_reader PRIVATE
         -fsanitize=fuzzer,address,undefined
         -fno-omit-frame-pointer
     )

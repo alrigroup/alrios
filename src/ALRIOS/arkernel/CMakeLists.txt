@@ -156,7 +156,18 @@ target_include_directories(arpki PUBLIC
 )
 target_link_libraries(arpki PUBLIC arcrypto arhal_isolation)
 
-# 6. ardeploy (Zero-Downtime Deployment, SCM_RIGHTS, Symlinks & Deltas)
+# 6. arpackage (Canonical .arapp v2 Reader and Structural Validator)
+add_library(arpackage STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_reader.c
+)
+set_property(TARGET arpackage PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arpackage PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(arpackage PUBLIC arpki)
+
+# 7. ardeploy (Zero-Downtime Deployment, SCM_RIGHTS, Symlinks & Deltas)
 add_library(ardeploy STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/fd_pass.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/atomic_swap.c
@@ -168,7 +179,7 @@ target_include_directories(ardeploy PUBLIC
     ${CMAKE_SOURCE_DIR}/include/alrios
 )
 
-# 7. arhooks (Deterministic Lifecycle Event Execution)
+# 8. arhooks (Deterministic Lifecycle Event Execution)
 add_library(arhooks STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/hooks/hooks_executor.c
 )
@@ -178,7 +189,7 @@ target_include_directories(arhooks PUBLIC
     ${CMAKE_SOURCE_DIR}/include/alrios
 )
 
-# 8. arsandbox_linux (Seccomp-BPF, Cgroups v2 & Namespace Quarantine)
+# 9. arsandbox_linux (Seccomp-BPF, Cgroups v2 & Namespace Quarantine)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_library(arsandbox_linux STATIC
         ${CMAKE_SOURCE_DIR}/src/ALRIOS/sandbox/seccomp_filter.c
