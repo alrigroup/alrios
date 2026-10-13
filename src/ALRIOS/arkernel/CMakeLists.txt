@@ -334,6 +334,17 @@ target_include_directories(arguest_router PUBLIC
 )
 target_link_libraries(arguest_router PUBLIC arguest_channel)
 
+# 20. arsecurity_epoch (Secure Time Monitor & Anti-Rollback Security Epoch)
+add_library(arsecurity_epoch STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/policy/security_epoch.c
+)
+set_property(TARGET arsecurity_epoch PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arsecurity_epoch PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(arsecurity_epoch PUBLIC arcrypto OpenSSL::Crypto)
+
 # ====================================================================
 # Umbrella Target: libarsdk (Maintains 100% Backward Compatibility)
 # ====================================================================

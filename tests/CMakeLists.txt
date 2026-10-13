@@ -341,6 +341,18 @@ set_target_properties(test_guest_isolation PROPERTIES
 )
 add_test(NAME test_guest_isolation COMMAND test_guest_isolation)
 
+add_executable(test_security_epoch integration/policy/test_security_epoch.c)
+target_link_libraries(test_security_epoch PRIVATE arsecurity_epoch arcrypto OpenSSL::Crypto)
+set_target_properties(test_security_epoch PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_security_epoch COMMAND test_security_epoch)
+set_tests_properties(test_security_epoch PROPERTIES ENVIRONMENT
+    "ALRIOS_CHRONOD_BIN=$<TARGET_FILE:ar_chronod>"
+)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
