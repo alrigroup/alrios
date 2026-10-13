@@ -153,15 +153,32 @@ mutate_and_expect_failure "duplicate toolchains" "$WORK/release/alrios.provenanc
 mutate_and_expect_failure "missing builder ID" "$WORK/release/alrios.provenance.json" 'del d["predicate"]["runDetails"]["builder"]["id"]'
 mutate_and_expect_failure "networkAccess true" "$WORK/release/alrios.provenance.json" 'd["predicate"]["buildDefinition"]["externalParameters"]["networkAccess"] = True'
 mutate_and_expect_failure "targets reordered" "$WORK/release/alrios.provenance.json" 'd["predicate"]["buildDefinition"]["externalParameters"]["targets"] = ["extra", "arcc"]'
+mutate_and_expect_failure "source revision altered" "$WORK/release/alrios.provenance.json" 'd["predicate"]["buildDefinition"]["resolvedDependencies"][0]["digest"]["gitCommit"] = "0"*40'
 mutate_and_expect_failure "source tree digest altered" "$WORK/release/alrios.provenance.json" 'd["predicate"]["buildDefinition"]["resolvedDependencies"][0]["digest"]["gitTree"] = "0"*40'
+mutate_and_expect_failure "source archive digest altered" "$WORK/release/alrios.provenance.json" 'd["predicate"]["buildDefinition"]["resolvedDependencies"][0]["digest"]["archiveSha256"] = "0"*64'
+mutate_and_expect_failure "epoch altered" "$WORK/release/alrios.provenance.json" 'd["predicate"]["buildDefinition"]["externalParameters"]["sourceDateEpoch"] += 1'
+mutate_and_expect_failure "build type URI altered" "$WORK/release/alrios.provenance.json" 'd["predicate"]["buildDefinition"]["buildType"] = "https://example.com/build/v1"'
+mutate_and_expect_failure "missing predicate" "$WORK/release/alrios.provenance.json" 'del d["predicate"]'
 mutate_and_expect_failure "missing creationInfo" "$WORK/release/alrios.spdx.json" 'del d["creationInfo"]'
 mutate_and_expect_failure "missing documentNamespace" "$WORK/release/alrios.spdx.json" 'del d["documentNamespace"]'
 mutate_and_expect_failure "missing SPDXID" "$WORK/release/alrios.spdx.json" 'del d["SPDXID"]'
 mutate_and_expect_failure "bad SBOM revision" "$WORK/release/alrios.spdx.json" 'd["packages"][0]["versionInfo"] = "0"*40'
 mutate_and_expect_failure "dangling SPDX relationship" "$WORK/release/alrios.spdx.json" 'd["relationships"].append({"spdxElementId":"SPDXRef-DOCUMENT","relationshipType":"CONTAINS","relatedSpdxElement":"SPDXRef-Dangling"})'
 mutate_and_expect_failure "duplicate SPDX file ID" "$WORK/release/alrios.spdx.json" 'd["files"].append(dict(d["files"][0]))'
+mutate_and_expect_failure "embedded POSIX tmp path" "$WORK/release/alrios.spdx.json" 'd["packages"][1]["versionInfo"] = "built in /tmp/private"'
+mutate_and_expect_failure "embedded repository path" "$WORK/release/alrios.spdx.json" "d[\"packages\"][1][\"versionInfo\"] = \"built in $ROOT\""
 mutate_and_expect_failure "embedded Windows path" "$WORK/release/alrios.spdx.json" 'd["packages"][1]["versionInfo"] = "C:\\private\\lib"'
 mutate_and_expect_failure "embedded UNC path" "$WORK/release/alrios.spdx.json" 'd["packages"][1]["versionInfo"] = "\\\\server\\share\\lib"'
+
+for bad_value in 'version /home/user/private' 'version /tmp/private' 'C:\private\compiler' '\\server\share\compiler'; do
+    if python3 "$ROOT/scripts/release/sbom.py" generate \
+        --source-root "$ROOT" --artifact "$WORK/release/arcc" --revision "$REVISION" --epoch 1700000000 \
+        --target arcc --toolchain "CCompiler=$bad_value" --sbom "$WORK/rejected.spdx.json" \
+        --provenance "$WORK/rejected.provenance.json" >/dev/null 2>&1; then
+        fail "generation accepted embedded local path: $bad_value"
+    fi
+    rm -f -- "$WORK/rejected.spdx.json" "$WORK/rejected.provenance.json"
+done
 
 cp -- "$WORK/release/arcc" "$WORK/arcc.original"
 printf '\0' >> "$WORK/release/arcc"

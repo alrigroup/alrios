@@ -9,10 +9,10 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import stat
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import urlsplit
@@ -81,8 +81,9 @@ def safe_output_path(value: str, label: str) -> Path:
 def write_exclusive(path: Path, data: bytes, epoch: int) -> None:
     parent = path.parent
     before = os.stat(parent, follow_symlinks=False)
-    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=parent)
-    temporary_path = Path(temporary)
+    temporary_path = parent / f".{path.name}.{secrets.token_hex(16)}"
+    descriptor = os.open(temporary_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    published = False
     try:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(data)
@@ -93,6 +94,7 @@ def write_exclusive(path: Path, data: bytes, epoch: int) -> None:
         current = os.stat(parent, follow_symlinks=False)
         require((before.st_dev, before.st_ino) == (current.st_dev, current.st_ino), "output directory was replaced")
         os.link(temporary_path, path, follow_symlinks=False)
+        published = True
         after = os.stat(parent, follow_symlinks=False)
         require((before.st_dev, before.st_ino) == (after.st_dev, after.st_ino), "output directory was replaced during publication")
         os.unlink(temporary_path)
@@ -101,10 +103,11 @@ def write_exclusive(path: Path, data: bytes, epoch: int) -> None:
             temporary_path.unlink()
         except FileNotFoundError:
             pass
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            pass
+        if published:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
         raise
 
 
