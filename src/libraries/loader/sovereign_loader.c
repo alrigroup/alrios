@@ -12,25 +12,22 @@
 #endif
 
 #include "alrios/loader/sovereign_loader.h"
+#include "alrios/crypto_verify.h"
 #include "alrios/package/arapp_v2.h"
+#include "alrios/pki/issuer.h"
 
-#include <openssl/evp.h>
-#include <openssl/sha.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <stdio.h>
+#include <limits.h>
+#include <openssl/evp.h>
+#include <openssl/sha.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
-
-/* External signature verification from arapp_v2_signatures.c */
-int alrios_arapp_v2_verify_hybrid(const uint8_t *package, size_t package_len,
-                                   EVP_PKEY *ed25519_pubkey,
-                                   EVP_PKEY *ml_dsa_pubkey,
-                                   int require_pqc);
+#include <unistd.h>
 
 #ifndef MFD_CLOEXEC
 #define MFD_CLOEXEC 0x0001U
@@ -40,6 +37,9 @@ int alrios_arapp_v2_verify_hybrid(const uint8_t *package, size_t package_len,
 #endif
 #ifndef F_ADD_SEALS
 #define F_ADD_SEALS 1033
+#endif
+#ifndef F_GET_SEALS
+#define F_GET_SEALS 1034
 #endif
 #ifndef F_SEAL_SEAL
 #define F_SEAL_SEAL 0x0001
@@ -54,66 +54,243 @@ int alrios_arapp_v2_verify_hybrid(const uint8_t *package, size_t package_len,
 #define F_SEAL_WRITE 0x0008
 #endif
 
-static int decrypt_aes_gcm_256(
-    const uint8_t *ciphertext, size_t ciphertext_len,
-    const uint8_t *key, const uint8_t *iv, const uint8_t *tag,
-    uint8_t **out_plaintext, size_t *out_len
-) {
-    EVP_CIPHER_CTX *ctx = NULL;
-    int len = 0;
-    int plaintext_len = 0;
-    uint8_t *plaintext = NULL;
-    int ret = ALRIOS_SOVEREIGN_ERR_DECRYPT;
+#define ALRIOS_REQUIRED_MEMFD_SEALS \
+    (F_SEAL_SEAL | F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE)
 
-    if (!ciphertext || !key || !iv || !tag || !out_plaintext || !out_len) {
-        return ALRIOS_SOVEREIGN_ERR_ARGUMENT;
+static int bytes_all_zero(const uint8_t *bytes, size_t length) {
+    uint8_t combined = 0U;
+    size_t index;
+
+    for (index = 0U; index < length; ++index) {
+        combined |= bytes[index];
     }
-    *out_plaintext = NULL;
-    *out_len = 0U;
+    return combined == 0U;
+}
 
-    plaintext = malloc(ciphertext_len > 0U ? ciphertext_len : 1U);
+static int verify_certificate_chain(const alrios_sovereign_keys_t *keys,
+                                    uint64_t now) {
+    uint8_t leaf_key[ALRIOS_CERTIFICATE_ED25519_KEY_SIZE];
+    size_t leaf_key_len = sizeof(leaf_key);
+
+    if (!keys->leaf_certificate || !keys->intermediate_certificate ||
+        !keys->trust_store ||
+        alrios_pki_verify_chain(keys->trust_store, keys->leaf_certificate,
+                               keys->intermediate_certificate, now) !=
+            ALRIOS_ISSUER_OK ||
+        keys->leaf_certificate->public_key_algorithm !=
+            ALRIOS_PUBLIC_KEY_ALGORITHM_ED25519 ||
+        keys->leaf_certificate->public_key_len != sizeof(leaf_key) ||
+        EVP_PKEY_get_raw_public_key(keys->ed25519_pubkey, leaf_key,
+                                    &leaf_key_len) != 1 ||
+        leaf_key_len != keys->leaf_certificate->public_key_len ||
+        CRYPTO_memcmp(leaf_key, keys->leaf_certificate->public_key,
+                      leaf_key_len) != 0) {
+        alrios_explicit_zeroize(leaf_key, sizeof(leaf_key));
+        return ALRIOS_SOVEREIGN_ERR_VERIFY;
+    }
+
+    alrios_explicit_zeroize(leaf_key, sizeof(leaf_key));
+    return ALRIOS_SOVEREIGN_OK;
+}
+
+static int verify_envelope(const uint8_t *package_data,
+                           size_t package_len,
+                           uint64_t now,
+                           uint32_t policy_flags,
+                           const alrios_sovereign_keys_t *keys,
+                           alrios_arapp_v2_view_t *out_view) {
+    int has_ed25519_signature;
+    int has_ml_dsa_signature;
+
+    if (alrios_arapp_v2_validate(package_data, package_len, now,
+                                 ALRIOS_ARAPP_V2_MAX_CLOCK_SKEW_SECONDS,
+                                 out_view) != ALRIOS_ARAPP_V2_OK) {
+        return ALRIOS_SOVEREIGN_ERR_VERIFY;
+    }
+
+    has_ed25519_signature = !bytes_all_zero(
+        out_view->ed25519_signature, ALRIOS_ARAPP_V2_ED25519_SIGNATURE_SIZE);
+    has_ml_dsa_signature = !bytes_all_zero(
+        out_view->ml_dsa_65_signature,
+        ALRIOS_ARAPP_V2_ML_DSA_65_SIGNATURE_SIZE);
+    if (!has_ed25519_signature) {
+        if (has_ml_dsa_signature ||
+            (out_view->flags & ALRIOS_ARAPP_V2_FLAG_PQC_HYBRID_SIG) != 0U) {
+            return ALRIOS_SOVEREIGN_ERR_VERIFY;
+        }
+        if ((policy_flags & ALRIOS_SOVEREIGN_POLICY_ALLOW_UNSIGNED) == 0U) {
+            return ALRIOS_SOVEREIGN_ERR_POLICY;
+        }
+        return ALRIOS_SOVEREIGN_OK;
+    }
+
+    if (!keys->ed25519_pubkey ||
+        verify_certificate_chain(keys, now) != ALRIOS_SOVEREIGN_OK) {
+        return ALRIOS_SOVEREIGN_ERR_VERIFY;
+    }
+    if ((policy_flags & ALRIOS_SOVEREIGN_POLICY_REQUIRE_PQC) != 0U &&
+        (out_view->flags & ALRIOS_ARAPP_V2_FLAG_PQC_HYBRID_SIG) == 0U) {
+        return ALRIOS_SOVEREIGN_ERR_POLICY;
+    }
+    if ((out_view->flags & ALRIOS_ARAPP_V2_FLAG_PQC_HYBRID_SIG) != 0U &&
+        (!has_ml_dsa_signature || !keys->ml_dsa_pubkey)) {
+        return ALRIOS_SOVEREIGN_ERR_VERIFY;
+    }
+    if ((out_view->flags & ALRIOS_ARAPP_V2_FLAG_PQC_HYBRID_SIG) == 0U &&
+        has_ml_dsa_signature) {
+        return ALRIOS_SOVEREIGN_ERR_VERIFY;
+    }
+    if (alrios_arapp_v2_verify_hybrid(
+            package_data, package_len, keys->ed25519_pubkey,
+            keys->ml_dsa_pubkey,
+            (policy_flags & ALRIOS_SOVEREIGN_POLICY_REQUIRE_PQC) != 0U ||
+            (out_view->flags & ALRIOS_ARAPP_V2_FLAG_PQC_HYBRID_SIG) != 0U) !=
+        ALRIOS_ARAPP_V2_SIG_OK) {
+        return ALRIOS_SOVEREIGN_ERR_VERIFY;
+    }
+    return ALRIOS_SOVEREIGN_OK;
+}
+
+static int decrypt_payload(const alrios_arapp_v2_view_t *view,
+                           const alrios_sovereign_keys_t *keys,
+                           uint8_t **out_plaintext,
+                           size_t *out_plaintext_len) {
+    uint8_t computed_sha[ALRIOS_ARAPP_V2_SHA512_SIZE];
+    uint8_t *plaintext;
+    int encrypted;
+
+    *out_plaintext = NULL;
+    *out_plaintext_len = 0U;
+    if (view->ciphertext_len == 0U || view->ciphertext_len > (size_t)INT_MAX) {
+        return ALRIOS_SOVEREIGN_ERR_VERIFY;
+    }
+
+    plaintext = (uint8_t *)malloc(view->ciphertext_len);
     if (!plaintext) {
         return ALRIOS_SOVEREIGN_ERR_DECRYPT;
     }
 
-    ctx = EVP_CIPHER_CTX_new();
-    if (!ctx) {
-        free(plaintext);
-        return ALRIOS_SOVEREIGN_ERR_DECRYPT;
-    }
-
-    if (EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL) != 1 ||
-        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, 12, NULL) != 1 ||
-        EVP_DecryptInit_ex(ctx, NULL, NULL, key, iv) != 1) {
-        goto cleanup;
-    }
-
-    if (ciphertext_len > 0U) {
-        if (EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext,
-                              (int)ciphertext_len) != 1) {
-            goto cleanup;
+    encrypted = (view->flags & ALRIOS_ARAPP_V2_FLAG_ENCRYPTED_GCM) != 0U;
+    if (encrypted) {
+        if (!keys->aes_key || keys->aes_key_len != AES256_KEY_LEN ||
+            alrios_aes256_gcm_decrypt(
+                view->ciphertext, view->ciphertext_len,
+                view->manifest, view->manifest_len, view->gcm_tag,
+                keys->aes_key, view->gcm_iv, plaintext) != ALRIOS_CRYPTO_OK) {
+            alrios_explicit_zeroize(plaintext, view->ciphertext_len);
+            free(plaintext);
+            return ALRIOS_SOVEREIGN_ERR_DECRYPT;
         }
-        plaintext_len = len;
+    } else {
+        memcpy(plaintext, view->ciphertext, view->ciphertext_len);
     }
 
-    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16, (void *)tag) != 1) {
-        goto cleanup;
+    if (SHA512(plaintext, view->ciphertext_len, computed_sha) == NULL ||
+        CRYPTO_memcmp(computed_sha, view->cleartext_sha512,
+                      sizeof(computed_sha)) != 0) {
+        alrios_explicit_zeroize(computed_sha, sizeof(computed_sha));
+        alrios_explicit_zeroize(plaintext, view->ciphertext_len);
+        free(plaintext);
+        return ALRIOS_SOVEREIGN_ERR_VERIFY;
     }
 
-    if (EVP_DecryptFinal_ex(ctx, plaintext + plaintext_len, &len) != 1) {
-        goto cleanup;
-    }
-    plaintext_len += len;
-
+    alrios_explicit_zeroize(computed_sha, sizeof(computed_sha));
     *out_plaintext = plaintext;
-    *out_len = (size_t)plaintext_len;
-    ret = ALRIOS_SOVEREIGN_OK;
-    plaintext = NULL;
+    *out_plaintext_len = view->ciphertext_len;
+    return ALRIOS_SOVEREIGN_OK;
+}
 
-cleanup:
-    EVP_CIPHER_CTX_free(ctx);
+static int create_sealed_memfd(const uint8_t *plaintext,
+                               size_t plaintext_len,
+                               int *out_memfd) {
+#if !defined(__linux__) || !defined(SYS_memfd_create)
+    (void)plaintext;
+    (void)plaintext_len;
+    (void)out_memfd;
+    return ALRIOS_SOVEREIGN_ERR_PLATFORM;
+#else
+    size_t written = 0U;
+    int memfd;
+    int seals;
+
+    memfd = (int)syscall(SYS_memfd_create, "alrios_sovereign_exec",
+                         MFD_CLOEXEC | MFD_ALLOW_SEALING);
+    if (memfd < 0) {
+        return ALRIOS_SOVEREIGN_ERR_MEMFD;
+    }
+
+    while (written < plaintext_len) {
+        ssize_t count = write(memfd, plaintext + written,
+                              plaintext_len - written);
+        if (count < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            (void)close(memfd);
+            return ALRIOS_SOVEREIGN_ERR_IO;
+        }
+        if (count == 0) {
+            (void)close(memfd);
+            return ALRIOS_SOVEREIGN_ERR_IO;
+        }
+        written += (size_t)count;
+    }
+
+    if (fcntl(memfd, F_ADD_SEALS, ALRIOS_REQUIRED_MEMFD_SEALS) < 0) {
+        (void)close(memfd);
+        return ALRIOS_SOVEREIGN_ERR_SEAL;
+    }
+    seals = fcntl(memfd, F_GET_SEALS);
+    if (seals < 0 || (seals & ALRIOS_REQUIRED_MEMFD_SEALS) !=
+                         ALRIOS_REQUIRED_MEMFD_SEALS) {
+        (void)close(memfd);
+        return ALRIOS_SOVEREIGN_ERR_SEAL;
+    }
+
+    *out_memfd = memfd;
+    return ALRIOS_SOVEREIGN_OK;
+#endif
+}
+
+int alrios_sovereign_loader_stage_memfd(
+    const uint8_t *package_data,
+    size_t package_len,
+    uint64_t now,
+    uint32_t policy_flags,
+    const alrios_sovereign_keys_t *keys,
+    int *out_memfd
+) {
+    alrios_arapp_v2_view_t view;
+    uint8_t *plaintext = NULL;
+    size_t plaintext_len = 0U;
+    int result;
+
+    if (!out_memfd) {
+        return ALRIOS_SOVEREIGN_ERR_ARGUMENT;
+    }
+    *out_memfd = -1;
+    if (!package_data || !keys ||
+        (policy_flags & ~ALRIOS_SOVEREIGN_POLICY_MASK) != 0U ||
+        ((policy_flags & ALRIOS_SOVEREIGN_POLICY_ALLOW_UNSIGNED) != 0U &&
+         (policy_flags & ALRIOS_SOVEREIGN_POLICY_REQUIRE_PQC) != 0U)) {
+        return ALRIOS_SOVEREIGN_ERR_ARGUMENT;
+    }
+
+    result = verify_envelope(package_data, package_len, now, policy_flags,
+                             keys, &view);
+    if (result != ALRIOS_SOVEREIGN_OK) {
+        return result;
+    }
+
+    result = decrypt_payload(&view, keys, &plaintext, &plaintext_len);
+    if (result != ALRIOS_SOVEREIGN_OK) {
+        return result;
+    }
+
+    result = create_sealed_memfd(plaintext, plaintext_len, out_memfd);
+    alrios_explicit_zeroize(plaintext, plaintext_len);
     free(plaintext);
-    return ret;
+    return result;
 }
 
 int alrios_sovereign_execute_package(
@@ -127,108 +304,36 @@ int alrios_sovereign_execute_package(
     int *out_child_status
 ) {
 #if !defined(__linux__)
-    (void)package_data; (void)package_len; (void)now; (void)require_pqc;
-    (void)keys; (void)argv; (void)envp; (void)out_child_status;
+    (void)package_data;
+    (void)package_len;
+    (void)now;
+    (void)require_pqc;
+    (void)keys;
+    (void)argv;
+    (void)envp;
+    (void)out_child_status;
     return ALRIOS_SOVEREIGN_ERR_PLATFORM;
 #else
-    alrios_arapp_v2_view_t view;
-    int validation_status;
-    int sig_status;
-    uint8_t computed_sha[64];
-    uint8_t *plaintext = NULL;
-    size_t plaintext_len = 0U;
+    uint32_t policy_flags = require_pqc != 0 ?
+        ALRIOS_SOVEREIGN_POLICY_REQUIRE_PQC : 0U;
     int memfd = -1;
     pid_t pid;
     int status;
-    size_t written = 0U;
+    int result;
 
-    if (!package_data || !keys || !keys->ed25519_pubkey ||
-        !keys->aes_key || !out_child_status) {
+    if (!out_child_status) {
         return ALRIOS_SOVEREIGN_ERR_ARGUMENT;
     }
     *out_child_status = -1;
-
-    /* 1. VERIFY STRUCTURAL INTEGRITY AND TIMESTAMPS FIRST (Fail-Closed) */
-    validation_status = alrios_arapp_v2_validate(
-        package_data,
-        package_len,
-        now,
-        ALRIOS_ARAPP_V2_MAX_CLOCK_SKEW_SECONDS,
-        &view
-    );
-    if (validation_status != ALRIOS_ARAPP_V2_OK) {
-        return ALRIOS_SOVEREIGN_ERR_VERIFY;
+    result = alrios_sovereign_loader_stage_memfd(
+        package_data, package_len, now, policy_flags, keys, &memfd);
+    if (result != ALRIOS_SOVEREIGN_OK) {
+        return result;
     }
 
-    /* 2. VERIFY CRYPTOGRAPHIC SIGNATURES BEFORE DECRYPT */
-    sig_status = alrios_arapp_v2_verify_hybrid(
-        package_data,
-        package_len,
-        keys->ed25519_pubkey,
-        keys->ml_dsa_pubkey,
-        require_pqc
-    );
-    if (sig_status != 0) {
-        return ALRIOS_SOVEREIGN_ERR_VERIFY;
-    }
-
-    /* 3. AUTHENTICATED DECRYPT (AES-256-GCM) */
-    validation_status = decrypt_aes_gcm_256(
-        view.ciphertext,
-        view.ciphertext_len,
-        keys->aes_key,
-        view.gcm_iv,
-        view.gcm_tag,
-        &plaintext,
-        &plaintext_len
-    );
-    if (validation_status != ALRIOS_SOVEREIGN_OK) {
-        return ALRIOS_SOVEREIGN_ERR_DECRYPT;
-    }
-
-    /* 4. VERIFY SHA-512 CLEARTEXT HASH AGAINST MANIFEST */
-    SHA512(plaintext, plaintext_len, computed_sha);
-    if (memcmp(computed_sha, view.cleartext_sha512, 64U) != 0) {
-        free(plaintext);
-        return ALRIOS_SOVEREIGN_ERR_VERIFY;
-    }
-
-    /* 5. CREATE MEMFD AND WRITE PLAINTEXT (NEVER WRITTEN TO DISK) */
-    memfd = (int)syscall(SYS_memfd_create, "alrios_sovereign_exec",
-                         MFD_CLOEXEC | MFD_ALLOW_SEALING);
-    if (memfd < 0) {
-        free(plaintext);
-        memset(plaintext, 0, plaintext_len);
-        return ALRIOS_SOVEREIGN_ERR_MEMFD;
-    }
-
-    while (written < plaintext_len) {
-        ssize_t w = write(memfd, plaintext + written, plaintext_len - written);
-        if (w < 0) {
-            if (errno == EINTR) continue;
-            close(memfd);
-            free(plaintext);
-            return ALRIOS_SOVEREIGN_ERR_IO;
-        }
-        written += (size_t)w;
-    }
-
-    /* Zeroize plaintext copy in memory immediately */
-    memset(plaintext, 0, plaintext_len);
-    free(plaintext);
-    plaintext = NULL;
-
-    /* 6. SEAL MEMFD (F_SEAL_SEAL | F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE) */
-    if (fcntl(memfd, F_ADD_SEALS,
-              F_SEAL_SEAL | F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE) < 0) {
-        close(memfd);
-        return ALRIOS_SOVEREIGN_ERR_SEAL;
-    }
-
-    /* 7. EXECUTE VIA fexecve */
     pid = fork();
     if (pid < 0) {
-        close(memfd);
+        (void)close(memfd);
         return ALRIOS_SOVEREIGN_ERR_PLATFORM;
     }
     if (pid == 0) {
@@ -241,10 +346,13 @@ int alrios_sovereign_execute_package(
         _exit(127);
     }
 
-    close(memfd);
-
-    if (waitpid(pid, &status, 0) < 0) {
-        return ALRIOS_SOVEREIGN_ERR_PLATFORM;
+    (void)close(memfd);
+    do {
+        result = waitpid(pid, &status, 0) < 0 ?
+            ALRIOS_SOVEREIGN_ERR_PLATFORM : ALRIOS_SOVEREIGN_OK;
+    } while (result != ALRIOS_SOVEREIGN_OK && errno == EINTR);
+    if (result != ALRIOS_SOVEREIGN_OK) {
+        return result;
     }
     *out_child_status = status;
     return ALRIOS_SOVEREIGN_OK;
