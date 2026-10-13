@@ -132,7 +132,8 @@ static void test_malformed_framing_and_bounds_rejection(void) {
         char buf[64];
 
         memset(garbage, 0xA5, sizeof(garbage));
-        (void)write(sv[1], garbage, sizeof(garbage));
+        ssize_t written = write(sv[1], garbage, sizeof(garbage));
+        CHECK(written == (ssize_t)sizeof(garbage));
 
         rc = ar_guest_channel_receive(ch_host, &hdr, buf, sizeof(buf));
         CHECK(rc == AR_GUEST_ERR_AUTH || rc == AR_GUEST_ERR_PROTOCOL);

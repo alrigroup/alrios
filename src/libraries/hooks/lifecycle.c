@@ -177,9 +177,13 @@ int alrios_hook_run_single(const alrios_hook_context_t *ctx,
 
         /* Set working directory */
         if (ctx->working_directory && ctx->working_directory[0] != '\0') {
-            (void)chdir(ctx->working_directory);
+            if (chdir(ctx->working_directory) != 0) {
+                _exit(127);
+            }
         } else if (ctx->slot_path && ctx->slot_path[0] != '\0') {
-            (void)chdir(ctx->slot_path);
+            if (chdir(ctx->slot_path) != 0) {
+                _exit(127);
+            }
         }
 
         /* Close /dev/null stdin */

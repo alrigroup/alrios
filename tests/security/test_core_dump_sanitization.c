@@ -40,7 +40,7 @@ static void test_sensitive_memory_registration_and_zeroize(void) {
 
     /* Write secret content */
     const char *secret_str = "SUPER_SECRET_ALRIOS_DATABASE_MASTER_KEY_001";
-    snprintf(secret_buffer, alloc_size, "%s", secret_str);
+    snprintf(secret_buffer, size, "%s", secret_str);
 
     /* Verify registration */
     CHECK(!alrios_sensitive_is_registered(secret_buffer, size));
