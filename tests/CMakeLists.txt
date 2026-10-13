@@ -223,6 +223,15 @@ set_target_properties(test_loader_injection PROPERTIES
 )
 add_test(NAME test_loader_injection COMMAND test_loader_injection)
 
+add_executable(test_mount_isolation integration/sandbox/test_mount_isolation.c)
+target_link_libraries(test_mount_isolation PRIVATE arsandbox_mounts)
+set_target_properties(test_mount_isolation PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_mount_isolation COMMAND test_mount_isolation)
+
 add_executable(test_ca_chain integration/pki/test_ca_chain.c)
 target_link_libraries(test_ca_chain PRIVATE arpki OpenSSL::Crypto)
 set_target_properties(test_ca_chain PROPERTIES

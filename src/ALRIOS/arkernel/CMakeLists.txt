@@ -234,7 +234,17 @@ target_include_directories(arresources PUBLIC
     ${CMAKE_SOURCE_DIR}/include/alrios
 )
 
-# 11. arindex (Package Index)
+# 11. arsandbox_mounts (Per-App Immutable Code and Persistent Data Mounts)
+add_library(arsandbox_mounts STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/sandbox/mounts.c
+)
+set_property(TARGET arsandbox_mounts PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arsandbox_mounts PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+
+# 12. arindex (Package Index)
 add_library(arindex STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/package/index.c
     ${CMAKE_SOURCE_DIR}/src/commands/armake/index_writer.c
@@ -276,6 +286,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         ${CMAKE_SOURCE_DIR}/src/ALRIOS/sandbox/seccomp_filter.c
         ${CMAKE_SOURCE_DIR}/src/ALRIOS/sandbox/cgroups_init.c
         ${CMAKE_SOURCE_DIR}/src/ALRIOS/sandbox/ns_unshare.c
+        ${CMAKE_SOURCE_DIR}/src/libraries/sandbox/mounts.c
         ${CMAKE_SOURCE_DIR}/src/ALRIOS/kernel/memloader.c
     )
     set_property(TARGET arsandbox_linux PROPERTY POSITION_INDEPENDENT_CODE ON)
@@ -328,6 +339,7 @@ add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/preimage.c
     ${CMAKE_SOURCE_DIR}/src/libraries/pki/certificate.c
     ${CMAKE_SOURCE_DIR}/src/libraries/pki/issuer.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/sandbox/mounts.c
 )
 set_property(TARGET arsdk PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arsdk PUBLIC
