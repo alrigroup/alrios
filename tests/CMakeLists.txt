@@ -362,6 +362,15 @@ set_target_properties(test_app_lifecycle PROPERTIES
 )
 add_test(NAME test_app_lifecycle COMMAND test_app_lifecycle)
 
+add_executable(test_core_dump_sanitization security/test_core_dump_sanitization.c)
+target_link_libraries(test_core_dump_sanitization PRIVATE arsensitive_mem arcrypto arkernel OpenSSL::Crypto)
+set_target_properties(test_core_dump_sanitization PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_core_dump_sanitization COMMAND test_core_dump_sanitization)
+
 option(ALRIOS_ENABLE_FUZZING "Build ALRIOS LibFuzzer targets" OFF)
 if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")

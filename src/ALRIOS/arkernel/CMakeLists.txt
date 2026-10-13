@@ -356,6 +356,19 @@ target_include_directories(arsdk_app PUBLIC
 )
 target_link_libraries(arsdk_app PUBLIC arcrypto)
 
+# 22. arsensitive_mem (Sensitive Memory Registry & Sanitized Crash Reports)
+add_library(arsensitive_mem STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/memory/sensitive.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/memory/crash_report.c
+)
+set_property(TARGET arsensitive_mem PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arsensitive_mem PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
+)
+target_link_libraries(arsensitive_mem PUBLIC arcrypto arkernel)
+
 # ====================================================================
 # Umbrella Target: libarsdk (Maintains 100% Backward Compatibility)
 # ====================================================================
@@ -388,6 +401,8 @@ add_library(arsdk STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/pki/issuer.c
     ${CMAKE_SOURCE_DIR}/src/libraries/sandbox/mounts.c
     ${CMAKE_SOURCE_DIR}/src/libraries/sdk/app.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/memory/sensitive.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/memory/crash_report.c
 )
 set_property(TARGET arsdk PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(arsdk PUBLIC

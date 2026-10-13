@@ -131,4 +131,15 @@ int alrios_aes256_gcm_decrypt(
     uint8_t *out_plaintext
 );
 
+int alrios_aes256_gcm_encrypt(
+    const uint8_t *plaintext,
+    size_t plaintext_len,
+    const uint8_t *aad,
+    size_t aad_len,
+    const uint8_t key[AES256_KEY_LEN],
+    const uint8_t iv[AES256_GCM_IV_LEN],
+    uint8_t *out_ciphertext,
+    uint8_t out_tag[AES256_GCM_TAG_LEN]
+);
+
 #endif /* ALRIOS_CRYPTO_VERIFY_H */

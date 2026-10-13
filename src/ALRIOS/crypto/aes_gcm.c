@@ -72,3 +72,71 @@ cleanup:
     return result;
 }
 
+int alrios_aes256_gcm_encrypt(
+    const uint8_t *plaintext,
+    size_t plaintext_len,
+    const uint8_t *aad,
+    size_t aad_len,
+    const uint8_t key[AES256_KEY_LEN],
+    const uint8_t iv[AES256_GCM_IV_LEN],
+    uint8_t *out_ciphertext,
+    uint8_t out_tag[AES256_GCM_TAG_LEN]
+) {
+    if (!key || !iv || !out_tag) {
+        return ALRIOS_CRYPTO_ERR_NULL_PTR;
+    }
+    if (plaintext_len > 0U && (!plaintext || !out_ciphertext)) {
+        return ALRIOS_CRYPTO_ERR_NULL_PTR;
+    }
+    if (aad_len > 0U && !aad) {
+        return ALRIOS_CRYPTO_ERR_NULL_PTR;
+    }
+    if (plaintext_len > (size_t)INT_MAX || aad_len > (size_t)INT_MAX) {
+        return ALRIOS_CRYPTO_ERR_INTERNAL;
+    }
+
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        return ALRIOS_CRYPTO_ERR_ALLOC_FAIL;
+    }
+
+    int output_len = 0;
+    int final_len = 0;
+    int result = ALRIOS_CRYPTO_ERR_INTERNAL;
+
+    if (EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL) != 1 ||
+        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, AES256_GCM_IV_LEN, NULL) != 1 ||
+        EVP_EncryptInit_ex(ctx, NULL, NULL, key, iv) != 1) {
+        goto cleanup;
+    }
+
+    if (aad_len > 0U &&
+        EVP_EncryptUpdate(ctx, NULL, &output_len, aad, (int)aad_len) != 1) {
+        goto cleanup;
+    }
+
+    if (plaintext_len > 0U &&
+        EVP_EncryptUpdate(ctx, out_ciphertext, &output_len,
+                          plaintext, (int)plaintext_len) != 1) {
+        goto cleanup;
+    }
+
+    if (EVP_EncryptFinal_ex(ctx, out_ciphertext + output_len, &final_len) != 1) {
+        goto cleanup;
+    }
+
+    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG,
+                            AES256_GCM_TAG_LEN, out_tag) != 1) {
+        goto cleanup;
+    }
+
+    result = ALRIOS_CRYPTO_OK;
+
+cleanup:
+    EVP_CIPHER_CTX_free(ctx);
+    if (result != ALRIOS_CRYPTO_OK && out_ciphertext && plaintext_len > 0U) {
+        alrios_explicit_zeroize(out_ciphertext, plaintext_len);
+    }
+    return result;
+}
+

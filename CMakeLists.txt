@@ -52,4 +52,14 @@ target_include_directories(ar_chronod PRIVATE
 )
 target_link_libraries(ar_chronod PRIVATE arsecurity_epoch arkernel arcrypto OpenSSL::Crypto)
 
+add_executable(ar_cored
+    src/daemons/ar_cored/main.c
+)
+target_include_directories(ar_cored PRIVATE
+    include
+    include/alrios
+    src/ALRIOS/arkernel/os/include
+)
+target_link_libraries(ar_cored PRIVATE arsensitive_mem arkernel arcrypto OpenSSL::Crypto OpenSSL::SSL)
+
 add_subdirectory(tests)
