@@ -82,4 +82,19 @@ target_include_directories(ar_resourced PRIVATE
 )
 target_link_libraries(ar_resourced PRIVATE arresources arkernel)
 
+add_executable(arcc
+    src/commands/arcc/main.c
+)
+target_include_directories(arcc PRIVATE
+    include
+    include/alrios
+    src/ALRIOS/arkernel/os/include
+)
+target_link_libraries(arcc PRIVATE arkernel arlog OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
+set_target_properties(arcc PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore"
+)
+
 add_subdirectory(tests)
