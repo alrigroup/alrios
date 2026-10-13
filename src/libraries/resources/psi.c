@@ -333,19 +333,32 @@ alrios_psi_pressure_level_t alrios_psi_classify_memory(
     return ALRIOS_PSI_PRESSURE_NORMAL;
 }
 
+static const char *extract_basename(const char *path) {
+    const char *slash;
+    if (path == NULL) {
+        return NULL;
+    }
+    slash = strrchr(path, '/');
+    return (slash != NULL) ? slash + 1 : path;
+}
+
 int alrios_psi_is_core_daemon(const char *name) {
     static const char *const protected_names[] = {
-        "arcore", "arkernel", "arauth", "ardb", "ar_resourced"
+        "arcore", "arkernel", "arauth", "ardb", "ar_resourced",
+        "supervisor", "router", "guest_router", "ar_supervisor", "ar_router",
+        "ar_auditd", "ar_chronod", "ar_cored", "ar_eventd"
     };
+    const char *base;
     size_t index;
 
     if (name == NULL || name[0] == '\0') {
         return 0;
     }
+    base = extract_basename(name);
     for (index = 0U;
          index < sizeof(protected_names) / sizeof(protected_names[0]);
          ++index) {
-        if (strcmp(name, protected_names[index]) == 0) {
+        if (strcmp(base, protected_names[index]) == 0) {
             return 1;
         }
     }
@@ -359,6 +372,37 @@ static int candidate_is_eligible(const alrios_psi_candidate_t *candidate) {
            !candidate->protected_process &&
            candidate->tier != ALRIOS_PSI_TIER_CORE &&
            !alrios_psi_is_core_daemon(candidate->name);
+}
+
+static int candidate_is_worker(const alrios_psi_candidate_t *candidate) {
+    return candidate != NULL && candidate->name != NULL &&
+           candidate->name[0] != '\0' && candidate->process_id > 0 &&
+           !candidate->protected_process &&
+           candidate->tier != ALRIOS_PSI_TIER_CORE &&
+           !alrios_psi_is_core_daemon(candidate->name);
+}
+
+static int compare_candidate_priority(const alrios_psi_candidate_t *a,
+                                      const alrios_psi_candidate_t *b) {
+    if (a->tier > b->tier) {
+        return -1;
+    }
+    if (a->tier < b->tier) {
+        return 1;
+    }
+    {
+        int name_cmp = strcmp(a->name, b->name);
+        if (name_cmp != 0) {
+            return name_cmp;
+        }
+    }
+    if (a->process_id < b->process_id) {
+        return -1;
+    }
+    if (a->process_id > b->process_id) {
+        return 1;
+    }
+    return 0;
 }
 
 int alrios_psi_select_candidate(const alrios_psi_candidate_t *candidates,
@@ -384,11 +428,7 @@ int alrios_psi_select_candidate(const alrios_psi_candidate_t *candidates,
             continue;
         }
         best = &candidates[best_index];
-        if (candidate->tier > best->tier ||
-            (candidate->tier == best->tier &&
-             (strcmp(candidate->name, best->name) < 0 ||
-              (strcmp(candidate->name, best->name) == 0 &&
-               candidate->process_id < best->process_id)))) {
+        if (compare_candidate_priority(candidate, best) < 0) {
             best_index = index;
         }
     }
@@ -433,7 +473,75 @@ int alrios_psi_evaluate(const alrios_psi_memory_sample_t *sample,
         if (out_candidate_index != NULL) {
             *out_candidate_index = candidate_index;
         }
+        if (notify(notify_context, &event) != 0) {
+            return ALRIOS_PSI_ERR_NOTIFY;
+        }
+        return ALRIOS_PSI_OK;
     }
+
+    if (candidates != NULL && candidate_count > 0U) {
+        size_t stack_indices[64];
+        size_t *worker_indices = stack_indices;
+        size_t worker_count = 0U;
+        size_t i;
+
+        if (candidate_count > sizeof(stack_indices) / sizeof(stack_indices[0])) {
+            worker_indices = (size_t *)malloc(candidate_count * sizeof(size_t));
+            if (worker_indices == NULL) {
+                return ALRIOS_PSI_ERR_IO;
+            }
+        }
+
+        for (i = 0U; i < candidate_count; ++i) {
+            const alrios_psi_candidate_t *c = &candidates[i];
+            if (candidate_is_worker(c)) {
+                worker_indices[worker_count++] = i;
+            }
+        }
+
+        if (worker_count > 0U) {
+            for (i = 1U; i < worker_count; ++i) {
+                size_t key_idx = worker_indices[i];
+                const alrios_psi_candidate_t *key = &candidates[key_idx];
+                size_t j = i;
+                while (j > 0U) {
+                    const alrios_psi_candidate_t *prev =
+                        &candidates[worker_indices[j - 1U]];
+                    if (compare_candidate_priority(key, prev) < 0) {
+                        worker_indices[j] = worker_indices[j - 1U];
+                        --j;
+                    } else {
+                        break;
+                    }
+                }
+                worker_indices[j] = key_idx;
+            }
+
+            if (out_candidate_index != NULL) {
+                *out_candidate_index = worker_indices[0];
+            }
+
+            for (i = 0U; i < worker_count; ++i) {
+                event.candidate = &candidates[worker_indices[i]];
+                if (notify(notify_context, &event) != 0) {
+                    if (worker_indices != stack_indices) {
+                        free(worker_indices);
+                    }
+                    return ALRIOS_PSI_ERR_NOTIFY;
+                }
+            }
+
+            if (worker_indices != stack_indices) {
+                free(worker_indices);
+            }
+            return ALRIOS_PSI_OK;
+        }
+
+        if (worker_indices != stack_indices) {
+            free(worker_indices);
+        }
+    }
+
     if (notify(notify_context, &event) != 0) {
         return ALRIOS_PSI_ERR_NOTIFY;
     }

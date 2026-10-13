@@ -72,4 +72,14 @@ target_include_directories(ar_eventd PRIVATE
 )
 target_link_libraries(ar_eventd PRIVATE areventbus arkernel arcrypto)
 
+add_executable(ar_resourced
+    src/daemons/ar_resourced/main.c
+)
+target_include_directories(ar_resourced PRIVATE
+    include
+    include/alrios
+    src/ALRIOS/arkernel/os/include
+)
+target_link_libraries(ar_resourced PRIVATE arresources arkernel)
+
 add_subdirectory(tests)

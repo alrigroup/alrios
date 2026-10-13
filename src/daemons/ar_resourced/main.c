@@ -67,6 +67,16 @@ static int emit_notification(void *context,
         return -1;
     }
     if (event->type == ALRIOS_PSI_NOTIFY_WARNING) {
+        if (event->candidate != NULL) {
+            return fprintf(output,
+                           "ar_resourced: memory pressure warning %.2f%% "
+                           "(threshold %.0f%%) dispatched to %s pid=%d tier=%d\n",
+                           event->pressure_percent,
+                           ALRIOS_PSI_WARNING_PERCENT,
+                           event->candidate->name,
+                           event->candidate->process_id,
+                           (int)event->candidate->tier) < 0 ? -1 : 0;
+        }
         return fprintf(output,
                        "ar_resourced: memory pressure warning %.2f%% "
                        "(threshold %.0f%%)\n",

@@ -124,6 +124,22 @@ static void test_thresholds_and_notifications(void) {
     CHECK(log.last.type == ALRIOS_PSI_NOTIFY_WARNING);
     CHECK(log.last.candidate == NULL);
 
+    {
+        /* Tiered worker notifications at warning level */
+        const alrios_psi_candidate_t workers[] = {
+            {"arcore", 1, ALRIOS_PSI_TIER_CORE, 1, 0, 0},
+            {"supervisor", 2, ALRIOS_PSI_TIER_CORE, 1, 0, 0},
+            {"worker-low-prio", 201, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0},
+            {"worker-high-prio", 101, ALRIOS_PSI_TIER_WORKER, 1, 0, 0}
+        };
+        memset(&log, 0, sizeof(log));
+        status = alrios_psi_evaluate(&sample, workers,
+                                     sizeof(workers) / sizeof(workers[0]),
+                                     record_notification, &log, NULL);
+        CHECK(status == ALRIOS_PSI_OK);
+        CHECK(log.calls == 2U); /* Both eligible workers notified in tiered order, core ignored */
+    }
+
     sample = sample_with_pressure(89.99);
     CHECK(alrios_psi_classify_memory(&sample) == ALRIOS_PSI_PRESSURE_WARNING);
     sample = sample_with_pressure(90.0);
@@ -157,6 +173,9 @@ static void test_deterministic_selective_shedding(void) {
     CHECK(alrios_psi_is_core_daemon("arkernel") == 1);
     CHECK(alrios_psi_is_core_daemon("arauth") == 1);
     CHECK(alrios_psi_is_core_daemon("ardb") == 1);
+    CHECK(alrios_psi_is_core_daemon("supervisor") == 1);
+    CHECK(alrios_psi_is_core_daemon("router") == 1);
+    CHECK(alrios_psi_is_core_daemon("/bin/router") == 1);
     CHECK(alrios_psi_is_core_daemon("guest-a") == 0);
 
     status = alrios_psi_select_candidate(
@@ -179,10 +198,127 @@ static void test_deterministic_selective_shedding(void) {
     CHECK(status == ALRIOS_PSI_ERR_NO_CANDIDATE);
 }
 
+typedef struct multi_notification_log {
+    size_t count;
+    alrios_psi_notification_t events[16];
+} multi_notification_log_t;
+
+static int record_multi_notification(void *context,
+                                     const alrios_psi_notification_t *event) {
+    multi_notification_log_t *log = context;
+    if (log->count < sizeof(log->events) / sizeof(log->events[0])) {
+        log->events[log->count] = *event;
+        ++log->count;
+    }
+    return 0;
+}
+
+static void test_tiered_worker_warning_notifications(void) {
+    const alrios_psi_candidate_t candidates[] = {
+        {"arcore", 1, ALRIOS_PSI_TIER_CORE, 1, 0, 0},
+        {"supervisor", 2, ALRIOS_PSI_TIER_CORE, 1, 0, 0},
+        {"router", 3, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0},
+        {"protected-app", 4, ALRIOS_PSI_TIER_WORKER, 1, 0, 1},
+        {"worker-b", 202, ALRIOS_PSI_TIER_WORKER, 1, 0, 0},
+        {"worker-a", 201, ALRIOS_PSI_TIER_WORKER, 1, 0, 0},
+        {"batch-z", 302, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0},
+        {"batch-a", 301, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0}
+    };
+    alrios_psi_memory_sample_t sample = sample_with_pressure(85.0);
+    multi_notification_log_t log;
+    size_t selected = 99U;
+    int status;
+
+    memset(&log, 0, sizeof(log));
+    status = alrios_psi_evaluate(&sample, candidates,
+                                 sizeof(candidates) / sizeof(candidates[0]),
+                                 record_multi_notification, &log, &selected);
+    CHECK(status == ALRIOS_PSI_OK);
+    CHECK(log.count == 4U);
+
+    /* Tier 2 (best effort) must precede Tier 1 (worker) */
+    CHECK(log.events[0].candidate == &candidates[7]); /* batch-a */
+    CHECK(log.events[0].candidate->tier == ALRIOS_PSI_TIER_BEST_EFFORT);
+    CHECK(log.events[0].type == ALRIOS_PSI_NOTIFY_WARNING);
+
+    CHECK(log.events[1].candidate == &candidates[6]); /* batch-z */
+    CHECK(log.events[1].candidate->tier == ALRIOS_PSI_TIER_BEST_EFFORT);
+    CHECK(log.events[1].type == ALRIOS_PSI_NOTIFY_WARNING);
+
+    CHECK(log.events[2].candidate == &candidates[5]); /* worker-a */
+    CHECK(log.events[2].candidate->tier == ALRIOS_PSI_TIER_WORKER);
+    CHECK(log.events[2].type == ALRIOS_PSI_NOTIFY_WARNING);
+
+    CHECK(log.events[3].candidate == &candidates[4]); /* worker-b */
+    CHECK(log.events[3].candidate->tier == ALRIOS_PSI_TIER_WORKER);
+    CHECK(log.events[3].type == ALRIOS_PSI_NOTIFY_WARNING);
+}
+
+static void test_core_daemons_never_sacrificed(void) {
+    const alrios_psi_candidate_t core_daemons_only[] = {
+        {"arcore", 1, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0},
+        {"supervisor", 2, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0},
+        {"router", 3, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0},
+        {"guest_router", 4, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0},
+        {"ar_resourced", 5, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0},
+        {"ar_auditd", 6, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0},
+        {"ar_chronod", 7, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0},
+        {"ar_cored", 8, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0},
+        {"ar_eventd", 9, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0}
+    };
+    const alrios_psi_candidate_t core_with_worker[] = {
+        {"arcore", 1, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0},
+        {"supervisor", 2, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0},
+        {"router", 3, ALRIOS_PSI_TIER_BEST_EFFORT, 1, 0, 0},
+        {"worker-sacrificial", 999, ALRIOS_PSI_TIER_WORKER, 1, 0, 0}
+    };
+    alrios_psi_memory_sample_t sample = sample_with_pressure(92.0);
+    notification_log_t log;
+    size_t selected = 0U;
+    int status;
+
+    /* Core daemons must never be selected even if best-effort tier and allow_shedding set */
+    status = alrios_psi_select_candidate(
+        core_daemons_only,
+        sizeof(core_daemons_only) / sizeof(core_daemons_only[0]),
+        &selected);
+    CHECK(status == ALRIOS_PSI_ERR_NO_CANDIDATE);
+
+    memset(&log, 0, sizeof(log));
+    status = alrios_psi_evaluate(
+        &sample,
+        core_daemons_only,
+        sizeof(core_daemons_only) / sizeof(core_daemons_only[0]),
+        record_notification, &log, &selected);
+    CHECK(status == ALRIOS_PSI_ERR_NO_CANDIDATE);
+
+    /* When worker is present alongside core daemons, only worker is sacrificed */
+    status = alrios_psi_select_candidate(
+        core_with_worker,
+        sizeof(core_with_worker) / sizeof(core_with_worker[0]),
+        &selected);
+    CHECK(status == ALRIOS_PSI_OK);
+    CHECK(selected == 3U);
+    CHECK(strcmp(core_with_worker[selected].name, "worker-sacrificial") == 0);
+
+    memset(&log, 0, sizeof(log));
+    status = alrios_psi_evaluate(
+        &sample,
+        core_with_worker,
+        sizeof(core_with_worker) / sizeof(core_with_worker[0]),
+        record_notification, &log, &selected);
+    CHECK(status == ALRIOS_PSI_OK);
+    CHECK(log.calls == 1U);
+    CHECK(log.last.type == ALRIOS_PSI_NOTIFY_SHED);
+    CHECK(log.last.candidate == &core_with_worker[3]);
+}
+
 int main(void) {
     test_strict_parser_and_source_injection();
     test_thresholds_and_notifications();
     test_deterministic_selective_shedding();
+    test_tiered_worker_warning_notifications();
+    test_core_daemons_never_sacrificed();
     printf("MP-017 memory pressure governance: PASS\n");
     return 0;
 }
