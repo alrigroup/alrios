@@ -190,6 +190,17 @@ target_include_directories(arsupervisor_policy PUBLIC
 )
 target_link_libraries(arsupervisor_policy PUBLIC arpolicy arcrypto)
 
+# 16. arvault_store (Encrypted Host Vault Store & Secret Injection)
+add_library(arvault_store STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/vault/store.c
+)
+set_property(TARGET arvault_store PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arvault_store PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(arvault_store PUBLIC arcrypto OpenSSL::Crypto)
+
 # 7. araudit (Append-Only Cryptographic Audit Chain)
 add_library(araudit STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/audit/hash_chain.c

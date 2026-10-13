@@ -146,6 +146,15 @@ set_target_properties(test_profile_enforcement PROPERTIES
 )
 add_test(NAME test_profile_enforcement COMMAND test_profile_enforcement)
 
+add_executable(test_loader_injection integration/vault/test_loader_injection.c)
+target_link_libraries(test_loader_injection PRIVATE arvault_store arcrypto OpenSSL::Crypto)
+set_target_properties(test_loader_injection PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_loader_injection COMMAND test_loader_injection)
+
 add_executable(test_ca_chain integration/pki/test_ca_chain.c)
 target_link_libraries(test_ca_chain PRIVATE arpki OpenSSL::Crypto)
 set_target_properties(test_ca_chain PROPERTIES
