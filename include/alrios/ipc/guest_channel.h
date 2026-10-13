@@ -33,6 +33,10 @@
 
 #define AR_GUEST_DEFAULT_IO_TIMEOUT_MS   1000
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct ar_guest_channel ar_guest_channel_t;
 
 typedef enum ar_guest_status {
@@ -108,5 +112,11 @@ int ar_guest_channel_receive(
     ar_guest_frame_header_t *out_header,
     void *out_payload,
     uint32_t payload_capacity);
+
+#ifdef __cplusplus
+}
+#endif
+
+#include "alrios/supervisor/guest_router.h"
 
 #endif /* ALRIOS_IPC_GUEST_CHANNEL_H */

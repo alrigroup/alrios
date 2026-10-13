@@ -313,6 +313,27 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(ardevmode_jail PUBLIC arsandbox_linux)
 endif()
 
+# 18. arguest_channel (Authenticated Host-Guest SOCK_SEQPACKET IPC)
+add_library(arguest_channel STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/ipc/guest_channel.c
+)
+set_property(TARGET arguest_channel PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arguest_channel PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+
+# 19. arguest_router (Supervisor Guest Router & Backpressure Anti-Flood Engine)
+add_library(arguest_router STATIC
+    ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/guest_router.c
+)
+set_property(TARGET arguest_router PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arguest_router PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(arguest_router PUBLIC arguest_channel)
+
 # ====================================================================
 # Umbrella Target: libarsdk (Maintains 100% Backward Compatibility)
 # ====================================================================
