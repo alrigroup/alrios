@@ -7,8 +7,8 @@ enable_testing()
 include_directories(
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/alrios
-    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
-    ${CMAKE_SOURCE_DIR}/src/tools
+    ${CMAKE_SOURCE_DIR}/src/platform/core
+    ${CMAKE_SOURCE_DIR}/src/libraries/archive
 )
 
 set(TEST_OUTPUT_DIR "${CMAKE_BINARY_DIR}/tests_bin")
@@ -184,16 +184,15 @@ add_test(NAME test_profile_enforcement COMMAND test_profile_enforcement)
 
 add_executable(test_supervisor_runtime_policy
     integration/policy/test_supervisor_runtime_policy.c
-    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core/loader.c
-    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core/ar_path.c
 )
 target_include_directories(test_supervisor_runtime_policy PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/include
-    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
-    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
-    ${CMAKE_SOURCE_DIR}/src/tools
+    ${CMAKE_SOURCE_DIR}/src/platform/kernel/include
+    ${CMAKE_SOURCE_DIR}/src/platform/hal/include
+    ${CMAKE_SOURCE_DIR}/src/platform/core
+    ${CMAKE_SOURCE_DIR}/src/libraries/archive
 )
 target_link_libraries(test_supervisor_runtime_policy PRIVATE
+    arcore_runtime
     arsupervisor_policy
     arpackage
     arpki
@@ -292,7 +291,7 @@ set_target_properties(test_notary_confinement PROPERTIES
 add_test(NAME test_notary_confinement COMMAND test_notary_confinement)
 
 add_executable(test_hal_fs_isolation integration/pki/test_hal_fs_isolation.c)
-target_include_directories(test_hal_fs_isolation PRIVATE ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include)
+target_include_directories(test_hal_fs_isolation PRIVATE ${CMAKE_SOURCE_DIR}/src/platform/hal/include)
 target_link_libraries(test_hal_fs_isolation PRIVATE arhal_isolation)
 set_target_properties(test_hal_fs_isolation PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
@@ -322,7 +321,7 @@ add_test(NAME test_devmode_jail COMMAND test_devmode_jail)
 
 add_executable(test_lifecycle_hooks integration/hooks/test_lifecycle_hooks.c)
 target_include_directories(test_lifecycle_hooks PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
+    ${CMAKE_SOURCE_DIR}/src/platform/hal/include
 )
 target_link_libraries(test_lifecycle_hooks PRIVATE arhooks ardeploy arkernel)
 set_target_properties(test_lifecycle_hooks PROPERTIES
@@ -375,7 +374,7 @@ add_executable(test_arcc integration/toolchain/test_arcc.c)
 target_include_directories(test_arcc PRIVATE
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/alrios
-    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
+    ${CMAKE_SOURCE_DIR}/src/platform/hal/include
 )
 target_link_libraries(test_arcc PRIVATE arkernel arlog OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
 set_target_properties(test_arcc PROPERTIES
@@ -415,11 +414,8 @@ if(ALRIOS_ENABLE_FUZZING)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
         message(FATAL_ERROR "ALRIOS_ENABLE_FUZZING requires Clang with LibFuzzer")
     endif()
-    add_executable(fuzz_certificate
-        fuzz/fuzz_certificate.c
-        ${CMAKE_SOURCE_DIR}/src/libraries/pki/certificate.c
-    )
-    target_link_libraries(fuzz_certificate PRIVATE arcrypto)
+    add_executable(fuzz_certificate fuzz/fuzz_certificate.c)
+    target_link_libraries(fuzz_certificate PRIVATE arpki)
     target_include_directories(fuzz_certificate PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_compile_options(fuzz_certificate PRIVATE
         -fsanitize=fuzzer,address,undefined
@@ -430,11 +426,8 @@ if(ALRIOS_ENABLE_FUZZING)
         -fno-omit-frame-pointer
     )
 
-    add_executable(fuzz_arapp_v2_reader
-        fuzz/fuzz_arapp_v2_reader.c
-        ${CMAKE_SOURCE_DIR}/src/libraries/package/arapp_v2_reader.c
-        ${CMAKE_SOURCE_DIR}/src/ALRIOS/pki/manifest_canon.c
-    )
+    add_executable(fuzz_arapp_v2_reader fuzz/fuzz_arapp_v2_reader.c)
+    target_link_libraries(fuzz_arapp_v2_reader PRIVATE arpackage)
     target_include_directories(fuzz_arapp_v2_reader PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_compile_options(fuzz_arapp_v2_reader PRIVATE
         -fsanitize=fuzzer,address,undefined

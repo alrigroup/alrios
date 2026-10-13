@@ -1,11 +1,4 @@
-/* ====================================================================
- * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
- * ==================================================================== */
-#ifndef AR_CTL_H
-#define AR_CTL_H
-
-int ctl_start(void);
-void ctl_stop(void);
-
+#ifndef ALRIOS_LEGACY_CTL_FORWARD_H
+#define ALRIOS_LEGACY_CTL_FORWARD_H
+#include "../../platform/core/ctl.h"
 #endif

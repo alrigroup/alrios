@@ -1,6 +1,6 @@
 # arcore — Master Service & Lifecycle Daemon
 
-The **`arcore`** daemon (`src/ALRIOS/core/`) is the central process manager of the ALRIOS platform.
+The **`arcore`** daemon (`src/platform/core/`) is the central process manager of the ALRIOS platform.
 
 ---
 

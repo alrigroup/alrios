@@ -30,7 +30,7 @@ O **ALRIOS** é uma plataforma operacional nativa em espaço de usuário (*user-
 
 ### Princípios Arquiteturais Invioláveis:
 1. **Zero Runtime Disk Lookups**: Desacoplamento entre empacotamento (`.arapp`) e execução via staging isolado e cache em memória RAM.
-2. **Hardware Abstraction Layer (HAL)**: Nenhuma chamada direta ao sistema operacional (`fork`, `execvp`, `CreateProcessW`, `pthread_create`, `socket`) fora do escopo de `src/ALRIOS/arkernel/os/`. Toda invocação transita por `aros_hal.h`.
+2. **Hardware Abstraction Layer (HAL)**: Nenhuma chamada direta ao sistema operacional (`fork`, `execvp`, `CreateProcessW`, `pthread_create`, `socket`) fora do escopo de `src/platform/hal/`. Toda invocação transita por `aros_hal.h`.
 3. **Comunicação Segura Zero-Trust**: Todos os descritores de sockets IPC e de controle impõem timeouts simétricos mandatórios (`SO_RCVTIMEO` e `SO_SNDTIMEO`), fechamento atômico `FD_CLOEXEC` e validação estrita de frames binários.
 4. **Alocação de Memória Segura (Zero-Leak Discipline)**: Proibição estrita de realocação direta (`ptr = realloc(ptr, ...)`). Toda alocação dinâmica exige ponteiro intermediário temporário e liberação em profundidade em caso de falha de memória do kernel.
 5. **Eliminação de Primitivas Inseguras**: Proibição terminante de `sprintf`, `strcpy`, `strcat`, `gets` ou `scanf`. Apenas primitivas delimitadas (`snprintf`) ou chamadas diretas com vetor de argumentos (`execvp`) são aceitas.
@@ -42,7 +42,7 @@ O **ALRIOS** é uma plataforma operacional nativa em espaço de usuário (*user-
 O ARKernel abstrai integralmente as diferenças de ABI e chamadas de sistema entre plataformas POSIX (Linux) e Windows NT (Win32), expondo uma API C11 consistente.
 
 ```
-src/ALRIOS/arkernel/
+src/platform/kernel/
 ├── include/
 │   ├── ar_ipc.h              # Protocolo de quadros e transporte IPC
 │   ├── ar_kernel.h           # Estruturas de controle de processos e subsistemas

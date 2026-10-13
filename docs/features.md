@@ -20,7 +20,7 @@
 
 ## 1. ARKernel - Hardware Abstraction Layer (HAL)
 
-The **ARKernel** (`src/ALRIOS/arkernel/`) provides a unified system call layer (Win32 and POSIX) with zero-overhead abstractions (`aros_hal.h`).
+The **ARKernel** (`src/platform/kernel/`) provides a unified system call layer (Win32 and POSIX) with zero-overhead abstractions (`aros_hal.h`).
 
 ### 1.1 Process Management (`ar_process.h`)
 - **Async Isolated Spawn**: Child process creation decoupled from parent console (`CreateProcessW` on Windows / `fork` + `execvp` on Linux).
@@ -48,7 +48,7 @@ The **ARKernel** (`src/ALRIOS/arkernel/`) provides a unified system call layer (
 
 ## 2. arcore - Master Service Daemon & Supervisor
 
-The **`arcore`** (`src/ALRIOS/core/`) is the system orchestrator.
+The **`arcore`** (`src/platform/core/`) is the system orchestrator.
 
 ### 2.1 Self-Healing Supervision
 - **Service State Machine**: Strict control of states `UNREGISTERED` -> `STOPPED` -> `STARTING` -> `RUNNING` -> `CRASHED` -> `RECOVERING`.
@@ -164,7 +164,7 @@ The **`arcore`** (`src/ALRIOS/core/`) is the system orchestrator.
 
 ## 7. Developer Toolchain & CLI
 
-Native tools (`src/tools/`) managing the entire development lifecycle, compilation, packaging, and system operation.
+Native tools (`src/commands/`) managing the entire development lifecycle, compilation, packaging, and system operation.
 
 ### 7.1 `armake` - Application Packager
 - **`.arapp` Package Building**: Structured packaging of binaries, manifests, and assets into self-contained archives.

@@ -16,7 +16,7 @@
 ### Core Architectural Specifications
 - **Supervisor Daemon (`arcore`)**: Spawns, monitors, and restarts infrastructure services (`arws`, `ardb`, `arcdn`) and user applications with self-healing state machines (`UNREGISTERED` -> `STOPPED` -> `STARTING` -> `RUNNING` -> `CRASHED` -> `RECOVERING`).
 - **Operating Ports**: Port `9500` (IPC Server for daemon control, route registration, and CLI queries) and Port `9600`.
-- **System HAL (`src/ALRIOS/arkernel/`)**: Isolates low-level Win32 vs. Linux POSIX code behind unified APIs in `aros_hal.h`.
+- **System HAL (`src/platform/kernel/`)**: Isolates low-level Win32 vs. Linux POSIX code behind unified APIs in `aros_hal.h`.
 - **Application Staging (`arcore/.staging/`)**: Automatically extracts `.arapp` packages into isolated runtime sandboxes verifying `ALRIGROUP@APPMAKE` manifests before execution.
 
 ---
@@ -98,7 +98,7 @@ Autonomous AI Agents operating within this codebase must strictly observe these 
 ### 4.1 Strict Prohibitions
 - ❌ **NEVER add Git submodules**: Applications are decoupled independent repositories located under `github.com/alrigroup/<app>`. Submodules in `alrios` are strictly forbidden.
 - ❌ **NEVER commit build outputs or generated packages**: Block `build/`, `build-linux/`, `.staging/`, `arcore/apps/*.arapp`, and `lib/*.a`.
-- ❌ **NEVER bypass the AROS HAL in application code**: Direct OS calls like `fork()`, `execvp()`, `CreateProcessW()`, `pthread_create()`, or `CreateThread()` are prohibited outside `src/ALRIOS/arkernel/os/`. Always use `aros_hal.h`.
+- ❌ **NEVER bypass the AROS HAL in application code**: Direct OS calls like `fork()`, `execvp()`, `CreateProcessW()`, `pthread_create()`, or `CreateThread()` are prohibited outside `src/platform/hal/`. Always use `aros_hal.h`.
 - ❌ **NEVER introduce blocking socket operations without timeouts**: Network sockets must enforce `O_NONBLOCK` and evaluate granular timeouts to prevent thread exhaustion.
 - ❌ **NEVER ignore return codes from HAL memory or process routines**: Always check return values of `ar_process_spawn()` and `ar_socket_create()`.
 

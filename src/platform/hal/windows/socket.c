@@ -1,0 +1,100 @@
+/* ====================================================================
+ * Copyright (c) 2026 ALRI Development. All rights reserved.
+ * Proprietary and confidential. Unauthorized copying is prohibited.
+ * ==================================================================== */
+#include "hal_private.h"
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <stdint.h>
+#include <string.h>
+#include <errno.h>
+
+int os_socket_reuseaddr(int fd, int enable) {
+    BOOL opt = enable ? TRUE : FALSE;
+    return setsockopt((SOCKET)fd, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt, sizeof(opt));
+}
+
+int os_socket_create(int type) {
+    static int wsock_inited = 0;
+    if (!wsock_inited) {
+        WSADATA wsa;
+        if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return -1;
+        wsock_inited = 1;
+    }
+    SOCKET s = socket(AF_INET, type, 0);
+    if (s == INVALID_SOCKET) return -1;
+    BOOL nodelay = TRUE;
+    setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (const char *)&nodelay, sizeof(nodelay));
+    return (int)s;
+}
+
+int os_socket_bind(int fd, const char *addr, uint16_t port) {
+    struct sockaddr_in sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons(port);
+    sa.sin_addr.s_addr = inet_addr(addr);
+    if (sa.sin_addr.s_addr == INADDR_NONE) return -EINVAL;
+    if (bind((SOCKET)fd, (struct sockaddr *)&sa, sizeof(sa)) == SOCKET_ERROR) return -1;
+    return 0;
+}
+
+int os_socket_listen(int fd, int backlog) {
+    if (listen((SOCKET)fd, backlog) == SOCKET_ERROR) return -1;
+    return 0;
+}
+
+int os_socket_accept(int fd) {
+    SOCKET client = accept((SOCKET)fd, NULL, NULL);
+    if (client == INVALID_SOCKET) return -1;
+    return (int)client;
+}
+
+int os_socket_connect(int fd, const char *addr, uint16_t port) {
+    struct sockaddr_in sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons(port);
+    sa.sin_addr.s_addr = inet_addr(addr);
+    if (sa.sin_addr.s_addr == INADDR_NONE) return -EINVAL;
+    if (connect((SOCKET)fd, (struct sockaddr *)&sa, sizeof(sa)) == SOCKET_ERROR) return -1;
+    return 0;
+}
+
+int os_socket_send(int fd, const void *data, size_t len) {
+    int sent = send((SOCKET)fd, data, (int)len, 0);
+    if (sent == SOCKET_ERROR) return -1;
+    return sent;
+}
+
+int os_socket_recv(int fd, void *buf, size_t len) {
+    int received = recv((SOCKET)fd, buf, (int)len, 0);
+    if (received == SOCKET_ERROR) return -1;
+    return received;
+}
+
+int os_socket_set_nonblock(int fd) {
+    u_long mode = 1;
+    return ioctlsocket((SOCKET)fd, FIONBIO, &mode);
+}
+
+int os_socket_set_recv_timeout(int fd, int timeout_ms) {
+    DWORD tv = (DWORD)timeout_ms;
+    return setsockopt((SOCKET)fd, SOL_SOCKET, SO_RCVTIMEO,
+                      (const char *)&tv, sizeof(tv)) == 0 ? 0 : -1;
+}
+
+int os_socket_set_timeouts(int fd, int timeout_sec) {
+    DWORD tv = (DWORD)(timeout_sec * 1000);
+    if (setsockopt((SOCKET)fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof(tv)) < 0) {
+        return -1;
+    }
+    if (setsockopt((SOCKET)fd, SOL_SOCKET, SO_SNDTIMEO, (const char *)&tv, sizeof(tv)) < 0) {
+        return -1;
+    }
+    return 0;
+}
+
+void os_socket_close(int fd) {
+    closesocket((SOCKET)fd);
+}

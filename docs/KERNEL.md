@@ -1,6 +1,6 @@
 # ARKernel — Operating System Hardware Abstraction Layer (HAL)
 
-The **ARKernel** module (`src/ALRIOS/arkernel/`) isolates low-level platform code (Windows Win32 vs Linux POSIX) behind unified, cross-platform APIs defined in `aros_hal.h`.
+The **ARKernel** module (`src/platform/kernel/`) isolates low-level platform code (Windows Win32 vs Linux POSIX) behind unified, cross-platform APIs defined in `aros_hal.h`.
 
 ---
 

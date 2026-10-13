@@ -200,7 +200,7 @@ Banned libc functions rejected:
 
     # Default targets if none provided
     if not args.paths:
-        default_candidates = ["src/commands/arcc", "src/ALRIOS", "src/installer", "src/daemons"]
+        default_candidates = ["src/platform", "src/libraries", "src/daemons", "src/commands"]
         targets = [c for c in default_candidates if os.path.exists(c)]
         if not targets:
             targets = ["src"]
