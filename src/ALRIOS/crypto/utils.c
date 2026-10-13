@@ -51,6 +51,9 @@ uint32_t alrios_crypto_capabilities(void) {
 #if defined(ALRIOS_HAVE_ML_DSA_65)
     capabilities |= ALRIOS_CRYPTO_CAP_ML_DSA_65;
 #endif
+#if defined(ALRIOS_HAVE_ML_KEM_768)
+    capabilities |= ALRIOS_CRYPTO_CAP_ML_KEM_768;
+#endif
     return capabilities;
 }
 

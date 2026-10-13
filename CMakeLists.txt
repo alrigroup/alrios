@@ -23,6 +23,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore")
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 
+include(cmake/CryptoProviders.cmake)
+
 enable_testing()
 
 add_subdirectory(src/ALRIOS/arkernel)

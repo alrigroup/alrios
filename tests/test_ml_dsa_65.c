@@ -17,6 +17,7 @@ int main(void) {
 
 #if defined(ALRIOS_HAVE_ML_DSA_65)
     int result = alrios_ml_dsa_65_verify(public_key, digest, signature);
+    (void)result;
     assert(result == ALRIOS_CRYPTO_ERR_INVALID_KEY ||
            result == ALRIOS_CRYPTO_ERR_BAD_SIG_PQC ||
            result == ALRIOS_CRYPTO_ERR_INTERNAL);
