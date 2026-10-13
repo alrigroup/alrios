@@ -204,13 +204,15 @@ target_link_libraries(arvault_store PUBLIC arcrypto OpenSSL::Crypto)
 # 7. araudit (Append-Only Cryptographic Audit Chain)
 add_library(araudit STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/audit/hash_chain.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/audit/forwarder.c
 )
 set_property(TARGET araudit PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(araudit PUBLIC
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/alrios
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
 )
-target_link_libraries(araudit PUBLIC OpenSSL::Crypto)
+target_link_libraries(araudit PUBLIC OpenSSL::Crypto OpenSSL::SSL arkernel arcrypto)
 
 # 9. areventbus (In-Memory Event Broker)
 add_library(areventbus STATIC

@@ -31,4 +31,15 @@ add_subdirectory(src/ALRIOS/arkernel)
 add_subdirectory(src/ALRIOS/core)
 add_subdirectory(src/tools)
 add_subdirectory(src/installer)
+
+add_executable(ar_auditd
+    src/daemons/ar_auditd/main.c
+)
+target_include_directories(ar_auditd PRIVATE
+    include
+    include/alrios
+    src/ALRIOS/arkernel/os/include
+)
+target_link_libraries(ar_auditd PRIVATE araudit arkernel arcrypto OpenSSL::Crypto OpenSSL::SSL)
+
 add_subdirectory(tests)
