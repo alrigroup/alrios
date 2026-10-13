@@ -1387,6 +1387,10 @@ static void test_null_and_bounds_checking(void) {
     CHECK(alrios_ml_dsa_65_sign_msg(NULL, dig, sizeof(dig), sig) == ALRIOS_CRYPTO_ERR_NULL_PTR);
     CHECK(alrios_ml_dsa_65_sign_msg(sk, NULL, sizeof(dig), sig) == ALRIOS_CRYPTO_ERR_NULL_PTR);
     CHECK(alrios_ml_dsa_65_sign_msg(sk, dig, sizeof(dig), NULL) == ALRIOS_CRYPTO_ERR_NULL_PTR);
+    CHECK(alrios_ml_dsa_65_sign_ctx(sk, dig, sizeof(dig), NULL, 1U, 1, sig) ==
+          ALRIOS_CRYPTO_ERR_INVALID_KEY);
+    CHECK(alrios_ml_dsa_65_verify_ctx(pk, dig, sizeof(dig), NULL, 1U, sig) ==
+          ALRIOS_CRYPTO_ERR_INVALID_KEY);
     CHECK(alrios_ml_dsa_65_sign_ctx(sk, dig, sizeof(dig), oversized_ctx, 256U, 1, sig) ==
           ALRIOS_CRYPTO_ERR_INVALID_KEY);
 

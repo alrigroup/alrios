@@ -174,7 +174,8 @@ int alrios_ml_dsa_65_sign_ctx(
     if (!msg && msg_len > 0U) {
         return ALRIOS_CRYPTO_ERR_NULL_PTR;
     }
-    if (context_len > ML_DSA_65_CONTEXT_MAX_LEN) {
+    if ((!context && context_len > 0U) ||
+        context_len > ML_DSA_65_CONTEXT_MAX_LEN) {
         return ALRIOS_CRYPTO_ERR_INVALID_KEY;
     }
 
@@ -281,7 +282,8 @@ int alrios_ml_dsa_65_verify_ctx(
     if (!msg && msg_len > 0U) {
         return ALRIOS_CRYPTO_ERR_NULL_PTR;
     }
-    if (context_len > ML_DSA_65_CONTEXT_MAX_LEN) {
+    if ((!context && context_len > 0U) ||
+        context_len > ML_DSA_65_CONTEXT_MAX_LEN) {
         return ALRIOS_CRYPTO_ERR_INVALID_KEY;
     }
 
