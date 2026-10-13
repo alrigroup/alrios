@@ -128,6 +128,21 @@ int ar_hotreload_deploy(const char *app_name, const char *arapp_path, char *out_
         return -2;
     }
 
+    {
+        char policy_reason[160];
+        int policy_result = loader_policy_evaluate_package(
+            resolved_pkg, policy_reason, sizeof(policy_reason));
+        if (policy_result != ALRIOS_POLICY_OK) {
+            if (out_log && out_log_size > 0) {
+                snprintf(out_log, out_log_size,
+                         "ERR: Package rejected by execution profile (rc=%d, %s)",
+                         policy_result,
+                         policy_reason[0] ? policy_reason : "fail-closed");
+            }
+            return -8;
+        }
+    }
+
     hotreload_lock();
     hotreload_app_context_t *ctx = find_or_create_context(app_name);
     if (!ctx) {

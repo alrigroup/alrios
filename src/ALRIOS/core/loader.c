@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 
 #define RST "\033[0m"
 #define RED "\033[31m"
@@ -45,6 +46,7 @@ static int temp_dir_count = 0;
 
 static ar_supervisor_t g_supervisor_ctx;
 static int g_supervisor_ctx_ready = 0;
+static alrios_supervisor_policy_t *g_execution_policy = NULL;
 
 static void ensure_supervisor_context(void) {
     if (!g_supervisor_ctx_ready) {
@@ -57,6 +59,38 @@ static void ensure_supervisor_context(void) {
 ar_supervisor_t *loader_get_supervisor_context(void) {
     ensure_supervisor_context();
     return &g_supervisor_ctx;
+}
+
+int loader_policy_initialize(alrios_profile_t profile,
+                             const char *trust_directory) {
+    if (g_execution_policy) return ALRIOS_POLICY_ERR_IMMUTABLE;
+    return alrios_supervisor_policy_startup_with_trust(
+        &g_execution_policy, profile, trust_directory);
+}
+
+void loader_policy_shutdown(void) {
+    alrios_supervisor_policy_shutdown(g_execution_policy);
+    g_execution_policy = NULL;
+}
+
+int loader_policy_get_profile(alrios_profile_t *out_profile) {
+    if (!g_execution_policy) return ALRIOS_POLICY_ERR_STATE;
+    return alrios_supervisor_policy_get_profile(g_execution_policy,
+                                                out_profile);
+}
+
+int loader_policy_set_profile(alrios_profile_t profile) {
+    if (!g_execution_policy) return ALRIOS_POLICY_ERR_STATE;
+    return alrios_supervisor_policy_set_profile(g_execution_policy, profile);
+}
+
+int loader_policy_evaluate_package(const char *package_path,
+                                   char *reason_buf,
+                                   size_t reason_len) {
+    if (!g_execution_policy) return ALRIOS_POLICY_ERR_STATE;
+    return alrios_supervisor_policy_evaluate_package(
+        g_execution_policy, package_path, (uint64_t)time(NULL),
+        reason_buf, reason_len);
 }
 
 #define apps (loader_get_supervisor_context()->apps)
@@ -76,13 +110,18 @@ static void app_unlock(void) {
     if (app_mutex) ar_mutex_unlock(app_mutex);
 }
 
-static loader_app_t *app_register(const ar_app_manifest_t *m, const char *app_dir) {
-    if (!m) return NULL;
+static loader_app_t *app_register(const ar_app_manifest_t *m,
+                                  const char *app_dir,
+                                  const char *package_path) {
+    if (!m || !package_path) return NULL;
     app_lock();
     for (int i = 0; i < app_count; i++) {
         if (strcmp(apps[i].name, m->name) == 0) {
             strncpy(apps[i].dir, app_dir, sizeof(apps[i].dir) - 1);
             apps[i].dir[sizeof(apps[i].dir) - 1] = '\0';
+            strncpy(apps[i].package_path, package_path,
+                    sizeof(apps[i].package_path) - 1);
+            apps[i].package_path[sizeof(apps[i].package_path) - 1] = '\0';
             apps[i].m = *m;
             app_unlock();
             return &apps[i];
@@ -93,6 +132,7 @@ static loader_app_t *app_register(const ar_app_manifest_t *m, const char *app_di
     memset(a, 0, sizeof(*a));
     snprintf(a->name, sizeof(a->name), "%s", m->name);
     snprintf(a->dir, sizeof(a->dir), "%s", app_dir);
+    snprintf(a->package_path, sizeof(a->package_path), "%s", package_path);
     a->m = *m;
     a->state = APP_STOPPED;
     app_unlock();
@@ -551,6 +591,21 @@ static int parse_extracted_manifest(const char *app_dir, ar_app_manifest_t *m) {
 }
 
 static void loader_spawn(loader_app_t *a) {
+    char policy_reason[160];
+    int policy_result;
+
+    if (!a || a->package_path[0] == '\0') return;
+    policy_result = loader_policy_evaluate_package(
+        a->package_path, policy_reason, sizeof(policy_reason));
+    if (policy_result != ALRIOS_POLICY_OK) {
+        a->pid = 0;
+        a->state = APP_CRASHED;
+        alri_printf("    " RED "x" RST " Policy rejected " BLD "%s" RST
+                    " (rc=%d, %s)\n", a->name, policy_result,
+                    policy_reason[0] ? policy_reason : "fail-closed");
+        return;
+    }
+
     if (a->m.requires_count > 0) {
         int missing = 0;
         for (int i = 0; i < a->m.requires_count; i++) {
@@ -587,7 +642,9 @@ static void loader_spawn(loader_app_t *a) {
     }
 }
 
-static void process_app(const char *app_dir, int phase) {
+static void process_app(const char *app_dir,
+                        const char *package_path,
+                        int phase) {
     ar_app_manifest_t m;
     if (parse_extracted_manifest(app_dir, &m) != 0) {
         if (phase == 0) {
@@ -622,9 +679,11 @@ static void process_app(const char *app_dir, int phase) {
     if (phase == 1) {
         if (m.service_count > 0) {
             alri_printf("    " DIM "├─" RST " " BLD "%-20s" RST " (" CYN "native" RST ")", m.name);
-            loader_app_t *a = app_register(&m, app_dir);
-            if (a) a->is_native_service = 1;
-            load_native(&m, app_dir, a);
+            loader_app_t *a = app_register(&m, app_dir, package_path);
+            if (a) {
+                a->is_native_service = 1;
+                loader_spawn(a);
+            }
         }
         return;
     }
@@ -646,7 +705,7 @@ static void process_app(const char *app_dir, int phase) {
         }
         alri_printf("    " DIM "├─" RST " " BLD "%-20s" RST " (" CYN "%s" RST ")", m.name, rt_str);
 
-        loader_app_t *a = app_register(&m, app_dir);
+        loader_app_t *a = app_register(&m, app_dir, package_path);
         if (!a) { alri_printf(" " RED "x" RST " registry full\n"); return; }
         if (g_refresh_scan) {
             alri_printf(" " DIM "(list updated)" RST "\n");
@@ -916,7 +975,7 @@ static void scan_arapp_file(const char *arapp_path, const char *apps_dir,
     app_name[sizeof(app_name) - 1] = '\0';
     char *dot2 = strrchr(app_name, '.');
     if (dot2) *dot2 = '\0';
-    process_app(cache_dir, phase);
+    process_app(cache_dir, arapp_path, phase);
 }
 
 static int is_dir_path(const char *path) {
@@ -1058,7 +1117,18 @@ int loader_start_app(const char *name) {
     loader_app_t *a = loader_find_app(name);
     if (!a) return -1;
     if (a->is_native_service) {
+        char policy_reason[160];
+        int policy_result;
+
         if (ar_svc_status(name) == SVC_RUNNING) return 0;
+        policy_result = loader_policy_evaluate_package(
+            a->package_path, policy_reason, sizeof(policy_reason));
+        if (policy_result != ALRIOS_POLICY_OK) {
+            alri_printf("    " RED "x" RST " Policy rejected " BLD "%s" RST
+                        " (rc=%d, %s)\n", a->name, policy_result,
+                        policy_reason[0] ? policy_reason : "fail-closed");
+            return -1;
+        }
         return (ar_svc_start(name) == 0) ? 0 : -1;
     }
     if (a->state == APP_RUNNING) return 0;
@@ -1114,8 +1184,16 @@ int loader_stop_app(const char *name) {
 int loader_restart_app(const char *name) {
     loader_app_t *a = loader_find_app(name);
     if (!a) return -1;
-    if (a->is_native_service)
+    if (a->is_native_service) {
+        char policy_reason[160];
+
+        if (loader_policy_evaluate_package(a->package_path, policy_reason,
+                                           sizeof(policy_reason)) !=
+            ALRIOS_POLICY_OK) {
+            return -1;
+        }
         return (ar_svc_restart(name) == 0) ? 0 : -1;
+    }
     loader_stop_app(name);
     ar_sleep_ms(100);
     return loader_start_app(name);

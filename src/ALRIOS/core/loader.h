@@ -6,6 +6,9 @@
 #define AR_LOADER_H
 
 #include "arapp_parser.h"
+#include "alrios/supervisor/policy.h"
+
+#include <stddef.h>
 
 #define AR_MAX_APPS 64
 
@@ -18,6 +21,7 @@ typedef enum {
 typedef struct {
     char name[AR_APP_NAME_MAX];
     char dir[1024];
+    char package_path[1024];
     ar_app_manifest_t m;
     int pid;
     loader_app_state_t state;
@@ -35,6 +39,14 @@ typedef struct ar_supervisor {
 } ar_supervisor_t;
 
 ar_supervisor_t *loader_get_supervisor_context(void);
+
+int loader_policy_initialize(alrios_profile_t profile, const char *trust_directory);
+void loader_policy_shutdown(void);
+int loader_policy_get_profile(alrios_profile_t *out_profile);
+int loader_policy_set_profile(alrios_profile_t profile);
+int loader_policy_evaluate_package(const char *package_path,
+                                   char *reason_buf,
+                                   size_t reason_len);
 
 void loader_get_apps_dir(char *buf, int size);
 void loader_get_run_dir(char *buf, int size);

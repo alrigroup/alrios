@@ -123,6 +123,7 @@ static void spinner_done(const char *msg, const char *result_color,
 }
 
 static volatile int running = 1;
+static int policy_initialized = 0;
 
 static void handle_signal(int sig) {
   (void)sig;
@@ -133,6 +134,48 @@ static void cleanup_and_exit(void) {
   loader_stop_all();
   ar_process_group_destroy(loader_get_proc_group());
   loader_cleanup_temp();
+  if (policy_initialized) {
+    loader_policy_shutdown();
+    policy_initialized = 0;
+  }
+}
+
+static int initialize_execution_policy(void) {
+  const char *configured_profile = getenv("ALRIOS_PROFILE");
+  const char *trust_directory = getenv("ALRIOS_TRUST_DIR");
+  alrios_profile_t profile;
+  char default_trust_directory[1024];
+  int result;
+
+  if (!configured_profile || configured_profile[0] == '\0') {
+    configured_profile = "enterprise";
+  }
+  if (alrios_profile_parse(configured_profile, &profile) != 0) {
+    fprintf(stderr, "Invalid ALRIOS_PROFILE: %s\n", configured_profile);
+    return -1;
+  }
+  if (!trust_directory || trust_directory[0] == '\0') {
+    loader_get_base_dir(default_trust_directory,
+                        (int)sizeof(default_trust_directory));
+    if (strlen(default_trust_directory) + strlen("/trust") + 1U >=
+        sizeof(default_trust_directory)) {
+      return -1;
+    }
+    strcat(default_trust_directory, "/trust");
+    trust_directory = default_trust_directory;
+  }
+
+  result = loader_policy_initialize(profile, trust_directory);
+  if (result != ALRIOS_POLICY_OK) {
+    fprintf(stderr,
+            "Execution policy startup failed closed (profile=%s, rc=%d)\n",
+            alrios_profile_name(profile), result);
+    return -1;
+  }
+  policy_initialized = 1;
+  alri_printf("  " GRN "✓" RST " Execution profile " CYN "%s" RST
+              " sealed\n", alrios_profile_name(profile));
+  return 0;
 }
 
 int main(void) {
@@ -160,6 +203,10 @@ int main(void) {
   loader_set_temp_dir(run_dir);
 
   loader_cleanup_temp();
+
+  if (initialize_execution_policy() != 0) {
+    return 1;
+  }
 
   /*
    * Drop root privileges immediately when started via sudo.

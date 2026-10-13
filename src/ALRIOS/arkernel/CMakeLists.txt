@@ -188,7 +188,7 @@ target_include_directories(arsupervisor_policy PUBLIC
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/alrios
 )
-target_link_libraries(arsupervisor_policy PUBLIC arpolicy arcrypto)
+target_link_libraries(arsupervisor_policy PUBLIC arpolicy arpackage arpki arcrypto)
 
 # 16. arvault_store (Encrypted Host Vault Store & Secret Injection)
 add_library(arvault_store STATIC

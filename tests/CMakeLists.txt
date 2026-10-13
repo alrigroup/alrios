@@ -182,6 +182,38 @@ set_target_properties(test_profile_enforcement PROPERTIES
 )
 add_test(NAME test_profile_enforcement COMMAND test_profile_enforcement)
 
+add_executable(test_supervisor_runtime_policy
+    integration/policy/test_supervisor_runtime_policy.c
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core/loader.c
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core/ar_path.c
+)
+target_include_directories(test_supervisor_runtime_policy PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/include
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/os/include
+    ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
+    ${CMAKE_SOURCE_DIR}/src/tools
+)
+target_link_libraries(test_supervisor_runtime_policy PRIVATE
+    arsupervisor_policy
+    arpackage
+    arpki
+    arkernel
+    arlog
+    ararchive
+    armanifest
+    arvault_legacy
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    Threads::Threads
+    ${CMAKE_DL_LIBS}
+)
+set_target_properties(test_supervisor_runtime_policy PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_supervisor_runtime_policy COMMAND test_supervisor_runtime_policy)
+
 add_executable(test_loader_injection integration/vault/test_loader_injection.c)
 target_link_libraries(test_loader_injection PRIVATE arvault_store arcrypto OpenSSL::Crypto)
 set_target_properties(test_loader_injection PROPERTIES
