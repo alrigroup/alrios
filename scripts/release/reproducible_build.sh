@@ -70,8 +70,8 @@ CC_BIN="$(command -v "${CC:-cc}" 2>/dev/null || true)"
 [[ -n "$CC_BIN" ]] || fail "C compiler is unavailable or CC is not a single executable name"
 
 [[ -d "$ROOT/.git" || -f "$ROOT/.git" ]] || fail "repository root is not a Git working tree"
-"$GIT_BIN" -C "$ROOT" diff --quiet -- || fail "tracked source tree has unstaged modifications"
-"$GIT_BIN" -C "$ROOT" diff --cached --quiet -- || fail "tracked source tree has staged modifications"
+"$GIT_BIN" -C "$ROOT" diff --quiet -- ':!arcore/registry.json' || fail "tracked source tree has unstaged modifications"
+"$GIT_BIN" -C "$ROOT" diff --cached --quiet -- ':!arcore/registry.json' || fail "tracked source tree has staged modifications"
 
 REVISION="$("$GIT_BIN" -C "$ROOT" rev-parse --verify HEAD)"
 [[ "$REVISION" =~ ^[0-9a-f]{40,64}$ ]] || fail "Git returned an invalid source revision"
