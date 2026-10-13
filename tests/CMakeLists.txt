@@ -452,4 +452,52 @@ if(ALRIOS_ENABLE_FUZZING)
         -fsanitize=fuzzer,address,undefined
         -fno-omit-frame-pointer
     )
+
+    add_executable(fuzz_manifest fuzz/fuzz_manifest.c)
+    target_link_libraries(fuzz_manifest PRIVATE armanifest)
+    target_include_directories(fuzz_manifest PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/arcore/include)
+    target_compile_options(fuzz_manifest PRIVATE
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer
+    )
+    target_link_options(fuzz_manifest PRIVATE
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer
+    )
+
+    add_executable(fuzz_crash_report fuzz/fuzz_crash_report.c)
+    target_link_libraries(fuzz_crash_report PRIVATE arsensitive_mem arcrypto OpenSSL::Crypto)
+    target_include_directories(fuzz_crash_report PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_options(fuzz_crash_report PRIVATE
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer
+    )
+    target_link_options(fuzz_crash_report PRIVATE
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer
+    )
+
+    add_executable(fuzz_security_epoch fuzz/fuzz_security_epoch.c)
+    target_link_libraries(fuzz_security_epoch PRIVATE arsecurity_epoch OpenSSL::Crypto)
+    target_include_directories(fuzz_security_epoch PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_options(fuzz_security_epoch PRIVATE
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer
+    )
+    target_link_options(fuzz_security_epoch PRIVATE
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer
+    )
+
+    add_executable(fuzz_ipc_wire fuzz/fuzz_ipc_wire.c)
+    target_link_libraries(fuzz_ipc_wire PRIVATE aripc_v2)
+    target_include_directories(fuzz_ipc_wire PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_options(fuzz_ipc_wire PRIVATE
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer
+    )
+    target_link_options(fuzz_ipc_wire PRIVATE
+        -fsanitize=fuzzer,address,undefined
+        -fno-omit-frame-pointer
+    )
 endif()

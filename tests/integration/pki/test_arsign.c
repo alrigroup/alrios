@@ -383,17 +383,36 @@ static void test_certificate_chain_notarization(void) {
     alrios_trust_store_clear(&store);
 }
 
+#ifndef _WIN32
+static int run_process(char *const argv[]) {
+    pid_t pid = fork();
+    if (pid < 0) {
+        return -1;
+    }
+    if (pid == 0) {
+        /* Desabilitar leak detection herdada sob ptrace/sanitizer */
+        (void)setenv("ASAN_OPTIONS", "detect_leaks=0", 1);
+        (void)setenv("LSAN_OPTIONS", "detect_leaks=0", 1);
+        execv(argv[0], argv);
+        _exit(127);
+    }
+    int status = 0;
+    if (waitpid(pid, &status, 0) != pid) {
+        return -1;
+    }
+    return (WIFEXITED(status)) ? WEXITSTATUS(status) : 255;
+}
+#endif
+
 static void test_arsign_cli_fail_closed(void) {
     char priv_path[1024];
     char pub_path[1024];
     char payload_path[1024];
     char sig_path[1024];
-    char cmd[8192];
     uint8_t pubkey[ED25519_PUBLIC_KEY_LEN];
     uint8_t payload[] = "arsign CLI strict parser and raw-key downgrade negative test";
     EVP_PKEY *pkey = generate_test_ed25519_key(pubkey);
     const char *arsign_path = NULL;
-    int rc;
 
     (void)printf("[TEST] Testing arsign CLI fail-closed parsing and strict raw-key rejection...\n");
 
@@ -413,44 +432,55 @@ static void test_arsign_cli_fail_closed(void) {
     }
     TEST_ASSERT(access(arsign_path, X_OK) == 0);
 
-    TEST_ASSERT(snprintf(cmd, sizeof(cmd), "'%s' sign --key '%s' --in '%s' --out '%s'",
-                         arsign_path, priv_path, payload_path, sig_path) > 0);
-    rc = system(cmd);
-    TEST_ASSERT(rc != -1);
-    TEST_ASSERT(WIFEXITED(rc) && WEXITSTATUS(rc) == 0);
+    {
+        char *const argv[] = {
+            (char *)(uintptr_t)arsign_path, "sign", "--key", priv_path,
+            "--in", payload_path, "--out", sig_path, NULL
+        };
+        TEST_ASSERT(run_process(argv) == 0);
+    }
 
-    TEST_ASSERT(snprintf(cmd, sizeof(cmd), "'%s' sign --key '%s' --in '%s' --out '%s' --policy=pqc",
-                         arsign_path, priv_path, payload_path, sig_path) > 0);
-    rc = system(cmd);
-    TEST_ASSERT(rc != -1);
-    TEST_ASSERT(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0);
+    {
+        char *const argv[] = {
+            (char *)(uintptr_t)arsign_path, "sign", "--key", priv_path,
+            "--in", payload_path, "--out", sig_path, "--policy=pqc", NULL
+        };
+        TEST_ASSERT(run_process(argv) != 0);
+    }
 
-    TEST_ASSERT(snprintf(cmd, sizeof(cmd), "'%s' sign --key '%s' --in '%s' --out '%s' --policy",
-                         arsign_path, priv_path, payload_path, sig_path) > 0);
-    rc = system(cmd);
-    TEST_ASSERT(rc != -1);
-    TEST_ASSERT(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0);
+    {
+        char *const argv[] = {
+            (char *)(uintptr_t)arsign_path, "sign", "--key", priv_path,
+            "--in", payload_path, "--out", sig_path, "--policy", NULL
+        };
+        TEST_ASSERT(run_process(argv) != 0);
+    }
 
-    TEST_ASSERT(snprintf(cmd, sizeof(cmd), "'%s' sign --key '%s' --key '%s' --in '%s' --out '%s'",
-                         arsign_path, priv_path, priv_path, payload_path, sig_path) > 0);
-    rc = system(cmd);
-    TEST_ASSERT(rc != -1);
-    TEST_ASSERT(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0);
+    {
+        char *const argv[] = {
+            (char *)(uintptr_t)arsign_path, "sign", "--key", priv_path,
+            "--key", priv_path, "--in", payload_path, "--out", sig_path, NULL
+        };
+        TEST_ASSERT(run_process(argv) != 0);
+    }
 
-    TEST_ASSERT(snprintf(cmd, sizeof(cmd), "'%s' verify --key '%s' --in '%s' --sig '%s' --policy strict",
-                         arsign_path, pub_path, payload_path, sig_path) > 0);
-    rc = system(cmd);
-    TEST_ASSERT(rc != -1);
-    TEST_ASSERT(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0);
+    {
+        char *const argv[] = {
+            (char *)(uintptr_t)arsign_path, "verify", "--key", pub_path,
+            "--in", payload_path, "--sig", sig_path, "--policy", "strict", NULL
+        };
+        TEST_ASSERT(run_process(argv) != 0);
+    }
 
-    TEST_ASSERT(snprintf(cmd, sizeof(cmd), "'%s' sign --key '%s' --in '%s' --out /dev/full",
-                         arsign_path, priv_path, payload_path) > 0);
-    rc = system(cmd);
-    TEST_ASSERT(rc != -1);
-    TEST_ASSERT(!WIFEXITED(rc) || WEXITSTATUS(rc) != 0);
+    {
+        char *const argv[] = {
+            (char *)(uintptr_t)arsign_path, "sign", "--key", priv_path,
+            "--in", payload_path, "--out", "/dev/full", NULL
+        };
+        TEST_ASSERT(run_process(argv) != 0);
+    }
 #else
-    (void)cmd;
-    (void)rc;
+    (void)arsign_path;
 #endif
 
     EVP_PKEY_free(pkey);
@@ -533,12 +563,10 @@ static void test_arsign_sign_arapp_cli(void) {
     char priv_path[1024];
     char in_pkg_path[1024];
     char out_pkg_path[1024];
-    char cmd[8192];
     uint8_t pubkey[ED25519_PUBLIC_KEY_LEN];
     EVP_PKEY *pkey = generate_test_ed25519_key(pubkey);
     const char *arsign_path = NULL;
     uint8_t mock_header[ALRIOS_ARAPP_V2_HEADER_SIZE + 64U];
-    int rc;
 
     (void)printf("[TEST] Testing arsign sign-arapp CLI invocation...\n");
 
@@ -560,14 +588,14 @@ static void test_arsign_sign_arapp_cli(void) {
     }
     TEST_ASSERT(access(arsign_path, X_OK) == 0);
 
-    TEST_ASSERT(snprintf(cmd, sizeof(cmd), "'%s' sign-arapp --key '%s' --in '%s' --out '%s'",
-                         arsign_path, priv_path, in_pkg_path, out_pkg_path) > 0);
-    rc = system(cmd);
-    TEST_ASSERT(rc != -1);
-    TEST_ASSERT(WIFEXITED(rc) && WEXITSTATUS(rc) == 0);
+    {
+        char *const argv[] = {
+            (char *)(uintptr_t)arsign_path, "sign-arapp", "--key", priv_path,
+            "--in", in_pkg_path, "--out", out_pkg_path, NULL
+        };
+        TEST_ASSERT(run_process(argv) == 0);
+    }
 #else
-    (void)cmd;
-    (void)rc;
     (void)arsign_path;
 #endif
 

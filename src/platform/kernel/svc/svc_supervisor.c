@@ -18,6 +18,7 @@ int ar_supervisor_set_strategy(int strategy) {
     if (strategy < STRATEGY_ONEFORONE || strategy > STRATEGY_TEMPORARY)
         return -1;
     current_strategy = (supervisor_strategy_t)strategy;
+    (void)current_strategy;
     return 0;
 }
 

@@ -64,13 +64,26 @@ static void join_path_or_die(char *out, size_t out_cap, const char *dir, const c
     out[dir_len + 1U + name_len] = '\0';
 }
 
-static int run_command(const char *cmd) {
-    /* Desabilitar leak detection herdada ao invocar subprocessos de teste sob ptrace/sanitizer */
-    char full_cmd[16384 + 64];
-    snprintf(full_cmd, sizeof(full_cmd), "ASAN_OPTIONS=detect_leaks=0 LSAN_OPTIONS=detect_leaks=0 %s", cmd);
-    int rc = system(full_cmd);
-    CHECK(rc != -1);
-    return (WIFEXITED(rc)) ? WEXITSTATUS(rc) : 255;
+static int run_armake_build(const char *armake_bin, const char *src_dir, const char *out_pkg) {
+    pid_t pid = fork();
+    CHECK(pid >= 0);
+    if (pid == 0) {
+        /* Desabilitar leak detection herdada ao invocar subprocessos de teste sob ptrace/sanitizer */
+        (void)setenv("ASAN_OPTIONS", "detect_leaks=0", 1);
+        (void)setenv("LSAN_OPTIONS", "detect_leaks=0", 1);
+        char *const argv[] = {
+            (char *)(uintptr_t)armake_bin,
+            "build",
+            (char *)(uintptr_t)src_dir,
+            (char *)(uintptr_t)out_pkg,
+            NULL
+        };
+        execv(armake_bin, argv);
+        _exit(127);
+    }
+    int status = 0;
+    CHECK(waitpid(pid, &status, 0) == pid);
+    return (WIFEXITED(status)) ? WEXITSTATUS(status) : 255;
 }
 
 static void verify_meaningful_key_boundary(void) {
@@ -127,7 +140,6 @@ static void verify_armake_real_packaging_boundary(void) {
     char key_file[4096];
     char output_ok[4096];
     char output_bad[4096];
-    char cmd[16384];
 
     CHECK(armake != NULL && armake[0] != '\0');
     CHECK(base != NULL);
@@ -140,13 +152,11 @@ static void verify_armake_real_packaging_boundary(void) {
     write_or_die(payload, "payload");
     write_or_die(key_file, "secret-key-material");
     write_or_die(manifest, "{\"name\":\"probe\",\"version\":\"1.0\",\"entry\":\"payload.bin\",\"files\":[\"payload.bin\"]}");
-    CHECK(snprintf(cmd, sizeof(cmd), "'%s' build '%s' '%s'", armake, base, output_ok) > 0);
-    CHECK(run_command(cmd) == 0);
+    CHECK(run_armake_build(armake, base, output_ok) == 0);
     CHECK(try_read_file(output_ok) == 0);
 
     write_or_die(manifest, "{\"name\":\"probe\",\"version\":\"1.0\",\"entry\":\"payload.bin\",\"files\":[\"key.pem\"]}");
-    CHECK(snprintf(cmd, sizeof(cmd), "'%s' build '%s' '%s'", armake, base, output_bad) > 0);
-    CHECK(run_command(cmd) != 0);
+    CHECK(run_armake_build(armake, base, output_bad) != 0);
     CHECK(try_read_file(output_bad) != 0);
 }
 #endif

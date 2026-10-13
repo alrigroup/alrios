@@ -40,11 +40,14 @@ static const char *skip_ws(const char *p) {
 
 static const char *parse_string(const char *p, char *out, int max) {
     p = skip_ws(p);
-    if (*p != '"') return NULL;
+    if (!p || *p != '"') return NULL;
     p++;
     const char *start = p;
     while (*p && *p != '"') {
-        if (*p == '\\') p++;
+        if (*p == '\\') {
+            p++;
+            if (!*p) return NULL;
+        }
         p++;
     }
     if (*p != '"') return NULL;
@@ -57,10 +60,14 @@ static const char *parse_string(const char *p, char *out, int max) {
 
 static const char *skip_value(const char *p) {
     p = skip_ws(p);
+    if (!p || !*p) return NULL;
     if (*p == '"') {
         p++;
         while (*p && *p != '"') {
-            if (*p == '\\') p++;
+            if (*p == '\\') {
+                p++;
+                if (!*p) return NULL;
+            }
             p++;
         }
         if (*p == '"') p++;
@@ -70,11 +77,23 @@ static const char *skip_value(const char *p) {
         int depth = 1;
         p++;
         while (*p && depth > 0) {
+            if (*p == '"') {
+                p++;
+                while (*p && *p != '"') {
+                    if (*p == '\\') {
+                        p++;
+                        if (!*p) return NULL;
+                    }
+                    p++;
+                }
+                if (*p == '"') p++;
+                continue;
+            }
             if (*p == '{' || *p == '[') depth++;
             else if (*p == '}' || *p == ']') depth--;
             if (depth > 0) p++;
         }
-        if (*p) p++;
+        if (depth > 0) return NULL;
         return p;
     }
     while (*p && *p != ',' && *p != '}' && *p != ']' && *p != '\n')
@@ -126,13 +145,16 @@ int ar_manifest_parse(const char *json, ar_app_manifest_t *out) {
         if (*p != ':') return -1;
         p++;
 
-        if (strcmp(key, "name") == 0)
+        if (strcmp(key, "name") == 0) {
             p = parse_string(p, out->name, AR_APP_NAME_MAX);
-        else if (strcmp(key, "version") == 0)
+            if (!p) return -1;
+        } else if (strcmp(key, "version") == 0) {
             p = parse_string(p, out->version, AR_APP_VERSION_MAX);
-        else if (strcmp(key, "runtime") == 0) {
+            if (!p) return -1;
+        } else if (strcmp(key, "runtime") == 0) {
             char buf[AR_RUNTIME_MAX];
             p = parse_string(p, buf, AR_RUNTIME_MAX);
+            if (!p) return -1;
             if (strcmp(buf, "native") == 0)
                 out->runtime = AR_RUNTIME_NATIVE;
             else if (strcmp(buf, "python3") == 0)
@@ -148,18 +170,23 @@ int ar_manifest_parse(const char *json, ar_app_manifest_t *out) {
             else if (strcmp(buf, "go") == 0)
                 out->runtime = AR_RUNTIME_GO;
         }
-        else if (strcmp(key, "entry") == 0)
+        else if (strcmp(key, "entry") == 0) {
             p = parse_string(p, out->entry, AR_ENTRY_MAX);
-        else if (strcmp(key, "bin") == 0)
+            if (!p) return -1;
+        } else if (strcmp(key, "bin") == 0) {
             p = parse_string(p, out->bin, AR_FILE_PATH_MAX);
-        else if (strcmp(key, "is_runtime") == 0)
+            if (!p) return -1;
+        } else if (strcmp(key, "is_runtime") == 0) {
             p = parse_bool(p, &out->is_runtime);
+            if (!p) return -1;
+        }
         else if (strcmp(key, "requires") == 0) {
             p = skip_ws(p);
-            if (*p != '[') return -1;
+            if (!p || *p != '[') return -1;
             p++;
             while (*p) {
                 p = skip_ws(p);
+                if (!p) return -1;
                 if (*p == ']') { p++; break; }
                 if (*p == ',') { p++; continue; }
                 char *req = out->requires[out->requires_count];
@@ -172,16 +199,30 @@ int ar_manifest_parse(const char *json, ar_app_manifest_t *out) {
         }
         else if (strcmp(key, "platforms") == 0) {
             p = skip_ws(p);
+            if (!p) return -1;
             if (*p == '{') {
                 int depth = 1;
                 const char *start = p;
                 p++;
                 while (*p && depth > 0) {
+                    if (*p == '"') {
+                        p++;
+                        while (*p && *p != '"') {
+                            if (*p == '\\') {
+                                p++;
+                                if (!*p) return -1;
+                            }
+                            p++;
+                        }
+                        if (*p == '"') p++;
+                        continue;
+                    }
                     if (*p == '{') depth++;
                     else if (*p == '}') depth--;
                     if (depth > 0) p++;
                 }
-                if (*p) p++;
+                if (depth > 0 || !*p) return -1;
+                p++;
                 int len = (int)(p - start);
                 if (len >= AR_PLATFORM_RAW_MAX)
                     len = AR_PLATFORM_RAW_MAX - 1;
@@ -193,10 +234,11 @@ int ar_manifest_parse(const char *json, ar_app_manifest_t *out) {
         }
         else if (strcmp(key, "files") == 0) {
             p = skip_ws(p);
-            if (*p != '[') return -1;
+            if (!p || *p != '[') return -1;
             p++;
             while (*p) {
                 p = skip_ws(p);
+                if (!p) return -1;
                 if (*p == ']') { p++; break; }
                 if (*p == ',') { p++; continue; }
                 char *file = out->files[out->file_count];
@@ -209,10 +251,11 @@ int ar_manifest_parse(const char *json, ar_app_manifest_t *out) {
         }
         else if (strcmp(key, "files_windows") == 0) {
             p = skip_ws(p);
-            if (*p != '[') return -1;
+            if (!p || *p != '[') return -1;
             p++;
             while (*p) {
                 p = skip_ws(p);
+                if (!p) return -1;
                 if (*p == ']') { p++; break; }
                 if (*p == ',') { p++; continue; }
                 char *file = out->files_windows[out->files_windows_count];
@@ -225,10 +268,11 @@ int ar_manifest_parse(const char *json, ar_app_manifest_t *out) {
         }
         else if (strcmp(key, "files_linux") == 0) {
             p = skip_ws(p);
-            if (*p != '[') return -1;
+            if (!p || *p != '[') return -1;
             p++;
             while (*p) {
                 p = skip_ws(p);
+                if (!p) return -1;
                 if (*p == ']') { p++; break; }
                 if (*p == ',') { p++; continue; }
                 char *file = out->files_linux[out->files_linux_count];
@@ -241,10 +285,11 @@ int ar_manifest_parse(const char *json, ar_app_manifest_t *out) {
         }
         else if (strcmp(key, "services") == 0) {
             p = skip_ws(p);
-            if (*p != '[') return -1;
+            if (!p || *p != '[') return -1;
             p++;
             while (*p) {
                 p = skip_ws(p);
+                if (!p) return -1;
                 if (*p == ']') { p++; break; }
                 if (*p == ',') { p++; continue; }
 
@@ -255,6 +300,7 @@ int ar_manifest_parse(const char *json, ar_app_manifest_t *out) {
 
                 while (*p) {
                     p = skip_ws(p);
+                    if (!p) return -1;
                     if (*p == '}') { p++; break; }
                     if (*p == ',') { p++; continue; }
 
@@ -262,7 +308,7 @@ int ar_manifest_parse(const char *json, ar_app_manifest_t *out) {
                     p = parse_string(p, sk, sizeof(sk));
                     if (!p) return -1;
                     p = skip_ws(p);
-                    if (*p != ':') return -1;
+                    if (!p || *p != ':') return -1;
                     p++;
 
                     if (strcmp(sk, "name") == 0)
@@ -271,6 +317,7 @@ int ar_manifest_parse(const char *json, ar_app_manifest_t *out) {
                         p = parse_string(p, svc->entry, AR_ENTRY_MAX);
                     else
                         p = skip_value(p);
+                    if (!p) return -1;
                 }
 
                 if (svc->name[0])
@@ -297,9 +344,10 @@ int ar_manifest_parse(const char *json, ar_app_manifest_t *out) {
                     if (strcmp(bk, "command") == 0) {
                         /* Legado: build.command */
                         p = parse_string(p, out->build.command, sizeof(out->build.command));
-
+                        if (!p) return -1;
                     } else if (strcmp(bk, "staging") == 0) {
                         p = parse_string(p, out->build.staging, sizeof(out->build.staging));
+                        if (!p) return -1;
 
                     } else if (strcmp(bk, "cleanup") == 0) {
                         /* build.cleanup: array de strings */
@@ -369,6 +417,7 @@ int ar_manifest_parse(const char *json, ar_app_manifest_t *out) {
         else {
             p = skip_value(p);
         }
+        if (!p) return -1;
     }
 
     return 0;
@@ -417,6 +466,7 @@ int ar_manifest_get_platform_entry(const ar_app_manifest_t *m,
                 } else {
                     p = skip_value(p);
                 }
+                if (!p) return -1;
             }
 
             if (strcmp(key, platform) == 0 && entry_val[0]) {
@@ -426,6 +476,7 @@ int ar_manifest_get_platform_entry(const ar_app_manifest_t *m,
         } else {
             p = skip_value(p);
         }
+        if (!p) return -1;
     }
 
     return -1;
