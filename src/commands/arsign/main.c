@@ -10,6 +10,7 @@
 #include "alrios/pki/notary.h"
 #include "alrios/pki/issuer.h"
 #include "alrios/crypto_verify.h"
+#include "arapp_sign.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,6 +22,7 @@ static void print_usage(void) {
     (void)printf("  arsign sign --key <key_file> --in <file> --out <sig_file> [--policy <default|strict>]\n");
     (void)printf("  arsign verify --key <key_file_or_cert> --in <file> --sig <sig_file> [--policy <default|strict>]\n");
     (void)printf("  arsign verify-chain --leaf <leaf.bin> --inter <inter.bin> --root <root.bin> --in <file> --sig <sig_file>\n");
+    (void)printf("  arsign sign-arapp --key <key_file> --in <arapp_file> [--out <output_file>] [--leaf <leaf.bin> --inter <inter.bin> --root <root.bin>]\n");
     (void)printf("  arsign status\n");
 }
 
@@ -477,6 +479,10 @@ int main(int argc, char **argv) {
 
         (void)printf("[OK] Certificate chain and notary signature verified successfully\n");
         return 0;
+    }
+
+    if (strcmp(cmd, "sign-arapp") == 0) {
+        return arsign_cmd_sign_arapp(argc, argv);
     }
 
     print_usage();

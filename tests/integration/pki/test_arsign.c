@@ -9,6 +9,7 @@
 
 #include "alrios/pki/notary.h"
 #include "alrios/pki/issuer.h"
+#include "alrios/package/arapp_v2.h"
 #include "alrios/crypto_verify.h"
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
@@ -528,6 +529,54 @@ static void test_key_file_io(void) {
     (void)remove(rsa_path);
 }
 
+static void test_arsign_sign_arapp_cli(void) {
+    char priv_path[1024];
+    char in_pkg_path[1024];
+    char out_pkg_path[1024];
+    char cmd[8192];
+    uint8_t pubkey[ED25519_PUBLIC_KEY_LEN];
+    EVP_PKEY *pkey = generate_test_ed25519_key(pubkey);
+    const char *arsign_path = NULL;
+    uint8_t mock_header[ALRIOS_ARAPP_V2_HEADER_SIZE + 64U];
+    int rc;
+
+    (void)printf("[TEST] Testing arsign sign-arapp CLI invocation...\n");
+
+    make_unique_temp_path(priv_path, sizeof(priv_path), "arapp_priv.key");
+    make_unique_temp_path(in_pkg_path, sizeof(in_pkg_path), "in.arapp");
+    make_unique_temp_path(out_pkg_path, sizeof(out_pkg_path), "out.arapp");
+
+    TEST_ASSERT(alrios_notary_save_private_key_raw(priv_path, pkey) == ALRIOS_NOTARY_OK);
+
+    memset(mock_header, 0, sizeof(mock_header));
+    memcpy(mock_header, "ALRIGROUP@ARAPP", 15U);
+    mock_header[16U] = 0U; mock_header[17U] = 2U; /* version 2 be */
+    write_exact_file(in_pkg_path, mock_header, sizeof(mock_header));
+
+#ifndef _WIN32
+    arsign_path = getenv("ALRIOS_ARSIGN_BIN");
+    if (!arsign_path || arsign_path[0] == '\0') {
+        arsign_path = "/home/alexsanderalri/ALRIGROUP/code-space/alrios/arcore/arsign";
+    }
+    TEST_ASSERT(access(arsign_path, X_OK) == 0);
+
+    TEST_ASSERT(snprintf(cmd, sizeof(cmd), "'%s' sign-arapp --key '%s' --in '%s' --out '%s'",
+                         arsign_path, priv_path, in_pkg_path, out_pkg_path) > 0);
+    rc = system(cmd);
+    TEST_ASSERT(rc != -1);
+    TEST_ASSERT(WIFEXITED(rc) && WEXITSTATUS(rc) == 0);
+#else
+    (void)cmd;
+    (void)rc;
+    (void)arsign_path;
+#endif
+
+    EVP_PKEY_free(pkey);
+    (void)remove(priv_path);
+    (void)remove(in_pkg_path);
+    (void)remove(out_pkg_path);
+}
+
 int main(void) {
     (void)printf("=====================================================\n");
     (void)printf("  ALRIOS MP-003: Isolated arsign Notary & Policy Test\n");
@@ -540,6 +589,7 @@ int main(void) {
     test_certificate_chain_notarization();
     test_arsign_cli_fail_closed();
     test_key_file_io();
+    test_arsign_sign_arapp_cli();
 
     (void)printf("[PASS] TASK-MP-003: Isolated arsign Notary & Algorithm Policy verified\n");
     return 0;

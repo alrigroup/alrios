@@ -65,6 +65,15 @@ extern "C" {
 #define ALRIOS_ARAPP_V2_ERR_PADDING        -3010
 #define ALRIOS_ARAPP_V2_ERR_MEMORY         -3011
 
+#define ALRIOS_ARAPP_V2_SIG_OK               0
+#define ALRIOS_ARAPP_V2_SIG_ERR_ARGUMENT    -3101
+#define ALRIOS_ARAPP_V2_SIG_ERR_KEY         -3102
+#define ALRIOS_ARAPP_V2_SIG_ERR_SIGN        -3103
+#define ALRIOS_ARAPP_V2_SIG_ERR_VERIFY      -3104
+#define ALRIOS_ARAPP_V2_SIG_ERR_POLICY      -3105
+#define ALRIOS_ARAPP_V2_SIG_ERR_TAMPERED    -3106
+#define ALRIOS_ARAPP_V2_SIG_ERR_UNAVAILABLE -3107
+
 /*
  * V2 wire integers are big-endian. The view borrows data from the input buffer,
  * which must remain alive and unchanged while any returned pointer is in use.
@@ -98,6 +107,41 @@ int alrios_arapp_v2_validate(
     uint64_t now,
     uint64_t max_clock_skew,
     alrios_arapp_v2_view_t *out_view
+);
+
+struct evp_pkey_st;
+typedef struct evp_pkey_st EVP_PKEY;
+
+int alrios_arapp_v2_sign_ed25519(
+    uint8_t *package,
+    size_t package_len,
+    EVP_PKEY *ed25519_key
+);
+
+int alrios_arapp_v2_verify_ed25519(
+    const uint8_t *package,
+    size_t package_len,
+    EVP_PKEY *ed25519_pubkey
+);
+
+int alrios_arapp_v2_sign_ml_dsa_65(
+    uint8_t *package,
+    size_t package_len,
+    EVP_PKEY *ml_dsa_key
+);
+
+int alrios_arapp_v2_verify_ml_dsa_65(
+    const uint8_t *package,
+    size_t package_len,
+    EVP_PKEY *ml_dsa_pubkey
+);
+
+int alrios_arapp_v2_verify_hybrid(
+    const uint8_t *package,
+    size_t package_len,
+    EVP_PKEY *ed25519_pubkey,
+    EVP_PKEY *ml_dsa_pubkey,
+    int require_pqc
 );
 
 #ifdef __cplusplus

@@ -24,34 +24,26 @@
     } \
 } while (0)
 
-/* External functions from arapp_v2_signatures.c */
-int alrios_arapp_v2_sign_ed25519(uint8_t *package, size_t package_len,
-                                  EVP_PKEY *ed25519_key);
-int alrios_arapp_v2_verify_ed25519(const uint8_t *package, size_t package_len,
-                                    EVP_PKEY *ed25519_pubkey);
-int alrios_arapp_v2_sign_ml_dsa_65(uint8_t *package, size_t package_len,
-                                    EVP_PKEY *ml_dsa_key);
-int alrios_arapp_v2_verify_ml_dsa_65(const uint8_t *package, size_t package_len,
-                                      EVP_PKEY *ml_dsa_pubkey);
-int alrios_arapp_v2_verify_hybrid(const uint8_t *package, size_t package_len,
-                                   EVP_PKEY *ed25519_pubkey,
-                                   EVP_PKEY *ml_dsa_pubkey,
-                                   int require_pqc);
+#define SIG_OK        ALRIOS_ARAPP_V2_SIG_OK
+#define SIG_ERR_ARG   ALRIOS_ARAPP_V2_SIG_ERR_ARGUMENT
+#define SIG_TAMPERED  ALRIOS_ARAPP_V2_SIG_ERR_TAMPERED
 
-#define SIG_OK        0
-#define SIG_ERR_ARG  -3101
-#define SIG_TAMPERED -3106
-
-static void write_u16_le(uint8_t *o, uint16_t v) {
-    o[0]=(uint8_t)v; o[1]=(uint8_t)(v>>8U);
+static void write_u16_be(uint8_t *o, uint16_t v) {
+    o[0] = (uint8_t)(v >> 8U);
+    o[1] = (uint8_t)v;
 }
-static void write_u32_le(uint8_t *o, uint32_t v) {
-    o[0]=(uint8_t)v; o[1]=(uint8_t)(v>>8U);
-    o[2]=(uint8_t)(v>>16U); o[3]=(uint8_t)(v>>24U);
+static void write_u32_be(uint8_t *o, uint32_t v) {
+    o[0] = (uint8_t)(v >> 24U);
+    o[1] = (uint8_t)(v >> 16U);
+    o[2] = (uint8_t)(v >> 8U);
+    o[3] = (uint8_t)v;
 }
-static void write_u64_le(uint8_t *o, uint64_t v) {
-    write_u32_le(o,(uint32_t)v);
-    write_u32_le(o+4U,(uint32_t)(v>>32U));
+static void write_u64_be(uint8_t *o, uint64_t v) {
+    size_t index;
+    for (index = 8U; index > 0U; --index) {
+        o[index - 1U] = (uint8_t)v;
+        v >>= 8U;
+    }
 }
 
 static uint8_t *make_test_package(const char *manifest, size_t *out_len) {
@@ -60,16 +52,16 @@ static uint8_t *make_test_package(const char *manifest, size_t *out_len) {
     uint8_t *p = calloc(total, 1U);
     CHECK(p != NULL);
     memcpy(p, "ALRIGROUP@ARAPP", 15U);
-    write_u16_le(p+16U, ALRIOS_ARAPP_V2_VERSION);
-    write_u16_le(p+18U, ALRIOS_ARAPP_V2_ARCH_X86_64);
-    write_u32_le(p+20U, ALRIOS_ARAPP_V2_FLAG_PROFILE_ENTERPRISE |
+    write_u16_be(p+16U, ALRIOS_ARAPP_V2_VERSION);
+    write_u16_be(p+18U, ALRIOS_ARAPP_V2_ARCH_X86_64);
+    write_u32_be(p+20U, ALRIOS_ARAPP_V2_FLAG_PROFILE_ENTERPRISE |
                          ALRIOS_ARAPP_V2_FLAG_RING_DEVMODE |
                          ALRIOS_ARAPP_V2_FLAG_PQC_HYBRID_SIG);
-    write_u64_le(p+24U, 1000U);
-    write_u64_le(p+32U, 2000U);
-    write_u32_le(p+40U, ALRIOS_ARAPP_V2_HEADER_SIZE);
-    write_u32_le(p+44U, (uint32_t)mlen);
-    write_u64_le(p+48U, 0U);
+    write_u64_be(p+24U, 1000U);
+    write_u64_be(p+32U, 2000U);
+    write_u32_be(p+40U, ALRIOS_ARAPP_V2_HEADER_SIZE);
+    write_u32_be(p+44U, (uint32_t)mlen);
+    write_u64_be(p+48U, 0U);
     memcpy(p + ALRIOS_ARAPP_V2_HEADER_SIZE, manifest, mlen);
     *out_len = total;
     return p;
@@ -170,10 +162,71 @@ static void test_ml_dsa_sign_verify(void) {
 }
 #endif
 
+#include "alrios/pki/issuer.h"
+
+static void test_certificate_chain_verification(void) {
+    EVP_PKEY *root_pkey = NULL;
+    alrios_certificate_t root_cert;
+    uint8_t root_wire[ALRIOS_CERTIFICATE_WIRE_MAX];
+    size_t root_wire_len = 0U;
+    EVP_PKEY *inter_pkey = NULL;
+    alrios_certificate_t inter_cert;
+    uint8_t inter_wire[ALRIOS_CERTIFICATE_WIRE_MAX];
+    size_t inter_wire_len = 0U;
+    EVP_PKEY *leaf_pkey = NULL;
+    alrios_certificate_t leaf_cert;
+    uint8_t leaf_wire[ALRIOS_CERTIFICATE_WIRE_MAX];
+    size_t leaf_wire_len = 0U;
+    alrios_trust_store_t store;
+    uint64_t current_time;
+    uint8_t *pkg;
+    size_t pkg_len;
+
+    CHECK(alrios_pki_issue_root("alrios.root.test", 365, &root_pkey,
+                                &root_cert, root_wire, sizeof(root_wire),
+                                &root_wire_len) == 0);
+    alrios_trust_store_init(&store);
+    CHECK(alrios_trust_store_add_anchor(&store, &root_cert) == 0);
+    CHECK(alrios_trust_store_seal(&store) == 0);
+
+    CHECK(alrios_pki_issue_intermediate("alrios.inter.test", 90,
+                                        &root_cert, root_pkey, &inter_pkey,
+                                        &inter_cert, inter_wire, sizeof(inter_wire),
+                                        &inter_wire_len) == 0);
+
+    CHECK(alrios_pki_issue_leaf("com.alrigroup.test.app", 30,
+                                &inter_cert, inter_pkey, &leaf_pkey,
+                                &leaf_cert, leaf_wire, sizeof(leaf_wire),
+                                &leaf_wire_len) == 0);
+
+    current_time = leaf_cert.not_before + 10ULL;
+    CHECK(alrios_pki_verify_chain(&store, &leaf_cert, &inter_cert, current_time) == ALRIOS_ISSUER_OK);
+
+    pkg = make_test_package("{\"cert\":true}", &pkg_len);
+    CHECK(alrios_arapp_v2_sign_ed25519(pkg, pkg_len, leaf_pkey) == SIG_OK);
+    CHECK(alrios_arapp_v2_verify_ed25519(pkg, pkg_len, leaf_pkey) == SIG_OK);
+
+    /* Tampering with signed bytes fails verification */
+    pkg[pkg_len - 1U] ^= 0x55U;
+    CHECK(alrios_arapp_v2_verify_ed25519(pkg, pkg_len, leaf_pkey) == SIG_TAMPERED);
+
+    /* Tampered certificate in chain must fail verification */
+    alrios_certificate_t tampered_leaf = leaf_cert;
+    tampered_leaf.signature[5] ^= 0xFFU;
+    CHECK(alrios_pki_verify_chain(&store, &tampered_leaf, &inter_cert, current_time) != ALRIOS_ISSUER_OK);
+
+    free(pkg);
+    alrios_trust_store_clear(&store);
+    EVP_PKEY_free(root_pkey);
+    EVP_PKEY_free(inter_pkey);
+    EVP_PKEY_free(leaf_pkey);
+}
+
 int main(void) {
     test_null_arguments();
     test_ed25519_sign_verify();
     test_hybrid_policy();
+    test_certificate_chain_verification();
 #if defined(ALRIOS_HAVE_ML_DSA_65)
     test_ml_dsa_sign_verify();
 #endif
