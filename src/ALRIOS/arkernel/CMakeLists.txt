@@ -167,7 +167,49 @@ target_include_directories(arpackage PUBLIC
 )
 target_link_libraries(arpackage PUBLIC arpki)
 
-# 7. ardeploy (Zero-Downtime Deployment, SCM_RIGHTS, Symlinks & Deltas)
+# 7. araudit (Append-Only Cryptographic Audit Chain)
+add_library(araudit STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/audit/hash_chain.c
+)
+set_property(TARGET araudit PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(araudit PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(araudit PUBLIC OpenSSL::Crypto)
+
+# 9. areventbus (In-Memory Event Broker)
+add_library(areventbus STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/events/broker.c
+)
+set_property(TARGET areventbus PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(areventbus PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+
+# 10. arresources (PSI Memory Pressure Monitor)
+add_library(arresources STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/resources/psi.c
+)
+set_property(TARGET arresources PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arresources PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+
+# 11. arindex (Package Index)
+add_library(arindex STATIC
+    ${CMAKE_SOURCE_DIR}/src/libraries/package/index.c
+)
+set_property(TARGET arindex PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arindex PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(arindex PUBLIC OpenSSL::Crypto)
+
+# 12. ardeploy (Zero-Downtime Deployment, SCM_RIGHTS, Symlinks & Deltas)
 add_library(ardeploy STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/fd_pass.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/atomic_swap.c

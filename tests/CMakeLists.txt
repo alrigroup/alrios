@@ -92,6 +92,33 @@ set_target_properties(test_arapp_v2_reader PROPERTIES
 )
 add_test(NAME test_arapp_v2_reader COMMAND test_arapp_v2_reader)
 
+add_executable(test_hash_chain unit/audit/test_hash_chain.c)
+target_link_libraries(test_hash_chain PRIVATE araudit OpenSSL::Crypto)
+set_target_properties(test_hash_chain PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_hash_chain COMMAND test_hash_chain)
+
+add_executable(test_pubsub integration/events/test_pubsub.c)
+target_link_libraries(test_pubsub PRIVATE areventbus)
+set_target_properties(test_pubsub PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_pubsub COMMAND test_pubsub)
+
+add_executable(test_memory_pressure integration/resources/test_memory_pressure.c)
+target_link_libraries(test_memory_pressure PRIVATE arresources)
+set_target_properties(test_memory_pressure PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${TEST_OUTPUT_DIR}"
+)
+add_test(NAME test_memory_pressure COMMAND test_memory_pressure)
+
 add_executable(test_ca_chain integration/pki/test_ca_chain.c)
 target_link_libraries(test_ca_chain PRIVATE arpki OpenSSL::Crypto)
 set_target_properties(test_ca_chain PROPERTIES
