@@ -97,9 +97,14 @@ add_custom_command(TARGET arkernel POST_BUILD
     COMMENT "Installing ALRIOS kernel SDK headers into arcore/include"
 )
 
-add_library(arsdk_core STATIC libraries/sdk/ar_sdk.c libraries/vault/vault.c)
+add_library(arvault STATIC libraries/vault/vault.c)
+alrios_pic(arvault)
+target_include_directories(arvault PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
+
+add_library(arsdk_core STATIC libraries/sdk/ar_sdk.c)
 alrios_pic(arsdk_core)
 target_include_directories(arsdk_core PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
+target_link_libraries(arsdk_core PUBLIC arvault)
 
 add_library(arcrypto STATIC
     libraries/crypto/utils.c
@@ -118,11 +123,19 @@ alrios_pic(arpolicy)
 target_include_directories(arpolicy PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
 target_link_libraries(arpolicy PUBLIC arcrypto)
 
-add_library(aripc_v2 STATIC
-    libraries/ipc/ipc_channel.c
-    libraries/ipc/epoll_multiplexer.c
-    libraries/ipc/http_serializer.c
-)
+set(ALRIOS_IPC_V2_SOURCES libraries/ipc/http_serializer.c)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    list(APPEND ALRIOS_IPC_V2_SOURCES
+        libraries/ipc/ipc_channel.c
+        libraries/ipc/epoll_multiplexer.c
+    )
+else()
+    list(APPEND ALRIOS_IPC_V2_SOURCES
+        libraries/ipc/ipc_channel_unsupported.c
+        libraries/ipc/epoll_multiplexer_unsupported.c
+    )
+endif()
+add_library(aripc_v2 STATIC ${ALRIOS_IPC_V2_SOURCES})
 alrios_pic(aripc_v2)
 target_include_directories(aripc_v2 PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
 
@@ -143,10 +156,21 @@ alrios_pic(arpackage)
 target_include_directories(arpackage PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
 target_link_libraries(arpackage PUBLIC arpki)
 
-add_library(arloader STATIC libraries/loader/sovereign_loader.c)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(ALRIOS_MEMLOADER_SOURCE libraries/loader/memloader.c)
+    set(ALRIOS_LOADER_SOURCE libraries/loader/sovereign_loader.c)
+else()
+    set(ALRIOS_MEMLOADER_SOURCE libraries/loader/memloader_unsupported.c)
+    set(ALRIOS_LOADER_SOURCE libraries/loader/sovereign_loader_unsupported.c)
+endif()
+add_library(armemloader STATIC ${ALRIOS_MEMLOADER_SOURCE})
+alrios_pic(armemloader)
+target_include_directories(armemloader PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
+
+add_library(arloader STATIC ${ALRIOS_LOADER_SOURCE})
 alrios_pic(arloader)
-target_include_directories(arloader PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
-target_link_libraries(arloader PUBLIC arpackage arcrypto OpenSSL::Crypto)
+target_include_directories(arloader PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}" "${ALRIOS_HAL_INCLUDE_DIR}")
+target_link_libraries(arloader PUBLIC arpackage arcrypto arhal OpenSSL::Crypto)
 
 add_library(arsupervisor_policy STATIC libraries/supervisor/policy.c)
 alrios_pic(arsupervisor_policy)
@@ -171,7 +195,12 @@ add_library(arresources STATIC libraries/resources/psi.c)
 alrios_pic(arresources)
 target_include_directories(arresources PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
 
-add_library(arsandbox_mounts STATIC libraries/sandbox/mounts.c)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(ALRIOS_SANDBOX_MOUNTS_SOURCE libraries/sandbox/mounts.c)
+else()
+    set(ALRIOS_SANDBOX_MOUNTS_SOURCE libraries/sandbox/mounts_unsupported.c)
+endif()
+add_library(arsandbox_mounts STATIC ${ALRIOS_SANDBOX_MOUNTS_SOURCE})
 alrios_pic(arsandbox_mounts)
 target_include_directories(arsandbox_mounts PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
 
@@ -180,36 +209,60 @@ alrios_pic(arindex)
 target_include_directories(arindex PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
 target_link_libraries(arindex PUBLIC OpenSSL::Crypto)
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(ALRIOS_FD_PASS_SOURCE libraries/deploy/fd_pass.c)
+    set(ALRIOS_HANDOVER_SOURCE libraries/supervisor/socket_handover.c)
+    set(ALRIOS_DRAIN_SOURCE libraries/deploy/drain.c)
+    set(ALRIOS_ATOMIC_SWAP_SOURCE libraries/deploy/atomic_swap.c)
+    set(ALRIOS_HOOK_SOURCES libraries/hooks/hooks_executor.c libraries/hooks/lifecycle.c)
+else()
+    set(ALRIOS_FD_PASS_SOURCE libraries/deploy/fd_pass_unsupported.c)
+    set(ALRIOS_HANDOVER_SOURCE libraries/supervisor/socket_handover_unsupported.c)
+    set(ALRIOS_DRAIN_SOURCE libraries/deploy/drain_unsupported.c)
+    set(ALRIOS_ATOMIC_SWAP_SOURCE libraries/deploy/atomic_swap_unsupported.c)
+    set(ALRIOS_HOOK_SOURCES libraries/hooks/hooks_unsupported.c)
+endif()
+
+add_library(arfds STATIC ${ALRIOS_FD_PASS_SOURCE})
+alrios_pic(arfds)
+target_include_directories(arfds PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
+
+add_library(arsocket_handover STATIC ${ALRIOS_HANDOVER_SOURCE})
+alrios_pic(arsocket_handover)
+target_include_directories(arsocket_handover PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
+
 add_library(ardeploy STATIC
-    libraries/deploy/fd_pass.c
-    libraries/deploy/atomic_swap.c
+    ${ALRIOS_ATOMIC_SWAP_SOURCE}
     libraries/deploy/arapp_index.c
     libraries/deploy/layering.c
-    libraries/deploy/drain.c
-    libraries/supervisor/socket_handover.c
+    ${ALRIOS_DRAIN_SOURCE}
 )
 alrios_pic(ardeploy)
-target_include_directories(ardeploy PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
-target_link_libraries(ardeploy PUBLIC arindex OpenSSL::Crypto)
+target_include_directories(ardeploy PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}" "${ALRIOS_HAL_INCLUDE_DIR}")
+target_link_libraries(ardeploy PUBLIC arindex arfds arsocket_handover arhal OpenSSL::Crypto)
 
-add_library(arhooks STATIC libraries/hooks/hooks_executor.c libraries/hooks/lifecycle.c)
+add_library(arhooks STATIC ${ALRIOS_HOOK_SOURCES})
 alrios_pic(arhooks)
 target_include_directories(arhooks PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}" "${ALRIOS_HAL_INCLUDE_DIR}")
-target_link_libraries(arhooks PUBLIC arkernel ardeploy)
+target_link_libraries(arhooks PUBLIC arkernel ardeploy arhal)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_library(arsandbox_linux STATIC
         libraries/sandbox/seccomp_filter.c
         libraries/sandbox/cgroups_init.c
         libraries/sandbox/ns_unshare.c
-        libraries/loader/memloader.c
     )
     alrios_pic(arsandbox_linux)
-    target_include_directories(arsandbox_linux PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
-    target_link_libraries(arsandbox_linux PUBLIC arsandbox_mounts)
+    target_include_directories(arsandbox_linux PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}" "${ALRIOS_HAL_INCLUDE_DIR}")
+    target_link_libraries(arsandbox_linux PUBLIC arsandbox_mounts armemloader arhal)
 endif()
 
-add_library(ardevmode_jail STATIC libraries/sandbox/devmode_jail.c)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(ALRIOS_DEVMODE_JAIL_SOURCE libraries/sandbox/devmode_jail.c)
+else()
+    set(ALRIOS_DEVMODE_JAIL_SOURCE libraries/sandbox/devmode_jail_unsupported.c)
+endif()
+add_library(ardevmode_jail STATIC ${ALRIOS_DEVMODE_JAIL_SOURCE})
 alrios_pic(ardevmode_jail)
 target_include_directories(ardevmode_jail PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
 target_link_libraries(ardevmode_jail PUBLIC arpolicy)
@@ -217,11 +270,18 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(ardevmode_jail PUBLIC arsandbox_linux)
 endif()
 
-add_library(arguest_channel STATIC libraries/ipc/guest_channel.c)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(ALRIOS_GUEST_CHANNEL_SOURCE libraries/ipc/guest_channel.c)
+    set(ALRIOS_GUEST_ROUTER_SOURCE libraries/supervisor/guest_router.c)
+else()
+    set(ALRIOS_GUEST_CHANNEL_SOURCE libraries/ipc/guest_channel_unsupported.c)
+    set(ALRIOS_GUEST_ROUTER_SOURCE libraries/supervisor/guest_router_unsupported.c)
+endif()
+add_library(arguest_channel STATIC ${ALRIOS_GUEST_CHANNEL_SOURCE})
 alrios_pic(arguest_channel)
 target_include_directories(arguest_channel PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
 
-add_library(arguest_router STATIC libraries/supervisor/guest_router.c)
+add_library(arguest_router STATIC ${ALRIOS_GUEST_ROUTER_SOURCE})
 alrios_pic(arguest_router)
 target_include_directories(arguest_router PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
 target_link_libraries(arguest_router PUBLIC arguest_channel)
@@ -244,6 +304,7 @@ target_link_libraries(arsensitive_mem PUBLIC arcrypto arkernel)
 add_library(arvault_legacy STATIC platform/core/vault_loader.c)
 alrios_pic(arvault_legacy)
 target_include_directories(arvault_legacy PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}" "${ALRIOS_CORE_DIR}")
+target_link_libraries(arvault_legacy PUBLIC arvault)
 
 add_library(arcore_runtime STATIC platform/core/loader.c platform/core/ar_path.c)
 alrios_pic(arcore_runtime)
@@ -258,14 +319,78 @@ target_link_libraries(arcore_runtime PUBLIC
     OpenSSL::SSL OpenSSL::Crypto Threads::Threads ${CMAKE_DL_LIBS}
 )
 
-add_library(arsdk INTERFACE)
-target_include_directories(arsdk INTERFACE "${ALRIOS_PUBLIC_INCLUDE_DIR}" "${ALRIOS_PLATFORM_INCLUDE_DIR}" "${ALRIOS_HAL_INCLUDE_DIR}")
-target_link_libraries(arsdk INTERFACE
-    arsdk_core arpolicy aripc_v2 arhooks ardeploy arcrypto arpki arsandbox_mounts ardevmode_jail arsdk_app
+set(ALRIOS_SDK_MODULE_TARGETS
+    arsdk_core arvault arpolicy aripc_v2 arhooks ardeploy arfds arsocket_handover
+    arcrypto arpki arsandbox_mounts ardevmode_jail arsdk_app arloader armemloader
+    arguest_channel arguest_router arpackage arindex arhal arkernel arlog arhal_isolation
 )
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_link_libraries(arsdk INTERFACE arsandbox_linux)
+    list(APPEND ALRIOS_SDK_MODULE_TARGETS arsandbox_linux)
 endif()
+
+set(ALRIOS_SDK_ARCHIVE_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/merge_arsdk_archives.cmake")
+file(WRITE "${ALRIOS_SDK_ARCHIVE_SCRIPT}" [=[
+if(NOT DEFINED OUTPUT OR NOT DEFINED AR OR NOT DEFINED RANLIB OR NOT DEFINED ARCHIVES)
+    message(FATAL_ERROR "Missing SDK archive merge arguments")
+endif()
+string(REPLACE "|" ";" ARCHIVES "${ARCHIVES}")
+file(REMOVE "${OUTPUT}")
+set(objects)
+set(index 0)
+foreach(archive IN LISTS ARCHIVES)
+    math(EXPR index "${index} + 1")
+    set(extract_dir "${OUTPUT}.objects/${index}")
+    file(REMOVE_RECURSE "${extract_dir}")
+    file(MAKE_DIRECTORY "${extract_dir}")
+    execute_process(COMMAND "${AR}" -x "${archive}"
+                    WORKING_DIRECTORY "${extract_dir}"
+                    RESULT_VARIABLE extract_result)
+    if(NOT extract_result EQUAL 0)
+        message(FATAL_ERROR "Failed to extract ${archive}")
+    endif()
+    file(GLOB extracted "${extract_dir}/*")
+    foreach(object IN LISTS extracted)
+        get_filename_component(object_name "${object}" NAME)
+        file(RENAME "${object}" "${extract_dir}/${index}_${object_name}")
+        list(APPEND objects "${extract_dir}/${index}_${object_name}")
+    endforeach()
+endforeach()
+execute_process(COMMAND "${AR}" qc "${OUTPUT}" ${objects} RESULT_VARIABLE archive_result)
+if(NOT archive_result EQUAL 0)
+    message(FATAL_ERROR "Failed to create ${OUTPUT}")
+endif()
+if(EXISTS "${RANLIB}")
+    execute_process(COMMAND "${RANLIB}" "${OUTPUT}" RESULT_VARIABLE ranlib_result)
+    if(NOT ranlib_result EQUAL 0)
+        message(FATAL_ERROR "Failed to index ${OUTPUT}")
+    endif()
+endif()
+file(REMOVE_RECURSE "${OUTPUT}.objects")
+]=])
+
+set(ALRIOS_SDK_ARCHIVES)
+foreach(module_target IN LISTS ALRIOS_SDK_MODULE_TARGETS)
+    list(APPEND ALRIOS_SDK_ARCHIVES "$<TARGET_FILE:${module_target}>")
+endforeach()
+string(JOIN "|" ALRIOS_SDK_ARCHIVES_ARG ${ALRIOS_SDK_ARCHIVES})
+set(ALRIOS_SDK_ARCHIVE "${CMAKE_SOURCE_DIR}/arcore/lib/${CMAKE_STATIC_LIBRARY_PREFIX}arsdk${CMAKE_STATIC_LIBRARY_SUFFIX}")
+add_custom_command(
+    OUTPUT "${ALRIOS_SDK_ARCHIVE}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/arcore/lib"
+    COMMAND ${CMAKE_COMMAND}
+        "-DOUTPUT=${ALRIOS_SDK_ARCHIVE}"
+        "-DAR=${CMAKE_AR}"
+        "-DRANLIB=${CMAKE_RANLIB}"
+        "-DARCHIVES=${ALRIOS_SDK_ARCHIVES_ARG}"
+        -P "${ALRIOS_SDK_ARCHIVE_SCRIPT}"
+    DEPENDS ${ALRIOS_SDK_MODULE_TARGETS}
+    COMMAND_EXPAND_LISTS
+    VERBATIM
+)
+add_custom_target(arsdk DEPENDS "${ALRIOS_SDK_ARCHIVE}")
+add_library(arsdk_modules INTERFACE)
+target_include_directories(arsdk_modules INTERFACE "${ALRIOS_PUBLIC_INCLUDE_DIR}" "${ALRIOS_PLATFORM_INCLUDE_DIR}" "${ALRIOS_HAL_INCLUDE_DIR}")
+target_link_libraries(arsdk_modules INTERFACE ${ALRIOS_SDK_MODULE_TARGETS})
 add_custom_target(arsdk_headers ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/arcore/include/alrios"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/include/alrios" "${CMAKE_SOURCE_DIR}/arcore/include/alrios"
@@ -316,7 +441,7 @@ target_link_libraries(arsign PRIVATE arpki arcrypto arpackage OpenSSL::Crypto)
 
 add_executable(arinstall commands/arinstall/main.c commands/arinstall/installer_core.c commands/arinstall/cli_ui.c)
 target_include_directories(arinstall PRIVATE commands/arinstall)
-target_link_libraries(arinstall PRIVATE ararchive armanifest)
+target_link_libraries(arinstall PRIVATE ararchive armanifest arhal)
 find_package(PkgConfig QUIET)
 if(UNIX AND PkgConfig_FOUND)
     pkg_check_modules(GTK3 gtk+-3.0)

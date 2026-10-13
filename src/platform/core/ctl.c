@@ -151,7 +151,10 @@ static void *accept_loop(void *arg) {
             ar_sleep_ms(50);
             continue;
         }
-        ar_socket_set_timeouts(client_fd, 5);
+        if (ar_socket_set_timeouts(client_fd, 5) != 0) {
+            ar_socket_close(client_fd);
+            continue;
+        }
         void *th = ar_thread_create(client_handler_loop, (void *)(intptr_t)client_fd);
         if (th) ar_thread_detach(th);
     }

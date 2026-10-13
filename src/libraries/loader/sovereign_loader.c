@@ -15,6 +15,7 @@
 #include "alrios/crypto_verify.h"
 #include "alrios/package/arapp_v2.h"
 #include "alrios/pki/issuer.h"
+#include "aros_hal.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -26,7 +27,6 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
 #ifndef MFD_CLOEXEC
@@ -317,7 +317,7 @@ int alrios_sovereign_execute_package(
     uint32_t policy_flags = require_pqc != 0 ?
         ALRIOS_SOVEREIGN_POLICY_REQUIRE_PQC : 0U;
     int memfd = -1;
-    pid_t pid;
+    int pid;
     int status;
     int result;
 
@@ -331,28 +331,13 @@ int alrios_sovereign_execute_package(
         return result;
     }
 
-    pid = fork();
+    pid = ar_process_spawn_fd(memfd, argv, envp, 0U);
+    (void)close(memfd);
     if (pid < 0) {
-        (void)close(memfd);
         return ALRIOS_SOVEREIGN_ERR_PLATFORM;
     }
-    if (pid == 0) {
-        char *default_argv[] = {(char *)"sovereign_app", NULL};
-        char *default_envp[] = {NULL};
-        char *const *exec_argv = argv ? argv : default_argv;
-        char *const *exec_envp = envp ? envp : default_envp;
-
-        fexecve(memfd, exec_argv, exec_envp);
-        _exit(127);
-    }
-
-    (void)close(memfd);
-    do {
-        result = waitpid(pid, &status, 0) < 0 ?
-            ALRIOS_SOVEREIGN_ERR_PLATFORM : ALRIOS_SOVEREIGN_OK;
-    } while (result != ALRIOS_SOVEREIGN_OK && errno == EINTR);
-    if (result != ALRIOS_SOVEREIGN_OK) {
-        return result;
+    if (ar_process_wait_raw(pid, &status) != 0) {
+        return ALRIOS_SOVEREIGN_ERR_PLATFORM;
     }
     *out_child_status = status;
     return ALRIOS_SOVEREIGN_OK;

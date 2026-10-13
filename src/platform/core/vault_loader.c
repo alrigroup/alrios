@@ -233,24 +233,6 @@ int alrios_vault_inject_envp(const vault_matrix_t *vault, char ***out_envp) {
     return VAULT_OK;
 }
 
-/* -----------------------------------------------------------------------
- * Securely release envp[]
- * ----------------------------------------------------------------------- */
-void alrios_vault_free_envp(char **envp, size_t entry_count) {
-    if (!envp) return;
-
-    for (size_t i = 0; i < entry_count; i++) {
-        if (envp[i]) {
-            size_t len = safe_strnlen(envp[i], VAULT_KEY_MAX + VAULT_VAL_MAX + 2);
-            secure_zeroize(envp[i], len);
-            free(envp[i]);
-            envp[i] = NULL;
-        }
-    }
-
-    free(envp);
-}
-
 #if defined(__GNUC__) || defined(__clang__)
 #  pragma GCC diagnostic pop
 #endif

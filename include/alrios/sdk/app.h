@@ -214,7 +214,11 @@ int ar_app_log(
     ar_app_log_level_t level,
     const char *fmt,
     ...
-) __attribute__((format(printf, 3, 4)));
+)
+#if defined(__GNUC__) || defined(__clang__)
+    __attribute__((format(printf, 3, 4)))
+#endif
+;
 
 int ar_app_vlog(
     ar_app_context_t *ctx,

@@ -6,6 +6,7 @@
 #endif
 
 #include "alrios/hooks.h"
+#include "aros_hal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,9 +15,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <signal.h>
 #include <time.h>
-#include <errno.h>
 
 #define ALRIOS_HOOK_MAX_PATH 1024
 #define ALRIOS_HOOK_DEFAULT_TIMEOUT_MS 5000
@@ -95,40 +94,22 @@ static void free_namelist(struct dirent **namelist, int count) {
 static int execute_single_hook(const char *hook_path, const alrios_hook_inv_t *inv, int abort_on_fail) {
     uint32_t timeout_ms = (inv->timeout_ms > 0) ? inv->timeout_ms : ALRIOS_HOOK_DEFAULT_TIMEOUT_MS;
 
-    pid_t pid = fork();
+    char env_stage[128];
+    char env_app[512];
+    char env_slot[ALRIOS_HOOK_MAX_PATH];
+    const char *stage_name = hook_stage_to_string(inv->stage);
+    if (!stage_name) stage_name = "unknown";
+    (void)snprintf(env_stage, sizeof(env_stage), "ALRIOS_HOOK_STAGE=%s", stage_name);
+    (void)snprintf(env_app, sizeof(env_app), "ALRIOS_APP_ID=%s", inv->app_id ? inv->app_id : "");
+    (void)snprintf(env_slot, sizeof(env_slot), "ALRIOS_SLOT_PATH=%s", inv->slot_path ? inv->slot_path : "");
+    char *child_envp[] = {env_stage, env_app, env_slot,
+                          "PATH=/usr/bin:/bin:/usr/sbin:/sbin", NULL};
+    char *child_argv[] = {(char *)(uintptr_t)hook_path, NULL};
+    int pid = ar_process_spawn(hook_path, child_argv, child_envp, NULL,
+                               AR_PROCESS_FLAG_NEW_GROUP |
+                               AR_PROCESS_FLAG_NO_NEW_PRIVS);
     if (pid < 0) {
         return abort_on_fail ? ALRIOS_HOOK_ERR_FAIL : ALRIOS_HOOK_OK;
-    }
-
-    if (pid == 0) {
-        char env_stage[128];
-        char env_app[512];
-        char env_slot[ALRIOS_HOOK_MAX_PATH];
-
-        const char *stage_name = hook_stage_to_string(inv->stage);
-        if (!stage_name) {
-            stage_name = "unknown";
-        }
-
-        (void)snprintf(env_stage, sizeof(env_stage), "ALRIOS_HOOK_STAGE=%s", stage_name);
-        (void)snprintf(env_app, sizeof(env_app), "ALRIOS_APP_ID=%s", inv->app_id ? inv->app_id : "");
-        (void)snprintf(env_slot, sizeof(env_slot), "ALRIOS_SLOT_PATH=%s", inv->slot_path ? inv->slot_path : "");
-
-        char *child_envp[] = {
-            env_stage,
-            env_app,
-            env_slot,
-            "PATH=/usr/bin:/bin:/usr/sbin:/sbin",
-            NULL
-        };
-
-        char *child_argv[] = {
-            (char *)(uintptr_t)hook_path,
-            NULL
-        };
-
-        execve(hook_path, child_argv, child_envp);
-        _exit(127);
     }
 
     struct timespec start_time;
@@ -142,15 +123,12 @@ static int execute_single_hook(const char *hook_path, const alrios_hook_inv_t *i
     int timed_out = 0;
 
     while (!child_done) {
-        pid_t r = waitpid(pid, &status, WNOHANG);
-        if (r == pid) {
+        int wait_result = ar_process_wait_raw_nohang(pid, &status);
+        if (wait_result > 0) {
             child_done = 1;
             break;
         }
-        if (r < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
+        if (wait_result < 0) {
             break;
         }
 
@@ -169,8 +147,9 @@ static int execute_single_hook(const char *hook_path, const alrios_hook_inv_t *i
     }
 
     if (timed_out) {
-        kill(pid, SIGKILL);
-        (void)waitpid(pid, &status, 0);
+        (void)ar_process_signal(pid, AR_PROCESS_SIGNAL_KILL, 1);
+        (void)ar_process_signal(pid, AR_PROCESS_SIGNAL_KILL, 0);
+        (void)ar_process_wait_raw(pid, &status);
         return ALRIOS_HOOK_ERR_TIMEOUT;
     }
 

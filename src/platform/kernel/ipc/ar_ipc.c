@@ -83,8 +83,11 @@ int ar_ipc_server_start(uint16_t port) {
     int fd = ar_socket_create(1);
     if (fd < 0) return -1;
 
-    ar_socket_reuseaddr(fd, 1);
-    ar_socket_set_timeouts(fd, 5);
+    if (ar_socket_reuseaddr(fd, 1) != 0 ||
+        ar_socket_set_timeouts(fd, 5) != 0) {
+        ar_socket_close(fd);
+        return -1;
+    }
 
     if (ar_socket_bind(fd, "127.0.0.1", port) < 0) {
         ar_socket_close(fd);
@@ -109,7 +112,10 @@ int ar_ipc_client_connect(const char *host, uint16_t port) {
     int fd = ar_socket_create(1);
     if (fd < 0) return -1;
 
-    ar_socket_set_timeouts(fd, 5);
+    if (ar_socket_set_timeouts(fd, 5) != 0) {
+        ar_socket_close(fd);
+        return -1;
+    }
 
     if (ar_socket_connect(fd, host, port) < 0) {
         ar_socket_close(fd);

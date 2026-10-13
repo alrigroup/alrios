@@ -8,7 +8,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <sys/types.h>
+#include "alrios/platform/types.h"
 
 #define ALRIOS_SANDBOX_OK                 0
 #define ALRIOS_SANDBOX_ERR_PRCTL_FAIL    -2001

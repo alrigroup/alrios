@@ -55,6 +55,11 @@ void alrios_vault_free_envp(char **envp, size_t count) {
     if (!envp) return;
     for (size_t i = 0; i < count; i++) {
         if (envp[i]) {
+            size_t length = strlen(envp[i]);
+            volatile unsigned char *bytes = (volatile unsigned char *)envp[i];
+            while (length > 0U) {
+                bytes[--length] = 0U;
+            }
             free(envp[i]);
         }
     }

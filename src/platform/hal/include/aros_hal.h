@@ -1,7 +1,11 @@
-/* ====================================================================
- * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
- * ==================================================================== */
+/*
+ * Copyright (c) 2026 ALRIGROUP and its affiliates.
+ * Engineered and maintained by ALRI Development.
+ *
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE
+ * found in the LICENSE file in the root directory of this source tree
+ * and at: https://github.com/alrigroup/licenses
+ */
 #ifndef AROS_HAL_H
 #define AROS_HAL_H
 
@@ -12,10 +16,43 @@ int ar_file_create(const char *directory, const char *filename, const char *cont
 int ar_file_delete(const char *path);
 int ar_file_exists(const char *path);
 
+#define AR_PROCESS_FLAG_SEARCH_PATH       (1U << 0)
+#define AR_PROCESS_FLAG_NEW_GROUP         (1U << 1)
+#define AR_PROCESS_FLAG_DETACHED          (1U << 2)
+#define AR_PROCESS_FLAG_NULL_STDIO        (1U << 3)
+#define AR_PROCESS_FLAG_CLOSE_EXTRA_FDS   (1U << 4)
+#define AR_PROCESS_FLAG_NO_NEW_PRIVS      (1U << 5)
+#define AR_PROCESS_FLAG_RAW_FD            (1U << 6)
+
+#define AR_PROCESS_SIGNAL_TERM 1
+#define AR_PROCESS_SIGNAL_KILL 2
+#define AR_PROCESS_SIGNAL_HUP  3
+#define AR_PROCESS_SIGNAL_NONE 4
+
 int ar_process_create(const char *path, char *const argv[]);
+int ar_process_spawn(const char *path,
+                     char *const argv[],
+                     char *const envp[],
+                     const char *working_directory,
+                     unsigned int flags);
+int ar_process_spawn_as(const char *path,
+                        char *const argv[],
+                        char *const envp[],
+                        const char *working_directory,
+                        unsigned int flags,
+                        unsigned long uid,
+                        unsigned long gid);
+int ar_process_spawn_fd(int executable_fd,
+                        char *const argv[],
+                        char *const envp[],
+                        unsigned int flags);
+int ar_process_run_callback(int (*callback)(void *), void *arg);
 int ar_process_wait(int pid);
+int ar_process_wait_raw(int pid, int *status);
+int ar_process_wait_raw_nohang(int pid, int *status);
 int ar_process_wait_nohang(int pid);
 int ar_process_wait_status(int pid, int *exit_code);
+int ar_process_signal(int pid, int signal_kind, int process_group);
 int ar_process_kill(int pid);
 int ar_process_self(void);
 

@@ -32,9 +32,53 @@ int ar_process_create(const char *path, char *const argv[]) {
     return os_process_create(path, argv);
 }
 
+int ar_process_spawn(const char *path,
+                     char *const argv[],
+                     char *const envp[],
+                     const char *working_directory,
+                     unsigned int flags) {
+    if (!path) return -EINVAL;
+    return os_process_spawn(path, argv, envp, working_directory, flags);
+}
+
+int ar_process_spawn_as(const char *path,
+                        char *const argv[],
+                        char *const envp[],
+                        const char *working_directory,
+                        unsigned int flags,
+                        unsigned long uid,
+                        unsigned long gid) {
+    if (!path) return -EINVAL;
+    return os_process_spawn_as(path, argv, envp, working_directory, flags,
+                               uid, gid);
+}
+
+int ar_process_spawn_fd(int executable_fd,
+                        char *const argv[],
+                        char *const envp[],
+                        unsigned int flags) {
+    if (executable_fd < 0) return -EINVAL;
+    return os_process_spawn_fd(executable_fd, argv, envp, flags);
+}
+
+int ar_process_run_callback(int (*callback)(void *), void *arg) {
+    if (!callback) return -EINVAL;
+    return os_process_run_callback(callback, arg);
+}
+
 int ar_process_wait(int pid) {
     if (pid <= 0) return -EINVAL;
     return os_process_wait(pid);
+}
+
+int ar_process_wait_raw(int pid, int *status) {
+    if (pid <= 0 || !status) return -EINVAL;
+    return os_process_wait_raw(pid, status);
+}
+
+int ar_process_wait_raw_nohang(int pid, int *status) {
+    if (pid <= 0 || !status) return -EINVAL;
+    return os_process_wait_raw_nohang(pid, status);
 }
 
 int ar_process_wait_nohang(int pid) {
@@ -45,6 +89,11 @@ int ar_process_wait_nohang(int pid) {
 int ar_process_wait_status(int pid, int *exit_code) {
     if (pid <= 0) return -EINVAL;
     return os_process_wait_status(pid, exit_code);
+}
+
+int ar_process_signal(int pid, int signal_kind, int process_group) {
+    if (pid <= 0) return -EINVAL;
+    return os_process_signal(pid, signal_kind, process_group);
 }
 
 int ar_process_kill(int pid) {

@@ -25,12 +25,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-#include <sys/prctl.h>
 #include <unistd.h>
-#include <signal.h>
 #include <time.h>
-#include <fcntl.h>
-#include <errno.h>
 #include <limits.h>
 
 #ifndef PATH_MAX
@@ -147,96 +143,68 @@ int alrios_hook_run_single(const alrios_hook_context_t *ctx,
     uint64_t start_ms = monotonic_time_ms();
     uint64_t deadline_ms = start_ms + (uint64_t)effective_timeout;
 
-    pid_t pid = fork();
+    char env_phase[128];
+    char env_stage[128];
+    char env_app[512];
+    char env_slot[ALRIOS_HOOK_MAX_PATH_LEN];
+    char env_old_slot[ALRIOS_HOOK_MAX_PATH_LEN];
+    char env_new_slot[ALRIOS_HOOK_MAX_PATH_LEN];
+
+    const char *phase_str = alrios_hook_phase_name(ctx->phase);
+    (void)snprintf(env_phase, sizeof(env_phase), "ALRIOS_HOOK_PHASE=%s", phase_str);
+    (void)snprintf(env_stage, sizeof(env_stage), "ALRIOS_HOOK_STAGE=%s", phase_str);
+    (void)snprintf(env_app, sizeof(env_app), "ALRIOS_APP_ID=%s", ctx->app_id ? ctx->app_id : "");
+    (void)snprintf(env_slot, sizeof(env_slot), "ALRIOS_SLOT_PATH=%s", ctx->slot_path ? ctx->slot_path : "");
+    (void)snprintf(env_old_slot, sizeof(env_old_slot), "ALRIOS_OLD_SLOT_PATH=%s",
+                   ctx->old_slot_path ? ctx->old_slot_path : "");
+    (void)snprintf(env_new_slot, sizeof(env_new_slot), "ALRIOS_NEW_SLOT_PATH=%s",
+                   ctx->new_slot_path ? ctx->new_slot_path : "");
+
+    char *child_env[ALRIOS_HOOK_MAX_ENV_COUNT + 16];
+    size_t env_idx = 0;
+    child_env[env_idx++] = env_phase;
+    child_env[env_idx++] = env_stage;
+    child_env[env_idx++] = env_app;
+    child_env[env_idx++] = env_slot;
+    child_env[env_idx++] = env_old_slot;
+    child_env[env_idx++] = env_new_slot;
+    child_env[env_idx++] = "PATH=/usr/bin:/bin:/usr/sbin:/sbin";
+
+    if (ctx->custom_env) {
+        for (size_t c = 0; c < ctx->custom_env_count && env_idx < (sizeof(child_env) / sizeof(child_env[0]) - 1); c++) {
+            if (ctx->custom_env[c]) {
+                child_env[env_idx++] = (char *)(uintptr_t)ctx->custom_env[c];
+            }
+        }
+    }
+    child_env[env_idx] = NULL;
+
+    char *child_argv[] = {
+        (char *)(uintptr_t)hook_path,
+        NULL
+    };
+
+    const char *working_directory = ctx->working_directory && ctx->working_directory[0] != '\0'
+        ? ctx->working_directory : ctx->slot_path;
+    unsigned long target_uid = (unsigned long)ctx->run_as_uid;
+    unsigned long target_gid = (unsigned long)ctx->run_as_gid;
+    if (ctx->drop_privileges && geteuid() == 0) {
+        if (target_uid == 0UL) target_uid = 65534UL;
+        if (target_gid == 0UL) target_gid = 65534UL;
+    }
+    int pid = ar_process_spawn_as(hook_path, child_argv, child_env,
+                                  working_directory,
+                                  AR_PROCESS_FLAG_NEW_GROUP |
+                                  AR_PROCESS_FLAG_NO_NEW_PRIVS,
+                                  target_uid, target_gid);
     if (pid < 0) {
         if (out_result) {
             memset(out_result, 0, sizeof(*out_result));
             out_result->error_code = ALRIOS_HOOK_ERR_EXEC;
-            (void)snprintf(out_result->failed_hook, sizeof(out_result->failed_hook), "%s", hook_path);
+            (void)snprintf(out_result->failed_hook,
+                           sizeof(out_result->failed_hook), "%s", hook_path);
         }
         return ALRIOS_HOOK_ERR_EXEC;
-    }
-
-    if (pid == 0) {
-        /* Child process: establish strict sandbox and isolation */
-        (void)setpgid(0, 0);
-
-        /* Sandboxed privilege: prevent any elevation via SUID/SGID or capabilities */
-        if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
-            _exit(125);
-        }
-
-        /* Drop privileges if configured or if parent is running as root */
-        if (ctx->run_as_uid > 0 || (ctx->drop_privileges && geteuid() == 0)) {
-            gid_t target_gid = (ctx->run_as_gid > 0) ? ctx->run_as_gid : 65534;
-            uid_t target_uid = (ctx->run_as_uid > 0) ? ctx->run_as_uid : 65534;
-            if (setgid(target_gid) != 0 || setuid(target_uid) != 0) {
-                _exit(124);
-            }
-        }
-
-        /* Set working directory */
-        if (ctx->working_directory && ctx->working_directory[0] != '\0') {
-            if (chdir(ctx->working_directory) != 0) {
-                _exit(127);
-            }
-        } else if (ctx->slot_path && ctx->slot_path[0] != '\0') {
-            if (chdir(ctx->slot_path) != 0) {
-                _exit(127);
-            }
-        }
-
-        /* Close /dev/null stdin */
-        int devnull = open("/dev/null", O_RDONLY);
-        if (devnull >= 0) {
-            (void)dup2(devnull, STDIN_FILENO);
-            (void)close(devnull);
-        }
-
-        /* Compose strict isolated environment */
-        char env_phase[128];
-        char env_stage[128];
-        char env_app[512];
-        char env_slot[ALRIOS_HOOK_MAX_PATH_LEN];
-        char env_old_slot[ALRIOS_HOOK_MAX_PATH_LEN];
-        char env_new_slot[ALRIOS_HOOK_MAX_PATH_LEN];
-
-        const char *phase_str = alrios_hook_phase_name(ctx->phase);
-        (void)snprintf(env_phase, sizeof(env_phase), "ALRIOS_HOOK_PHASE=%s", phase_str);
-        (void)snprintf(env_stage, sizeof(env_stage), "ALRIOS_HOOK_STAGE=%s", phase_str);
-        (void)snprintf(env_app, sizeof(env_app), "ALRIOS_APP_ID=%s", ctx->app_id ? ctx->app_id : "");
-        (void)snprintf(env_slot, sizeof(env_slot), "ALRIOS_SLOT_PATH=%s", ctx->slot_path ? ctx->slot_path : "");
-        (void)snprintf(env_old_slot, sizeof(env_old_slot), "ALRIOS_OLD_SLOT_PATH=%s",
-                       ctx->old_slot_path ? ctx->old_slot_path : "");
-        (void)snprintf(env_new_slot, sizeof(env_new_slot), "ALRIOS_NEW_SLOT_PATH=%s",
-                       ctx->new_slot_path ? ctx->new_slot_path : "");
-
-        char *child_env[ALRIOS_HOOK_MAX_ENV_COUNT + 16];
-        size_t env_idx = 0;
-        child_env[env_idx++] = env_phase;
-        child_env[env_idx++] = env_stage;
-        child_env[env_idx++] = env_app;
-        child_env[env_idx++] = env_slot;
-        child_env[env_idx++] = env_old_slot;
-        child_env[env_idx++] = env_new_slot;
-        child_env[env_idx++] = "PATH=/usr/bin:/bin:/usr/sbin:/sbin";
-
-        if (ctx->custom_env) {
-            for (size_t c = 0; c < ctx->custom_env_count && env_idx < (sizeof(child_env) / sizeof(child_env[0]) - 1); c++) {
-                if (ctx->custom_env[c]) {
-                    child_env[env_idx++] = (char *)(uintptr_t)ctx->custom_env[c];
-                }
-            }
-        }
-        child_env[env_idx] = NULL;
-
-        char *child_argv[] = {
-            (char *)(uintptr_t)hook_path,
-            NULL
-        };
-
-        execve(hook_path, child_argv, child_env);
-        _exit(127);
     }
 
     /* Parent monitor loop with monotonic deadline */
@@ -245,15 +213,12 @@ int alrios_hook_run_single(const alrios_hook_context_t *ctx,
     int timed_out = 0;
 
     while (!child_done) {
-        pid_t r = waitpid(pid, &status, WNOHANG);
-        if (r == pid) {
+        int wait_result = ar_process_wait_raw_nohang(pid, &status);
+        if (wait_result > 0) {
             child_done = 1;
             break;
         }
-        if (r < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
+        if (wait_result < 0) {
             break;
         }
 
@@ -269,12 +234,12 @@ int alrios_hook_run_single(const alrios_hook_context_t *ctx,
 
     if (timed_out) {
         /* Enforce deadline: escalate SIGTERM -> SIGKILL to process group */
-        (void)kill(-pid, SIGTERM);
+        (void)ar_process_signal(pid, AR_PROCESS_SIGNAL_TERM, 1);
 
         uint64_t term_deadline = monotonic_time_ms() + 100ULL;
         while (monotonic_time_ms() < term_deadline) {
-            pid_t r = waitpid(pid, &status, WNOHANG);
-            if (r == pid) {
+            int wait_result = ar_process_wait_raw_nohang(pid, &status);
+            if (wait_result != 0) {
                 child_done = 1;
                 break;
             }
@@ -283,8 +248,8 @@ int alrios_hook_run_single(const alrios_hook_context_t *ctx,
         }
 
         if (!child_done) {
-            (void)kill(-pid, SIGKILL);
-            (void)waitpid(pid, &status, 0);
+            (void)ar_process_signal(pid, AR_PROCESS_SIGNAL_KILL, 1);
+            (void)ar_process_wait_raw(pid, &status);
         }
 
         if (out_result) {

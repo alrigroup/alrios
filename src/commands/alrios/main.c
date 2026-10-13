@@ -270,35 +270,11 @@ static int run_ctl(int type, const char *payload) {
 }
 
 static int spawn_arcore_detached(const char *exe) {
-#ifdef _WIN32
-  char cmd[1024];
-  snprintf(cmd, sizeof(cmd), "\"%s\"", exe);
-  STARTUPINFOA si = {0};
-  si.cb = sizeof(si);
-  PROCESS_INFORMATION pi = {0};
-  BOOL ok = CreateProcessA(NULL, cmd, NULL, NULL, FALSE,
-                           DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP, NULL,
-                           NULL, &si, &pi);
-  if (!ok)
-    return -1;
-  CloseHandle(pi.hThread);
-  CloseHandle(pi.hProcess);
-  return (int)pi.dwProcessId;
-#else
-  pid_t pid = fork();
-  if (pid < 0)
-    return -1;
-  if (pid > 0)
-    return pid;
-  setsid();
-  if (!freopen("/dev/null", "r", stdin) ||
-      !freopen("/dev/null", "w", stdout) ||
-      !freopen("/dev/null", "w", stderr)) {
-    _exit(126);
-  }
-  execl(exe, exe, NULL);
-  _exit(127);
-#endif
+  char *const argv[] = {(char *)exe, NULL};
+  return ar_process_spawn(exe, argv, NULL, NULL,
+                          AR_PROCESS_FLAG_DETACHED |
+                          AR_PROCESS_FLAG_NULL_STDIO |
+                          AR_PROCESS_FLAG_CLOSE_EXTRA_FDS);
 }
 
 static int cmd_power_on(void) {

@@ -12,10 +12,10 @@
 #endif
 
 #include "alrios/deploy/drain.h"
+#include "aros_hal.h"
 
 #include <errno.h>
 #include <fcntl.h>
-#include <signal.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -373,8 +373,8 @@ int alrios_drain_process_await(pid_t pid,
     uint64_t deadline = drain_monotonic_ms() + (uint64_t)wait_limit_ms;
     for (;;) {
         int status = 0;
-        pid_t r = waitpid(pid, &status, WNOHANG);
-        if (r == pid) {
+        int wait_result = ar_process_wait_raw_nohang((int)pid, &status);
+        if (wait_result > 0) {
             if (out_exit_status != NULL) {
                 if (WIFEXITED(status)) {
                     *out_exit_status = WEXITSTATUS(status);
@@ -384,12 +384,9 @@ int alrios_drain_process_await(pid_t pid,
             }
             return ALRIOS_DRAIN_OK;
         }
-        if (r == -1) {
-            if (errno == ECHILD) {
-                if (kill(pid, 0) != 0 && errno == ESRCH) {
-                    return ALRIOS_DRAIN_OK;
-                }
-            }
+        if (wait_result < 0 &&
+            ar_process_signal((int)pid, AR_PROCESS_SIGNAL_NONE, 0) != 0) {
+            return ALRIOS_DRAIN_OK;
         }
 
         uint64_t now = drain_monotonic_ms();
@@ -401,13 +398,13 @@ int alrios_drain_process_await(pid_t pid,
     }
 
     /* Phase 2: Timeout reached, escalate to SIGTERM */
-    (void)kill(pid, SIGTERM);
+    (void)ar_process_signal((int)pid, AR_PROCESS_SIGNAL_TERM, 0);
 
     uint64_t grace_deadline = drain_monotonic_ms() + (uint64_t)grace_limit_ms;
     for (;;) {
         int status = 0;
-        pid_t r = waitpid(pid, &status, WNOHANG);
-        if (r == pid) {
+        int wait_result = ar_process_wait_raw_nohang((int)pid, &status);
+        if (wait_result > 0) {
             if (out_exit_status != NULL) {
                 if (WIFEXITED(status)) {
                     *out_exit_status = WEXITSTATUS(status);
@@ -417,12 +414,9 @@ int alrios_drain_process_await(pid_t pid,
             }
             return ALRIOS_DRAIN_OK;
         }
-        if (r == -1) {
-            if (errno == ECHILD) {
-                if (kill(pid, 0) != 0 && errno == ESRCH) {
-                    return ALRIOS_DRAIN_OK;
-                }
-            }
+        if (wait_result < 0 &&
+            ar_process_signal((int)pid, AR_PROCESS_SIGNAL_NONE, 0) != 0) {
+            return ALRIOS_DRAIN_OK;
         }
 
         uint64_t now = drain_monotonic_ms();
@@ -434,13 +428,13 @@ int alrios_drain_process_await(pid_t pid,
     }
 
     /* Phase 3: Unresponsive after timeout + grace period, escalate to SIGKILL */
-    (void)kill(pid, SIGKILL);
+    (void)ar_process_signal((int)pid, AR_PROCESS_SIGNAL_KILL, 0);
 
     for (int i = 0; i < 20; ++i) {
         int status = 0;
-        pid_t r = waitpid(pid, &status, WNOHANG);
-        if (r == pid || (r == -1 && errno == ECHILD)) {
-            if (out_exit_status != NULL && r == pid) {
+        int wait_result = ar_process_wait_raw_nohang((int)pid, &status);
+        if (wait_result != 0) {
+            if (out_exit_status != NULL && wait_result > 0) {
                 if (WIFEXITED(status)) {
                     *out_exit_status = WEXITSTATUS(status);
                 } else if (WIFSIGNALED(status)) {

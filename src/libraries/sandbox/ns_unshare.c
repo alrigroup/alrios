@@ -7,13 +7,13 @@
 #endif
 
 #include "alrios/sandbox_defs.h"
+#include "aros_hal.h"
 
 #include <errno.h>
 #include <fcntl.h>
 #include <sched.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
 #define ALRIOS_NS_MAP_BUF_MAX 64U
@@ -151,42 +151,19 @@ static int alrios_ns_unshare_pid_net_mount(uid_t host_uid, gid_t host_gid) {
     return 0;
 }
 
-static int alrios_ns_wait_for_clean_exit(pid_t child) {
-    int status = 0;
-    pid_t waited;
+typedef struct {
+    uid_t uid;
+    gid_t gid;
+} alrios_ns_probe_context_t;
 
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-
-    if (waited != child) {
-        return -1;
-    }
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-        return -1;
-    }
-
-    return 0;
-}
-
-static void alrios_ns_probe_child_exit(uid_t host_uid, gid_t host_gid) {
-    _exit((alrios_ns_unshare_pid_net_mount(host_uid, host_gid) == 0) ? 0 : 1);
+static int alrios_ns_probe_callback(void *arg) {
+    const alrios_ns_probe_context_t *context = (const alrios_ns_probe_context_t *)arg;
+    return alrios_ns_unshare_pid_net_mount(context->uid, context->gid);
 }
 
 static int alrios_ns_probe_kernel_support(void) {
-    const uid_t host_uid = getuid();
-    const gid_t host_gid = getgid();
-
-    const pid_t probe = fork();
-    if (probe < 0) {
-        return -1;
-    }
-
-    if (probe == 0) {
-        alrios_ns_probe_child_exit(host_uid, host_gid);
-    }
-
-    return alrios_ns_wait_for_clean_exit(probe);
+    const alrios_ns_probe_context_t context = {getuid(), getgid()};
+    return ar_process_run_callback(alrios_ns_probe_callback, (void *)&context);
 }
 
 int alrios_sandbox_enter_jail(const char *slot_id, pid_t pid) {

@@ -15,7 +15,7 @@ set(TEST_OUTPUT_DIR "${CMAKE_BINARY_DIR}/tests_bin")
 
 macro(register_alrios_test test_target test_source)
     add_executable(${test_target} ${test_source})
-    target_link_libraries(${test_target} PRIVATE arsdk arkernel OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
+    target_link_libraries(${test_target} PRIVATE arsdk_modules arkernel OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
     set_target_properties(${test_target} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
         RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"
@@ -353,7 +353,7 @@ set_tests_properties(test_security_epoch PROPERTIES ENVIRONMENT
 )
 
 add_executable(test_app_lifecycle unit/sdk/test_app_lifecycle.c)
-target_link_libraries(test_app_lifecycle PRIVATE arsdk_app arsdk arkernel OpenSSL::Crypto OpenSSL::SSL Threads::Threads)
+target_link_libraries(test_app_lifecycle PRIVATE arsdk_app arsdk_modules arkernel OpenSSL::Crypto OpenSSL::SSL Threads::Threads)
 set_target_properties(test_app_lifecycle PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${TEST_OUTPUT_DIR}"

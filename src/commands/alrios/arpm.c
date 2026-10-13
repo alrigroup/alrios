@@ -105,37 +105,9 @@ static void mkdir_p(const char *dir) {
 
 /* Safe process execution helper without invoking an OS shell (prevents CWE-78) */
 static int safe_run_cmd(const char *prog, char *const argv[]) {
-#ifdef _WIN32
-    (void)prog;
-    STARTUPINFOA si = { sizeof(si) };
-    PROCESS_INFORMATION pi = { 0 };
-    char cmdline[4096] = { 0 };
-    for (int i = 0; argv[i]; i++) {
-        if (i > 0) strncat(cmdline, " ", sizeof(cmdline) - strlen(cmdline) - 1);
-        strncat(cmdline, "\"", sizeof(cmdline) - strlen(cmdline) - 1);
-        strncat(cmdline, argv[i], sizeof(cmdline) - strlen(cmdline) - 1);
-        strncat(cmdline, "\"", sizeof(cmdline) - strlen(cmdline) - 1);
-    }
-    if (!CreateProcessA(NULL, cmdline, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-        return -1;
-    }
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    DWORD code = 0;
-    GetExitCodeProcess(pi.hProcess, &code);
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-    return (code == 0) ? 0 : -1;
-#else
-    pid_t pid = fork();
-    if (pid < 0) return -1;
-    if (pid == 0) {
-        execvp(prog, argv);
-        _exit(127);
-    }
-    int status = 0;
-    waitpid(pid, &status, 0);
-    return (WIFEXITED(status) && WEXITSTATUS(status) == 0) ? 0 : -1;
-#endif
+    int pid = ar_process_spawn(prog, argv, NULL, NULL, AR_PROCESS_FLAG_SEARCH_PATH);
+    if (pid <= 0) return -1;
+    return ar_process_wait(pid) == 0 ? 0 : -1;
 }
 
 static int copy_file_native(const char *src, const char *dst) {

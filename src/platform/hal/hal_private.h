@@ -1,3 +1,12 @@
+/*
+ * Copyright (c) 2026 ALRIGROUP and its affiliates.
+ * Engineered and maintained by ALRI Development.
+ *
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE
+ * found in the LICENSE file in the root directory of this source tree
+ * and at: https://github.com/alrigroup/licenses
+ */
+
 #ifndef ALRIOS_PLATFORM_HAL_PRIVATE_H
 #define ALRIOS_PLATFORM_HAL_PRIVATE_H
 
@@ -11,9 +20,29 @@ int os_file_delete(const char *path);
 int os_file_exists(const char *path);
 
 int os_process_create(const char *path, char *const argv[]);
+int os_process_spawn(const char *path,
+                     char *const argv[],
+                     char *const envp[],
+                     const char *working_directory,
+                     unsigned int flags);
+int os_process_spawn_as(const char *path,
+                        char *const argv[],
+                        char *const envp[],
+                        const char *working_directory,
+                        unsigned int flags,
+                        unsigned long uid,
+                        unsigned long gid);
+int os_process_spawn_fd(int executable_fd,
+                        char *const argv[],
+                        char *const envp[],
+                        unsigned int flags);
+int os_process_run_callback(int (*callback)(void *), void *arg);
 int os_process_wait(int pid);
+int os_process_wait_raw(int pid, int *status);
+int os_process_wait_raw_nohang(int pid, int *status);
 int os_process_wait_nohang(int pid);
 int os_process_wait_status(int pid, int *exit_code);
+int os_process_signal(int pid, int signal_kind, int process_group);
 int os_process_kill(int pid);
 int os_process_self(void);
 void *os_process_group_create(void);

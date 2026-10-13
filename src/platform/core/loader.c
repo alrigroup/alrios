@@ -365,10 +365,18 @@ static void load_native(const ar_app_manifest_t *m, const char *app_dir, loader_
         char *argv[2];
         argv[0] = libpath;
         argv[1] = NULL;
-        int pid = ar_process_create(libpath, argv);
+        int pid = ar_process_spawn(libpath, argv, NULL, app_dir,
+                                   AR_PROCESS_FLAG_CLOSE_EXTRA_FDS |
+                                   AR_PROCESS_FLAG_NEW_GROUP);
         if (pid > 0) {
-            if (proc_group)
-                ar_process_group_add(proc_group, pid);
+            if (proc_group && ar_process_group_add(proc_group, pid) != 0) {
+                (void)ar_process_signal(pid, AR_PROCESS_SIGNAL_KILL, 1);
+                (void)ar_process_signal(pid, AR_PROCESS_SIGNAL_KILL, 0);
+                (void)ar_process_wait(pid);
+                if (a) { a->pid = 0; a->state = APP_CRASHED; }
+                alri_printf("    " RED "x" RST " Failed to track " BLD "%s" RST " process\n", m->name);
+                return;
+            }
             if (a) { a->pid = pid; a->state = APP_RUNNING; }
             alri_printf("    " GRN "✓" RST " " BLD "%s" RST " started (" DIM "pid %d" RST " " DIM "%s" RST ")\n",
                         m->name, pid, libpath);
@@ -443,32 +451,20 @@ static void spawn_script(const ar_app_manifest_t *m, const char *app_dir, loader
     argv[ai++] = script_path;
     argv[ai] = NULL;
 
-#ifdef _WIN32
-    char saved_cwd[1024];
-    if (!_getcwd(saved_cwd, sizeof(saved_cwd))) saved_cwd[0] = '\0';
-    if (_chdir(app_dir) != 0) {
-        alri_printf("    " RED "x" RST " chdir(%s) failed\n", app_dir);
-        return;
-    }
-    int pid = ar_process_create(rt_path, argv);
-    if (saved_cwd[0]) _chdir(saved_cwd);
-#else
-    pid_t pid = fork();
-    if (pid == 0) {
-        int max_fd = (int)sysconf(_SC_OPEN_MAX);
-        if (max_fd < 0 || max_fd > 4096) max_fd = 4096;
-        for (int fd = 3; fd < max_fd; fd++) {
-            close(fd);
-        }
-        if (chdir(app_dir) != 0) _exit(127);
-        execvp(rt_path, argv);
-        _exit(127);
-    }
-#endif
+    int pid = ar_process_spawn(rt_path, argv, NULL, app_dir,
+                               AR_PROCESS_FLAG_SEARCH_PATH |
+                               AR_PROCESS_FLAG_CLOSE_EXTRA_FDS |
+                               AR_PROCESS_FLAG_NEW_GROUP);
     if (pid > 0) {
-        if (proc_group)
-            ar_process_group_add(proc_group, (int)pid);
-        if (a) { a->pid = (int)pid; a->state = APP_RUNNING; }
+        if (proc_group && ar_process_group_add(proc_group, pid) != 0) {
+            (void)ar_process_signal(pid, AR_PROCESS_SIGNAL_KILL, 1);
+            (void)ar_process_signal(pid, AR_PROCESS_SIGNAL_KILL, 0);
+            (void)ar_process_wait(pid);
+            if (a) { a->pid = 0; a->state = APP_CRASHED; }
+            alri_printf("    " RED "x" RST " Failed to track " BLD "%s" RST " process\n", m->name);
+            return;
+        }
+        if (a) { a->pid = pid; a->state = APP_RUNNING; }
         alri_printf("    " GRN "✓" RST " " BLD "%s" RST " started (" DIM "pid %d" RST ")\n", m->name, (int)pid);
         spawn_survive_check(a);
     } else {
@@ -1149,12 +1145,8 @@ int loader_stop_app(const char *name) {
     }
     if (a->state == APP_STOPPED && a->pid <= 0) return 0;
     if (a->pid > 0) {
-#ifndef _WIN32
-        kill(-(pid_t)a->pid, SIGTERM);
-        kill((pid_t)a->pid, SIGTERM);
-#else
-        ar_process_kill(a->pid);
-#endif
+        (void)ar_process_signal(a->pid, AR_PROCESS_SIGNAL_TERM, 1);
+        (void)ar_process_signal(a->pid, AR_PROCESS_SIGNAL_TERM, 0);
         int stopped = 0;
         for (int i = 0; i < 30; i++) {
             if (ar_process_wait_nohang(a->pid) != 0) {
@@ -1164,10 +1156,8 @@ int loader_stop_app(const char *name) {
             ar_sleep_ms(30);
         }
         if (!stopped) {
-#ifndef _WIN32
-            kill(-(pid_t)a->pid, SIGKILL);
-            kill((pid_t)a->pid, SIGKILL);
-#endif
+            (void)ar_process_signal(a->pid, AR_PROCESS_SIGNAL_KILL, 1);
+            (void)ar_process_signal(a->pid, AR_PROCESS_SIGNAL_KILL, 0);
             for (int i = 0; i < 15; i++) {
                 if (ar_process_wait_nohang(a->pid) != 0) break;
                 ar_sleep_ms(20);
@@ -1242,11 +1232,7 @@ void loader_stop_all(void) {
     /* 1. Signal all running standalone app processes concurrently with SIGTERM */
     for (int i = 0; i < app_count; i++) {
         if (!apps[i].is_native_service && apps[i].pid > 0) {
-#ifndef _WIN32
-            kill((pid_t)apps[i].pid, SIGTERM);
-#else
-            ar_process_kill(apps[i].pid);
-#endif
+            (void)ar_process_signal(apps[i].pid, AR_PROCESS_SIGNAL_TERM, 0);
         }
     }
 
@@ -1282,10 +1268,8 @@ void loader_stop_all(void) {
     /* 4. Force kill (SIGKILL) any stubborn remaining app processes */
     for (int i = 0; i < app_count; i++) {
         if (!apps[i].is_native_service && apps[i].pid > 0) {
-#ifndef _WIN32
-            kill((pid_t)apps[i].pid, SIGKILL);
-#endif
-            ar_process_wait_nohang(apps[i].pid);
+            (void)ar_process_signal(apps[i].pid, AR_PROCESS_SIGNAL_KILL, 0);
+            (void)ar_process_wait_nohang(apps[i].pid);
             apps[i].pid = 0;
             apps[i].state = APP_STOPPED;
         }

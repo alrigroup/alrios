@@ -13,7 +13,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <sys/types.h>
+#include "alrios/platform/types.h"
 
 #ifdef __cplusplus
 extern "C" {

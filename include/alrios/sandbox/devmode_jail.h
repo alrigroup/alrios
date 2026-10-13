@@ -12,7 +12,7 @@
 
 #include "alrios/profiles.h"
 #include "alrios/sandbox/devmode.h"
-#include <sys/types.h>
+#include "alrios/platform/types.h"
 #include <stdint.h>
 
 #ifdef __cplusplus

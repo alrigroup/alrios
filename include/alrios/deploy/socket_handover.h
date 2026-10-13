@@ -12,7 +12,7 @@
 
 #include <stdatomic.h>
 #include <stdint.h>
-#include <sys/types.h>
+#include "alrios/platform/types.h"
 
 #define ALRIOS_HANDOVER_PEER_SAME_EUID (1U << 0)
 #define ALRIOS_HANDOVER_PEER_UID       (1U << 1)

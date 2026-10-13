@@ -6,9 +6,9 @@
 #endif
 
 #include "alrios/atomic_swap.h"
+#include "aros_hal.h"
 #include <stdio.h>
 #include <unistd.h>
-#include <signal.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <limits.h>
@@ -55,7 +55,7 @@ int alrios_atomic_symlink_swap(const char *target_dir, const char *symlink_curre
      * PID <= 1 is guarded to prevent accidental signaling of PID 0 (pgrp) or PID 1 (init).
      */
     if (master_pid > 1) {
-        if (kill(master_pid, SIGHUP) != 0) {
+        if (ar_process_signal((int)master_pid, AR_PROCESS_SIGNAL_HUP, 0) != 0) {
             return -4;
         }
     }

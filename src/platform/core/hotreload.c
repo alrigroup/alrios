@@ -260,8 +260,15 @@ int ar_hotreload_deploy(const char *app_name, const char *arapp_path, char *out_
 
     cand->pid = pid;
     void *proc_group = loader_get_proc_group();
-    if (proc_group) {
-        ar_process_group_add(proc_group, pid);
+    if (proc_group && ar_process_group_add(proc_group, pid) != 0) {
+        (void)ar_process_signal(pid, AR_PROCESS_SIGNAL_KILL, 0);
+        (void)ar_process_wait(pid);
+        cand->pid = 0;
+        cand->state = HOTRELOAD_ABORTED;
+        hotreload_unlock();
+        if (out_log && out_log_size > 0)
+            snprintf(out_log, out_log_size, "ERR: Falha ao rastrear processo no slot candidato");
+        return -6;
     }
 
     cand->state = HOTRELOAD_PROBING;
