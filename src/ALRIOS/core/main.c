@@ -155,13 +155,12 @@ static int initialize_execution_policy(void) {
     return -1;
   }
   if (!trust_directory || trust_directory[0] == '\0') {
-    loader_get_base_dir(default_trust_directory,
-                        (int)sizeof(default_trust_directory));
-    if (strlen(default_trust_directory) + strlen("/trust") + 1U >=
-        sizeof(default_trust_directory)) {
+    char base_dir[1024];
+    loader_get_base_dir(base_dir, (int)sizeof(base_dir));
+    int written = snprintf(default_trust_directory, sizeof(default_trust_directory), "%s/trust", base_dir);
+    if (written < 0 || (size_t)written >= sizeof(default_trust_directory)) {
       return -1;
     }
-    strcat(default_trust_directory, "/trust");
     trust_directory = default_trust_directory;
   }
 
