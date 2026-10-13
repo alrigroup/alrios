@@ -177,6 +177,44 @@ int main(void) {
         AR_EVENT_OK);
     CHECK(payload_len == 5U && memcmp(receive_buffer, "crash", 5U) == 0);
 
+    /* Verify wire header serialization and deserialization */
+    {
+        ar_event_wire_header_t orig_hdr;
+        ar_event_wire_header_t dec_hdr;
+        uint8_t wire[sizeof(ar_event_wire_header_t)];
+
+        memset(&orig_hdr, 0, sizeof(orig_hdr));
+        orig_hdr.magic = AR_EVENT_WIRE_MAGIC;
+        orig_hdr.version = AR_EVENT_WIRE_VERSION;
+        orig_hdr.opcode = IPC_EVENT_EMIT;
+        orig_hdr.topic = EVENT_APP_DEPLOYED;
+        orig_hdr.flags = 0x0102U;
+        orig_hdr.sequence = 0x0102030405060708ULL;
+        orig_hdr.transaction_id = 0x1122334455667788ULL;
+        orig_hdr.timestamp_nanos = 0xAABBCCDDEEFF0011ULL;
+        orig_hdr.producer_pid = 12345U;
+        orig_hdr.producer_uid = 1000U;
+        orig_hdr.producer_gid = 1000U;
+        orig_hdr.payload_len = 42U;
+        strncpy(orig_hdr.producer_principal, "test-principal", sizeof(orig_hdr.producer_principal) - 1U);
+
+        CHECK(ar_event_wire_header_encode(&orig_hdr, wire) == AR_EVENT_OK);
+        CHECK(ar_event_wire_header_decode(wire, &dec_hdr) == AR_EVENT_OK);
+        CHECK(dec_hdr.magic == AR_EVENT_WIRE_MAGIC);
+        CHECK(dec_hdr.version == AR_EVENT_WIRE_VERSION);
+        CHECK(dec_hdr.opcode == IPC_EVENT_EMIT);
+        CHECK(dec_hdr.topic == EVENT_APP_DEPLOYED);
+        CHECK(dec_hdr.flags == 0x0102U);
+        CHECK(dec_hdr.sequence == 0x0102030405060708ULL);
+        CHECK(dec_hdr.transaction_id == 0x1122334455667788ULL);
+        CHECK(dec_hdr.timestamp_nanos == 0xAABBCCDDEEFF0011ULL);
+        CHECK(dec_hdr.producer_pid == 12345U);
+        CHECK(dec_hdr.producer_uid == 1000U);
+        CHECK(dec_hdr.producer_gid == 1000U);
+        CHECK(dec_hdr.payload_len == 42U);
+        CHECK(strcmp(dec_hdr.producer_principal, "test-principal") == 0);
+    }
+
     ar_event_broker_destroy(broker);
     puts("MP-022 event broker pub/sub: PASS");
     return 0;

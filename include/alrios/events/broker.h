@@ -175,4 +175,12 @@ size_t ar_event_broker_subscription_count(const ar_event_broker_t *broker);
 size_t ar_event_broker_topic_count(const ar_event_broker_t *broker);
 size_t ar_event_subscription_pending(const ar_event_subscription_t *subscription);
 
+int ar_event_wire_header_encode(
+    const ar_event_wire_header_t *header,
+    uint8_t out_wire[sizeof(ar_event_wire_header_t)]);
+
+int ar_event_wire_header_decode(
+    const uint8_t in_wire[sizeof(ar_event_wire_header_t)],
+    ar_event_wire_header_t *out_header);
+
 #endif /* ALRIOS_EVENTS_BROKER_H */

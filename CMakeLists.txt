@@ -62,4 +62,14 @@ target_include_directories(ar_cored PRIVATE
 )
 target_link_libraries(ar_cored PRIVATE arsensitive_mem arkernel arcrypto OpenSSL::Crypto OpenSSL::SSL)
 
+add_executable(ar_eventd
+    src/daemons/ar_eventd/main.c
+)
+target_include_directories(ar_eventd PRIVATE
+    include
+    include/alrios
+    src/ALRIOS/arkernel/os/include
+)
+target_link_libraries(ar_eventd PRIVATE areventbus arkernel arcrypto)
+
 add_subdirectory(tests)

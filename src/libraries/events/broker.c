@@ -54,7 +54,7 @@ static int identity_equal(const ar_event_identity_t *left, const ar_event_identi
     return left->pid == right->pid &&
            left->uid == right->uid &&
            left->gid == right->gid &&
-           strcmp(left->principal, right->principal) == 0;
+           strncmp(left->principal, right->principal, AR_EVENT_MAX_PRINCIPAL_LEN) == 0;
 }
 
 static int authorize_action(
@@ -390,4 +390,106 @@ size_t ar_event_broker_topic_count(const ar_event_broker_t *broker) {
 
 size_t ar_event_subscription_pending(const ar_event_subscription_t *subscription) {
     return subscription == NULL || subscription->broker == NULL ? 0U : subscription->queue_count;
+}
+
+static void store_u16_be(uint8_t *output, uint16_t value) {
+    output[0] = (uint8_t)(value >> 8U);
+    output[1] = (uint8_t)value;
+}
+
+static void store_u32_be(uint8_t *output, uint32_t value) {
+    output[0] = (uint8_t)(value >> 24U);
+    output[1] = (uint8_t)(value >> 16U);
+    output[2] = (uint8_t)(value >> 8U);
+    output[3] = (uint8_t)value;
+}
+
+static void store_u64_be(uint8_t *output, uint64_t value) {
+    size_t i;
+    for (i = 8U; i > 0U; --i) {
+        output[i - 1U] = (uint8_t)value;
+        value >>= 8U;
+    }
+}
+
+static uint16_t load_u16_be(const uint8_t *input) {
+    return (uint16_t)(((uint16_t)input[0] << 8U) | (uint16_t)input[1]);
+}
+
+static uint32_t load_u32_be(const uint8_t *input) {
+    return ((uint32_t)input[0] << 24U) |
+           ((uint32_t)input[1] << 16U) |
+           ((uint32_t)input[2] << 8U) |
+           (uint32_t)input[3];
+}
+
+static uint64_t load_u64_be(const uint8_t *input) {
+    uint64_t value = 0U;
+    size_t i;
+    for (i = 0U; i < 8U; ++i) {
+        value = (value << 8U) | (uint64_t)input[i];
+    }
+    return value;
+}
+
+int ar_event_wire_header_encode(
+    const ar_event_wire_header_t *header,
+    uint8_t out_wire[sizeof(ar_event_wire_header_t)]) {
+    size_t plen = 0U;
+
+    if (header == NULL || out_wire == NULL) {
+        return AR_EVENT_ERR_INVALID;
+    }
+
+    store_u32_be(out_wire + 0U, header->magic);
+    store_u16_be(out_wire + 4U, header->version);
+    store_u16_be(out_wire + 6U, header->opcode);
+    store_u16_be(out_wire + 8U, header->topic);
+    store_u16_be(out_wire + 10U, header->flags);
+    store_u64_be(out_wire + 12U, header->sequence);
+    store_u64_be(out_wire + 20U, header->transaction_id);
+    store_u64_be(out_wire + 28U, header->timestamp_nanos);
+    store_u32_be(out_wire + 36U, header->producer_pid);
+    store_u32_be(out_wire + 40U, header->producer_uid);
+    store_u32_be(out_wire + 44U, header->producer_gid);
+    store_u32_be(out_wire + 48U, header->payload_len);
+
+    memset(out_wire + 52U, 0, AR_EVENT_MAX_PRINCIPAL_LEN);
+    while (plen < AR_EVENT_MAX_PRINCIPAL_LEN - 1U && header->producer_principal[plen] != '\0') {
+        out_wire[52U + plen] = (uint8_t)header->producer_principal[plen];
+        plen++;
+    }
+    return AR_EVENT_OK;
+}
+
+int ar_event_wire_header_decode(
+    const uint8_t in_wire[sizeof(ar_event_wire_header_t)],
+    ar_event_wire_header_t *out_header) {
+    if (in_wire == NULL || out_header == NULL) {
+        return AR_EVENT_ERR_INVALID;
+    }
+
+    memset(out_header, 0, sizeof(*out_header));
+    out_header->magic = load_u32_be(in_wire + 0U);
+    if (out_header->magic != AR_EVENT_WIRE_MAGIC) {
+        return AR_EVENT_ERR_INVALID;
+    }
+    out_header->version = load_u16_be(in_wire + 4U);
+    if (out_header->version != AR_EVENT_WIRE_VERSION) {
+        return AR_EVENT_ERR_INVALID;
+    }
+    out_header->opcode = load_u16_be(in_wire + 6U);
+    out_header->topic = load_u16_be(in_wire + 8U);
+    out_header->flags = load_u16_be(in_wire + 10U);
+    out_header->sequence = load_u64_be(in_wire + 12U);
+    out_header->transaction_id = load_u64_be(in_wire + 20U);
+    out_header->timestamp_nanos = load_u64_be(in_wire + 28U);
+    out_header->producer_pid = load_u32_be(in_wire + 36U);
+    out_header->producer_uid = load_u32_be(in_wire + 40U);
+    out_header->producer_gid = load_u32_be(in_wire + 44U);
+    out_header->payload_len = load_u32_be(in_wire + 48U);
+
+    memcpy(out_header->producer_principal, in_wire + 52U, AR_EVENT_MAX_PRINCIPAL_LEN);
+    out_header->producer_principal[AR_EVENT_MAX_PRINCIPAL_LEN - 1U] = '\0';
+    return AR_EVENT_OK;
 }
