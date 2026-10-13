@@ -251,12 +251,14 @@ add_library(ardeploy STATIC
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/fd_pass.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/atomic_swap.c
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/deploy/arapp_index.c
+    ${CMAKE_SOURCE_DIR}/src/libraries/deploy/layering.c
 )
 set_property(TARGET ardeploy PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_include_directories(ardeploy PUBLIC
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/include/alrios
 )
+target_link_libraries(ardeploy PUBLIC arindex OpenSSL::Crypto)
 
 # 8. arhooks (Deterministic Lifecycle Event Execution)
 add_library(arhooks STATIC

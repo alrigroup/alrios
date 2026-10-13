@@ -12,6 +12,8 @@
 #include "zip.h"
 #include "arapp_parser.h"
 #include "arpm.h"
+#include "alrios/deploy/layering.h"
+#include "alrios/package/index.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -668,6 +670,138 @@ static void normalize_package_name(const char *input, char *output, size_t outpu
     }
 }
 
+static int read_index_wire(const char *path, uint8_t **out_wire, size_t *out_size) {
+    FILE *file;
+    long length;
+    uint8_t *wire;
+
+    if (!path || !out_wire || !out_size) return -1;
+    *out_wire = NULL;
+    *out_size = 0U;
+    file = fopen(path, "rb");
+    if (!file) return -1;
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        return -1;
+    }
+    length = ftell(file);
+    if (length <= 0 || (unsigned long)length > ALRIOS_PACKAGE_INDEX_MAX_WIRE_SIZE ||
+        fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        return -1;
+    }
+    wire = (uint8_t *)malloc((size_t)length);
+    if (!wire) {
+        fclose(file);
+        return -1;
+    }
+    if (fread(wire, 1U, (size_t)length, file) != (size_t)length ||
+        fclose(file) != 0) {
+        free(wire);
+        return -1;
+    }
+    *out_wire = wire;
+    *out_size = (size_t)length;
+    return 0;
+}
+
+static int load_verified_index(const char *index_path,
+                               const uint8_t public_key[ALRIOS_PACKAGE_INDEX_ED25519_PUBLIC_KEY_SIZE],
+                               alrios_package_index_t *out_index) {
+    uint8_t *wire = NULL;
+    size_t wire_size = 0U;
+    int result;
+
+    memset(out_index, 0, sizeof(*out_index));
+    if (read_index_wire(index_path, &wire, &wire_size) != 0) {
+        return ALRIOS_PACKAGE_INDEX_ERR_IO;
+    }
+    result = alrios_package_index_parse_and_verify(wire, wire_size, public_key,
+                                                   out_index);
+    free(wire);
+    return result;
+}
+
+static int cmd_delta_install(int argc, char **argv) {
+    const char *payload_directory;
+    const char *target_index_path;
+    const char *public_key_path;
+    const char *target_directory;
+    const char *existing_directory = NULL;
+    const char *existing_index_path = NULL;
+    uint8_t public_key[ALRIOS_PACKAGE_INDEX_ED25519_PUBLIC_KEY_SIZE];
+    alrios_package_index_t target_index;
+    alrios_package_index_t existing_index;
+    alrios_layering_stats_t stats;
+    int result;
+    int i;
+
+    if (argc < 6) {
+        printf("%sUso:%s arpm delta-install <payload-dir> <target-index> <public-key> <target-dir> [--existing <dir> --existing-index <index>]\n",
+               CLR_YELLOW, CLR_RESET);
+        return 1;
+    }
+    payload_directory = argv[2];
+    target_index_path = argv[3];
+    public_key_path = argv[4];
+    target_directory = argv[5];
+    for (i = 6; i < argc; ++i) {
+        if (strcmp(argv[i], "--existing") == 0 && i + 1 < argc) {
+            existing_directory = argv[++i];
+        } else if (strcmp(argv[i], "--existing-index") == 0 && i + 1 < argc) {
+            existing_index_path = argv[++i];
+        } else {
+            printf("%s[ERRO]%s Opcao delta desconhecida: %s\n",
+                   CLR_RED, CLR_RESET, argv[i]);
+            return 1;
+        }
+    }
+    if ((existing_directory == NULL) != (existing_index_path == NULL)) {
+        printf("%s[ERRO]%s --existing e --existing-index devem ser usados juntos.\n",
+               CLR_RED, CLR_RESET);
+        return 1;
+    }
+    result = alrios_package_index_load_public_key_file(public_key_path, public_key);
+    if (result != ALRIOS_PACKAGE_INDEX_OK) {
+        printf("%s[ERRO]%s Chave publica invalida: %s\n", CLR_RED, CLR_RESET,
+               alrios_package_index_error_string(result));
+        return 1;
+    }
+    result = load_verified_index(target_index_path, public_key, &target_index);
+    if (result != ALRIOS_PACKAGE_INDEX_OK) {
+        printf("%s[ERRO]%s Indice alvo invalido: %s\n", CLR_RED, CLR_RESET,
+               alrios_package_index_error_string(result));
+        return 1;
+    }
+    memset(&existing_index, 0, sizeof(existing_index));
+    if (existing_index_path) {
+        result = load_verified_index(existing_index_path, public_key, &existing_index);
+        if (result != ALRIOS_PACKAGE_INDEX_OK) {
+            printf("%s[ERRO]%s Indice existente invalido: %s\n", CLR_RED, CLR_RESET,
+                   alrios_package_index_error_string(result));
+            alrios_package_index_free(&target_index);
+            return 1;
+        }
+    }
+    result = alrios_layering_install(existing_directory,
+                                     existing_index_path ? &existing_index : NULL,
+                                     payload_directory, &target_index,
+                                     target_directory, &stats);
+    alrios_package_index_free(&existing_index);
+    alrios_package_index_free(&target_index);
+    if (result != ALRIOS_LAYERING_OK) {
+        printf("%s[ERRO]%s Instalacao delta abortada: %s\n", CLR_RED, CLR_RESET,
+               alrios_layering_error_string(result));
+        return 1;
+    }
+    printf("%s[OK]%s Instalacao atomica concluida: %llu hardlinks, %llu reflinks, %llu copias.\n",
+           CLR_GREEN, CLR_RESET,
+           (unsigned long long)stats.hardlinked_files,
+           (unsigned long long)stats.reflinked_files,
+           (unsigned long long)stats.copied_files);
+    return 0;
+}
+
 /* arpm install <target> [flags] */
 static int cmd_install(int argc, char **argv) {
     if (argc < 3) {
@@ -1219,6 +1353,7 @@ static void print_usage(void) {
     printf("%sUso:%s\n", CLR_BOLD, CLR_RESET);
     printf("  arpm install <app|url|arquivo.arapp>   Instala pacote .arapp pre-compilado\n");
     printf("  arpm install-src <git|github:org/repo>  Clona, compila via .arappmake e instala\n");
+    printf("  arpm delta-install <payload> <index> <public-key> <target> [--existing <dir> --existing-index <index>]\n");
     printf("  arpm update [<app> | --all]            Atualiza pacotes (preserva dados em storage/)\n");
     printf("  arpm uninstall <app> [--purge]         Desinstala app (use --purge para apagar dados)\n");
     printf("  arpm list                              Lista todos os pacotes instalados e status\n");
@@ -1253,6 +1388,9 @@ int cmd_arpm(int argc, char **argv) {
 
     if (strcmp(cmd, "install") == 0 || strcmp(cmd, "i") == 0 || strcmp(cmd, "add") == 0)
         return cmd_install(argc, argv);
+
+    if (strcmp(cmd, "delta-install") == 0 || strcmp(cmd, "delta_install") == 0)
+        return cmd_delta_install(argc, argv);
 
     if (strcmp(cmd, "install-src") == 0 || strcmp(cmd, "install_src") == 0 || strcmp(cmd, "src") == 0)
         return cmd_install_src(argc, argv);

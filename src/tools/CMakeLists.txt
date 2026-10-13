@@ -33,10 +33,12 @@ add_executable(alrios
 )
 target_include_directories(alrios PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/core
     ${CMAKE_SOURCE_DIR}/src/ALRIOS/arkernel/include
 )
-target_link_libraries(alrios PRIVATE arkernel arlog ararchive armanifest OpenSSL::SSL OpenSSL::Crypto Threads::Threads ${CMAKE_DL_LIBS})
+target_link_libraries(alrios PRIVATE arkernel arlog ararchive armanifest ardeploy arindex OpenSSL::SSL OpenSSL::Crypto Threads::Threads ${CMAKE_DL_LIBS})
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_options(alrios PRIVATE "-Wl,-rpath,$ORIGIN/lib")
