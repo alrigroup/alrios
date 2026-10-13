@@ -179,6 +179,17 @@ target_include_directories(arloader PUBLIC
 )
 target_link_libraries(arloader PUBLIC arpackage arcrypto OpenSSL::Crypto)
 
+# 15. arsupervisor_policy (Supervisor Execution Profiles & Policy Enforcement)
+add_library(arsupervisor_policy STATIC
+    ${CMAKE_SOURCE_DIR}/src/daemons/supervisor/policy.c
+)
+set_property(TARGET arsupervisor_policy PROPERTY POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arsupervisor_policy PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/include/alrios
+)
+target_link_libraries(arsupervisor_policy PUBLIC arpolicy arcrypto)
+
 # 7. araudit (Append-Only Cryptographic Audit Chain)
 add_library(araudit STATIC
     ${CMAKE_SOURCE_DIR}/src/libraries/audit/hash_chain.c
