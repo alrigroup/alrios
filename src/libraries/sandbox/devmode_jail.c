@@ -103,7 +103,9 @@ static int write_control_value(const char *dir, const char *file, const char *va
 static int map_user_ns_root(uid_t host_uid, gid_t host_gid) {
     int fd = open("/proc/self/setgroups", O_WRONLY | O_CLOEXEC);
     if (fd >= 0) {
-        (void)write(fd, "deny\n", 5);
+        if (write(fd, "deny\n", 5) < 0) {
+            /* ignore deny failure on older kernels or unprivileged containers */
+        }
         (void)close(fd);
     }
 
@@ -348,8 +350,12 @@ int alrios_devmode_jail_apply_namespaces(
         }
     }
 
-    (void)sethostname("alrios-devmode-jail", 19);
-    (void)mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL);
+    if (sethostname("alrios-devmode-jail", 19) != 0) {
+        /* non-fatal fallback if UTS namespace capability restricted */
+    }
+    if (mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL) != 0) {
+        /* non-fatal fallback if root mount propagation restricted */
+    }
 
     if (config && config->net_mode == ALRIOS_DEVMODE_NET_LOOPBACK_ONLY) {
         if (bring_loopback_up() != 0) {

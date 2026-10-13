@@ -249,6 +249,32 @@ static void run_mount_isolation_worker(const char *test_root) {
     _exit(EXIT_SUCCESS);
 }
 
+static void safe_recursive_rm(const char *path) {
+    if (!path || path[0] == '\0') return;
+    DIR *d = opendir(path);
+    if (!d) {
+        unlink(path);
+        return;
+    }
+    struct dirent *entry;
+    while ((entry = readdir(d)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        char full[TEST_PATH_BUF_SIZE];
+        if (join_path2(full, sizeof(full), path, entry->d_name) == 0) {
+            struct stat st;
+            if (lstat(full, &st) == 0) {
+                if (S_ISDIR(st.st_mode)) {
+                    safe_recursive_rm(full);
+                } else {
+                    unlink(full);
+                }
+            }
+        }
+    }
+    closedir(d);
+    rmdir(path);
+}
+
 static void test_mount_isolation_integration(void) {
     char test_root[] = "/tmp/alrios_mount_iso_XXXXXX";
     CHECK(mkdtemp(test_root) != NULL);
@@ -286,9 +312,7 @@ static void test_mount_isolation_integration(void) {
     CHECK(WEXITSTATUS(wstatus) == EXIT_SUCCESS);
 
     /* Cleanup host test files */
-    char rm_cmd[TEST_PATH_BUF_SIZE + 32U];
-    snprintf(rm_cmd, sizeof(rm_cmd), "rm -rf %s", test_root);
-    (void)system(rm_cmd);
+    safe_recursive_rm(test_root);
 }
 
 int main(void) {
