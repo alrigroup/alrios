@@ -1,6 +1,6 @@
 set(ALRIOS_PUBLIC_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/include")
-set(ALRIOS_PLATFORM_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/platform/kernel/include")
-set(ALRIOS_HAL_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/platform/hal/include")
+set(ALRIOS_PLATFORM_INCLUDE_DIR "${ALRIOS_PUBLIC_INCLUDE_DIR}")
+set(ALRIOS_HAL_INCLUDE_DIR "${ALRIOS_PUBLIC_INCLUDE_DIR}")
 set(ALRIOS_CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/platform/core")
 set(ALRIOS_ARCHIVE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libraries/archive")
 
@@ -79,19 +79,23 @@ target_include_directories(arkernel PUBLIC
 )
 target_link_libraries(arkernel PUBLIC arhal arlog)
 set_target_properties(arkernel PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore/lib"
-    ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore/lib"
-    ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore/lib"
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/arcore/lib"
-    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore/lib"
-    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore/lib"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+    ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/lib"
+    ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/lib"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/lib"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/lib"
+)
+add_custom_command(TARGET arkernel POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/arcore/lib"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:arkernel>" "${CMAKE_SOURCE_DIR}/arcore/lib/$<TARGET_FILE_NAME:arkernel>"
 )
 add_custom_command(TARGET arkernel POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/arcore/include"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ALRIOS_HAL_INCLUDE_DIR}/aros_hal.h" "${CMAKE_SOURCE_DIR}/arcore/include/aros_hal.h"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ALRIOS_PLATFORM_INCLUDE_DIR}/ar_ipc.h" "${CMAKE_SOURCE_DIR}/arcore/include/ar_ipc.h"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ALRIOS_PLATFORM_INCLUDE_DIR}/ar_kernel.h" "${CMAKE_SOURCE_DIR}/arcore/include/ar_kernel.h"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ALRIOS_PLATFORM_INCLUDE_DIR}/ar_svc.h" "${CMAKE_SOURCE_DIR}/arcore/include/ar_svc.h"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ALRIOS_PUBLIC_INCLUDE_DIR}/alrios/platform/aros_hal.h" "${CMAKE_SOURCE_DIR}/arcore/include/aros_hal.h"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ALRIOS_PUBLIC_INCLUDE_DIR}/alrios/platform/ar_ipc.h" "${CMAKE_SOURCE_DIR}/arcore/include/ar_ipc.h"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ALRIOS_PUBLIC_INCLUDE_DIR}/alrios/platform/ar_kernel.h" "${CMAKE_SOURCE_DIR}/arcore/include/ar_kernel.h"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ALRIOS_PUBLIC_INCLUDE_DIR}/alrios/platform/ar_svc.h" "${CMAKE_SOURCE_DIR}/arcore/include/ar_svc.h"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/libraries/log/log.h" "${CMAKE_SOURCE_DIR}/arcore/include/log.h"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/libraries/manifest/arapp_parser.h" "${CMAKE_SOURCE_DIR}/arcore/include/arapp_parser.h"
     COMMENT "Installing ALRIOS kernel SDK headers into arcore/include"
@@ -198,7 +202,7 @@ target_include_directories(arresources PUBLIC "${ALRIOS_PUBLIC_INCLUDE_DIR}")
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(ALRIOS_SANDBOX_MOUNTS_SOURCE libraries/sandbox/mounts.c)
 else()
-    set(ALRIOS_SANDBOX_MOUNTS_SOURCE libraries/sandbox/mounts_unsupported.c)
+    set(ALRIOS_SANDBOX_MOUNTS_SOURCE libraries/sandbox/mounts_windows.c)
 endif()
 add_library(arsandbox_mounts STATIC ${ALRIOS_SANDBOX_MOUNTS_SOURCE})
 alrios_pic(arsandbox_mounts)
@@ -260,7 +264,7 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(ALRIOS_DEVMODE_JAIL_SOURCE libraries/sandbox/devmode_jail.c)
 else()
-    set(ALRIOS_DEVMODE_JAIL_SOURCE libraries/sandbox/devmode_jail_unsupported.c)
+    set(ALRIOS_DEVMODE_JAIL_SOURCE libraries/sandbox/devmode_jail_windows.c)
 endif()
 add_library(ardevmode_jail STATIC ${ALRIOS_DEVMODE_JAIL_SOURCE})
 alrios_pic(ardevmode_jail)

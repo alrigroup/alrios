@@ -169,9 +169,13 @@ Todas as compilações e contribuições para o ALRIOS devem ser auditadas sob c
 1. **Compilação Estrita C11:** Zero warnings sob as flags `-std=c11 -Wall -Wextra -Wpedantic -Werror -Wstrict-prototypes -D_POSIX_C_SOURCE=200809L`.
 2. **Propriedade Intelectual Regulamentar:** Cabeçalho mandatório de copyright em todos os arquivos:
    ```c
-   /* ====================================================================
-    * Copyright (c) 2026 ALRI Development. All rights reserved.
-    * Proprietary and confidential. Unauthorized copying is prohibited.
-    * ==================================================================== */
+   /*
+    * Copyright (c) 2026 ALRIGROUP and its affiliates.
+    * Engineered and maintained by ALRI Development.
+    *
+    * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE
+    * found in the LICENSE file in the root directory of this source tree
+    * and at: https://github.com/alrigroup/licenses
+    */
    ```
 3. **Memory Safety Absoluto:** Validação rigorosa sob Valgrind Memcheck / ASan com zero bytes vazados.

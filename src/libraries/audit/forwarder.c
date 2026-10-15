@@ -9,9 +9,10 @@
 
 #include "alrios/audit/forwarder.h"
 #include "alrios/crypto_verify.h"
-#include "aros_hal.h"
+#include <alrios/platform/aros_hal.h>
 
 #include <errno.h>
+#include <alrios/platform/fs_compat.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <openssl/crypto.h>
@@ -21,7 +22,9 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 #define CHECKPOINT_VERSION 1U
 #define STATE_VERSION      1U

@@ -1,14 +1,17 @@
-/* ====================================================================
- * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
- * ==================================================================== */
-
+/*
+ * Copyright (c) 2026 ALRIGROUP and its affiliates.
+ * Engineered and maintained by ALRI Development.
+ *
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE
+ * found in the LICENSE file in the root directory of this source tree
+ * and at: https://github.com/alrigroup/licenses
+ */
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 #endif
 
-#include "ar_ipc.h"
-#include "aros_hal.h"
+#include <alrios/platform/ar_ipc.h>
+#include <alrios/platform/aros_hal.h>
 #include "zip.h"
 #include "arapp_parser.h"
 #include "arpm.h"
@@ -27,7 +30,9 @@
 #include <windows.h>
 #include <direct.h>
 #include <urlmon.h>
+#if defined(_MSC_VER)
 #pragma comment(lib, "urlmon.lib")
+#endif
 #define SEPARATOR '\\'
 #define mkdir_p_(p) _mkdir(p)
 #define strcasecmp _stricmp
@@ -42,8 +47,8 @@
 
 #include <openssl/evp.h>
 
-#define ARPM_VERSION "0.9.3"
-#define DEFAULT_REGISTRY_URL "https://raw.githubusercontent.com/alrigroup/alrios/v0.9.3/arcore/registry.json"
+#define ARPM_VERSION "1.0.0"
+#define DEFAULT_REGISTRY_URL "https://raw.githubusercontent.com/alrigroup/alrios/v1.0.0/arcore/registry.json"
 
 /* ANSI Colors */
 #define CLR_RESET   "\033[0m"

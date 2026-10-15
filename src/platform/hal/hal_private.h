@@ -10,7 +10,7 @@
 #ifndef ALRIOS_PLATFORM_HAL_PRIVATE_H
 #define ALRIOS_PLATFORM_HAL_PRIVATE_H
 
-#include "aros_hal.h"
+#include <alrios/platform/aros_hal.h>
 
 #include <stddef.h>
 #include <stdint.h>

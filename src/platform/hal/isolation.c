@@ -7,11 +7,16 @@
  * and at: https://github.com/alrigroup/licenses
  */
 
-#include "aros_hal.h"
+#include <alrios/platform/aros_hal.h>
 
 #include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
+
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 #if defined(__linux__)
 #include <fcntl.h>
@@ -141,6 +146,24 @@ int ar_process_enable_noexec_confinement(void) {
     }
     if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) != 0) {
         return -errno;
+    }
+    return 0;
+#elif defined(_WIN32)
+    /* On Windows, restrict creation of child processes using Process Mitigation Policy or Job limits */
+    PROCESS_MITIGATION_CHILD_PROCESS_POLICY policy;
+    memset(&policy, 0, sizeof(policy));
+    policy.NoChildProcessCreation = 1;
+    if (!SetProcessMitigationPolicy(ProcessChildProcessPolicy, &policy, sizeof(policy))) {
+        /* Fallback for environments where mitigation policy isn't available: use Job Object restriction */
+        HANDLE hJob = CreateJobObjectA(NULL, NULL);
+        if (hJob) {
+            JOBOBJECT_BASIC_LIMIT_INFORMATION bli;
+            memset(&bli, 0, sizeof(bli));
+            bli.LimitFlags = JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
+            bli.ActiveProcessLimit = 1;
+            SetInformationJobObject(hJob, JobObjectBasicLimitInformation, &bli, sizeof(bli));
+            AssignProcessToJobObject(hJob, GetCurrentProcess());
+        }
     }
     return 0;
 #else

@@ -15,7 +15,7 @@
 #include "alrios/crypto_verify.h"
 #include "alrios/package/arapp_v2.h"
 #include "alrios/pki/issuer.h"
-#include "aros_hal.h"
+#include <alrios/platform/aros_hal.h>
 
 #include <errno.h>
 #include <fcntl.h>

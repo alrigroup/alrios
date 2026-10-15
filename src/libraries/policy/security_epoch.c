@@ -11,6 +11,7 @@
 
 #include "alrios/policy/security_epoch.h"
 #include "alrios/crypto_verify.h"
+#include <alrios/platform/fs_compat.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -21,11 +22,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
 #include <sys/file.h>
+#include <unistd.h>
+#endif
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
-#include <unistd.h>
 
 static const uint8_t g_epoch_magic[ALRIOS_EPOCH_MAGIC_SIZE] = {
     'A', 'L', 'R', 'I', 'E', 'P', 'O', 'C'

@@ -6,11 +6,6 @@
  * found in the LICENSE file in the root directory of this source tree
  * and at: https://github.com/alrigroup/licenses
  */
-
-/* ====================================================================
- * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
- * ==================================================================== */
 #ifndef ARPM_H
 #define ARPM_H
 

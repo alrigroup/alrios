@@ -1,3 +1,12 @@
+/*
+ * Copyright (c) 2026 ALRIGROUP and its affiliates.
+ * Engineered and maintained by ALRI Development.
+ *
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE
+ * found in the LICENSE file in the root directory of this source tree
+ * and at: https://github.com/alrigroup/licenses
+ */
+
 /* ====================================================================
  * Copyright (c) 2026 ALRI Development. All rights reserved.
  * ==================================================================== */
@@ -9,7 +18,7 @@
 #include "installer_core.h"
 #include "runtimes.h"
 #include "zip.h"
-#include "aros_hal.h"
+#include <alrios/platform/aros_hal.h>
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -24,10 +33,12 @@
 #include <io.h>
 #include <urlmon.h>
 #include <shlobj.h>
+#if defined(_MSC_VER)
 #pragma comment(lib, "urlmon.lib")
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "advapi32.lib")
+#endif
 #define mkdir_p_(p) _mkdir(p)
 #else
 #include <unistd.h>

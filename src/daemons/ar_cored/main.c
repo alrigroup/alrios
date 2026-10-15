@@ -14,7 +14,7 @@
 #include "alrios/crash_report.h"
 #include "alrios/memory/sensitive.h"
 #include "alrios/crypto_verify.h"
-#include "aros_hal.h"
+#include <alrios/platform/aros_hal.h>
 
 #include <errno.h>
 #include <fcntl.h>

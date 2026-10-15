@@ -1,3 +1,12 @@
+/*
+ * Copyright (c) 2026 ALRIGROUP and its affiliates.
+ * Engineered and maintained by ALRI Development.
+ *
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE
+ * found in the LICENSE file in the root directory of this source tree
+ * and at: https://github.com/alrigroup/licenses
+ */
+
 /* ====================================================================
  * Copyright (c) 2026 ALRI Development. All rights reserved.
  * ==================================================================== */
@@ -8,7 +17,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(_WIN32)
+#include <winsock2.h>
+static void *alrios_memmem(const void *haystack, size_t haystacklen,
+                           const void *needle, size_t needlelen) {
+    if (!haystack || !needle || needlelen == 0 || haystacklen < needlelen) return NULL;
+    const char *h = (const char *)haystack;
+    const char *n = (const char *)needle;
+    for (size_t i = 0; i <= haystacklen - needlelen; i++) {
+        if (h[i] == n[0] && memcmp(&h[i], n, needlelen) == 0) {
+            return (void *)&h[i];
+        }
+    }
+    return NULL;
+}
+#define memmem(h, hl, n, nl) alrios_memmem(h, hl, n, nl)
+#else
 #include <arpa/inet.h>
+#endif
 
 /* Validates HTTP method against known safe HTTP tokens */
 static int is_valid_http_method(const char *method) {

@@ -12,7 +12,7 @@
 #endif
 
 #include "alrios/deploy/drain.h"
-#include "aros_hal.h"
+#include <alrios/platform/aros_hal.h>
 
 #include <errno.h>
 #include <fcntl.h>

@@ -14,10 +14,10 @@
 #include "alrios/supervisor/context.h"
 #include "alrios/supervisor/loader.h"
 #include "alrios/deploy/drain.h"
-#include "ar_ipc.h"
-#include "ar_kernel.h"
+#include <alrios/platform/ar_ipc.h>
+#include <alrios/platform/ar_kernel.h>
 #include "ar_path.h"
-#include "aros_hal.h"
+#include <alrios/platform/aros_hal.h>
 #include "zip.h"
 #include "log.h"
 

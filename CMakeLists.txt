@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(ALRIOS VERSION 0.9.3 LANGUAGES C)
+project(ALRIOS VERSION 1.0.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -21,6 +21,12 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/arcore")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/arcore")
 
 find_package(OpenSSL REQUIRED)
+if(WIN32)
+    # OpenSSL on Windows depends on ws2_32 and crypt32
+    if(TARGET OpenSSL::Crypto)
+        target_link_libraries(OpenSSL::Crypto INTERFACE ws2_32 crypt32)
+    endif()
+endif()
 find_package(Threads REQUIRED)
 
 include(cmake/CryptoProviders.cmake)

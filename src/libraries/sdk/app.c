@@ -13,11 +13,30 @@
 
 #include "alrios/sdk/app.h"
 #include "alrios/crypto_verify.h"
+#include <alrios/platform/fs_compat.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <time.h>
+#include <errno.h>
+
+#if defined(_WIN32)
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#include <io.h>
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+#define poll(p, n, t) WSAPoll((p), (n), (t))
+#define close(s) closesocket(s)
+#define SHUT_RDWR SD_BOTH
+#else
 #include <unistd.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -26,8 +45,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include <time.h>
-#include <errno.h>
+#endif
 
 #ifndef F_GET_SEALS
 #define F_GET_SEALS 1034
@@ -103,6 +121,10 @@ static int is_valid_secret_key(const char *key) {
 }
 
 static int verify_memfd_sealed(int fd) {
+#if defined(_WIN32)
+    (void)fd;
+    return 1;
+#else
     if (fd < 0) {
         return 0;
     }
@@ -114,6 +136,7 @@ static int verify_memfd_sealed(int fd) {
         return 0;
     }
     return 1;
+#endif
 }
 
 ar_app_context_t *ar_app_context_create(const ar_app_descriptor_t *desc) {
@@ -518,6 +541,17 @@ int ar_app_net_connect(
         return AR_APP_ERR_INVALID_ARG;
     }
 
+#if defined(_WIN32)
+    int fd = (int)socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return AR_APP_ERR_NETWORK;
+    }
+    u_long mode = 1;
+    if (ioctlsocket((SOCKET)fd, FIONBIO, &mode) != 0) {
+        closesocket((SOCKET)fd);
+        return AR_APP_ERR_NETWORK;
+    }
+#else
     int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
     if (fd < 0) {
         return AR_APP_ERR_NETWORK;
@@ -528,6 +562,7 @@ int ar_app_net_connect(
         close(fd);
         return AR_APP_ERR_NETWORK;
     }
+#endif
 
     struct sockaddr_in sa;
     memset(&sa, 0, sizeof(sa));
@@ -556,10 +591,18 @@ int ar_app_net_connect(
         return fd;
     }
 
+#if defined(_WIN32)
+    int werr = WSAGetLastError();
+    if (werr != WSAEWOULDBLOCK && werr != WSAEINPROGRESS) {
+        closesocket((SOCKET)fd);
+        return AR_APP_ERR_NETWORK;
+    }
+#else
     if (errno != EINPROGRESS) {
         close(fd);
         return AR_APP_ERR_NETWORK;
     }
+#endif
 
     struct pollfd pfd;
     pfd.fd = fd;
@@ -578,8 +621,13 @@ int ar_app_net_connect(
 
     if (pfd.revents & (POLLOUT | POLLERR | POLLHUP)) {
         int so_error = 0;
+#if defined(_WIN32)
+        int len = sizeof(so_error);
+        if (getsockopt((SOCKET)fd, SOL_SOCKET, SO_ERROR, (char *)&so_error, &len) < 0 || so_error != 0) {
+#else
         socklen_t len = sizeof(so_error);
         if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &len) < 0 || so_error != 0) {
+#endif
             close(fd);
             if (so_error == ETIMEDOUT || so_error == EINPROGRESS || so_error == EHOSTUNREACH || so_error == ENETUNREACH) {
                 return AR_APP_ERR_TIMEOUT;
@@ -738,9 +786,19 @@ int ar_app_vlog(
     char escaped_msg[1536];
     escape_json_string(raw_msg, escaped_msg, sizeof(escaped_msg));
 
+#if defined(_WIN32)
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    ULARGE_INTEGER uli;
+    uli.LowPart = ft.dwLowDateTime;
+    uli.HighPart = ft.dwHighDateTime;
+    /* Convert 100-ns intervals since Jan 1 1601 to ms since Jan 1 1970 */
+    uint64_t ts_ms = (uli.QuadPart - 116444736000000000ULL) / 10000ULL;
+#else
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     uint64_t ts_ms = ((uint64_t)ts.tv_sec * 1000ULL) + ((uint64_t)ts.tv_nsec / 1000000ULL);
+#endif
 
     int n = snprintf(
         ctx->last_log,

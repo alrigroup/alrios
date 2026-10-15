@@ -13,12 +13,28 @@
 
 #include "alrios/memory/sensitive.h"
 #include "alrios/crypto_verify.h"
-#include "aros_hal.h"
+#include <alrios/platform/aros_hal.h>
 
 #include <errno.h>
-#include <pthread.h>
 #include <string.h>
+
+#if defined(_WIN32)
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+#endif
+#include <windows.h>
+typedef SRWLOCK alrios_lock_t;
+#define ALRIOS_LOCK_INIT SRWLOCK_INIT
+#define alrios_lock_acquire(l) AcquireSRWLockExclusive(l)
+#define alrios_lock_release(l) ReleaseSRWLockExclusive(l)
+#else
+#include <pthread.h>
 #include <unistd.h>
+typedef pthread_mutex_t alrios_lock_t;
+#define ALRIOS_LOCK_INIT PTHREAD_MUTEX_INITIALIZER
+#define alrios_lock_acquire(l) (void)pthread_mutex_lock(l)
+#define alrios_lock_release(l) (void)pthread_mutex_unlock(l)
+#endif
 
 #if defined(__linux__)
 #include <sys/mman.h>
@@ -31,14 +47,14 @@
 #endif
 
 typedef struct sensitive_registry {
-    pthread_mutex_t lock;
+    alrios_lock_t lock;
     alrios_sensitive_range_t ranges[ALRIOS_SENSITIVE_MAX_REGISTRATIONS];
     size_t count;
     bool initialized;
 } sensitive_registry_t;
 
 static sensitive_registry_t g_registry = {
-    .lock = PTHREAD_MUTEX_INITIALIZER,
+    .lock = ALRIOS_LOCK_INIT,
     .count = 0,
     .initialized = true
 };
@@ -63,6 +79,27 @@ static int apply_madvise(void *ptr, size_t size, int advice) {
     }
     return ALRIOS_SENSITIVE_OK;
 }
+#elif defined(_WIN32)
+static int apply_memlock(void *ptr, size_t size, bool lock) {
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    DWORD page_size = si.dwPageSize ? si.dwPageSize : 4096;
+
+    uintptr_t start = (uintptr_t)ptr;
+    uintptr_t aligned_start = start & ~((uintptr_t)page_size - 1U);
+    uintptr_t end = start + size;
+    uintptr_t aligned_end = (end + (uintptr_t)page_size - 1U) & ~((uintptr_t)page_size - 1U);
+    size_t aligned_len = (size_t)(aligned_end - aligned_start);
+
+    if (lock) {
+        if (!VirtualLock((LPVOID)aligned_start, aligned_len)) {
+            return ALRIOS_SENSITIVE_OK;
+        }
+    } else {
+        VirtualUnlock((LPVOID)aligned_start, aligned_len);
+    }
+    return ALRIOS_SENSITIVE_OK;
+}
 #endif
 
 int alrios_sensitive_register(void *ptr, size_t size) {
@@ -70,30 +107,32 @@ int alrios_sensitive_register(void *ptr, size_t size) {
         return ALRIOS_SENSITIVE_ERR_INVALID_ARGUMENT;
     }
 
-    pthread_mutex_lock(&g_registry.lock);
+    alrios_lock_acquire(&g_registry.lock);
 
     /* Check if already registered */
     for (size_t i = 0; i < g_registry.count; ++i) {
         if (g_registry.ranges[i].ptr == ptr && g_registry.ranges[i].size == size) {
-            pthread_mutex_unlock(&g_registry.lock);
+            alrios_lock_release(&g_registry.lock);
             return ALRIOS_SENSITIVE_OK;
         }
     }
 
     if (g_registry.count >= ALRIOS_SENSITIVE_MAX_REGISTRATIONS) {
-        pthread_mutex_unlock(&g_registry.lock);
+        alrios_lock_release(&g_registry.lock);
         return ALRIOS_SENSITIVE_ERR_CAPACITY;
     }
 
 #if defined(__linux__)
     apply_madvise(ptr, size, MADV_DONTDUMP);
+#elif defined(_WIN32)
+    apply_memlock(ptr, size, true);
 #endif
 
     g_registry.ranges[g_registry.count].ptr = ptr;
     g_registry.ranges[g_registry.count].size = size;
     g_registry.count++;
 
-    pthread_mutex_unlock(&g_registry.lock);
+    alrios_lock_release(&g_registry.lock);
     return ALRIOS_SENSITIVE_OK;
 }
 
@@ -102,7 +141,7 @@ int alrios_sensitive_unregister(void *ptr, size_t size) {
         return ALRIOS_SENSITIVE_ERR_INVALID_ARGUMENT;
     }
 
-    pthread_mutex_lock(&g_registry.lock);
+    alrios_lock_acquire(&g_registry.lock);
 
     size_t found_idx = (size_t)-1;
     for (size_t i = 0; i < g_registry.count; ++i) {
@@ -113,7 +152,7 @@ int alrios_sensitive_unregister(void *ptr, size_t size) {
     }
 
     if (found_idx == (size_t)-1) {
-        pthread_mutex_unlock(&g_registry.lock);
+        alrios_lock_release(&g_registry.lock);
         return ALRIOS_SENSITIVE_ERR_NOT_FOUND;
     }
 
@@ -122,6 +161,8 @@ int alrios_sensitive_unregister(void *ptr, size_t size) {
 
 #if defined(__linux__)
     apply_madvise(ptr, size, MADV_DODUMP);
+#elif defined(_WIN32)
+    apply_memlock(ptr, size, false);
 #endif
 
     /* Shift remaining entries down */
@@ -132,7 +173,7 @@ int alrios_sensitive_unregister(void *ptr, size_t size) {
     g_registry.ranges[g_registry.count].ptr = NULL;
     g_registry.ranges[g_registry.count].size = 0;
 
-    pthread_mutex_unlock(&g_registry.lock);
+    alrios_lock_release(&g_registry.lock);
     return ALRIOS_SENSITIVE_OK;
 }
 
@@ -144,26 +185,26 @@ bool alrios_sensitive_is_registered(const void *ptr, size_t size) {
     uintptr_t check_start = (uintptr_t)ptr;
     uintptr_t check_end = check_start + size;
 
-    pthread_mutex_lock(&g_registry.lock);
+    alrios_lock_acquire(&g_registry.lock);
 
     for (size_t i = 0; i < g_registry.count; ++i) {
         uintptr_t reg_start = (uintptr_t)g_registry.ranges[i].ptr;
         uintptr_t reg_end = reg_start + g_registry.ranges[i].size;
 
         if (check_start < reg_end && check_end > reg_start) {
-            pthread_mutex_unlock(&g_registry.lock);
+            alrios_lock_release(&g_registry.lock);
             return true;
         }
     }
 
-    pthread_mutex_unlock(&g_registry.lock);
+    alrios_lock_release(&g_registry.lock);
     return false;
 }
 
 int alrios_sensitive_get_ranges(alrios_sensitive_range_t *out_ranges,
                                 size_t max_ranges,
                                 size_t *out_count) {
-    pthread_mutex_lock(&g_registry.lock);
+    alrios_lock_acquire(&g_registry.lock);
 
     if (out_count) {
         *out_count = g_registry.count;
@@ -176,12 +217,12 @@ int alrios_sensitive_get_ranges(alrios_sensitive_range_t *out_ranges,
         }
     }
 
-    pthread_mutex_unlock(&g_registry.lock);
+    alrios_lock_release(&g_registry.lock);
     return ALRIOS_SENSITIVE_OK;
 }
 
 void alrios_sensitive_scrub_all(void) {
-    pthread_mutex_lock(&g_registry.lock);
+    alrios_lock_acquire(&g_registry.lock);
 
     for (size_t i = 0; i < g_registry.count; ++i) {
         if (g_registry.ranges[i].ptr && g_registry.ranges[i].size > 0) {
@@ -189,17 +230,19 @@ void alrios_sensitive_scrub_all(void) {
         }
     }
 
-    pthread_mutex_unlock(&g_registry.lock);
+    alrios_lock_release(&g_registry.lock);
 }
 
 void alrios_sensitive_clear_all(void) {
-    pthread_mutex_lock(&g_registry.lock);
+    alrios_lock_acquire(&g_registry.lock);
 
     for (size_t i = 0; i < g_registry.count; ++i) {
         if (g_registry.ranges[i].ptr && g_registry.ranges[i].size > 0) {
             alrios_explicit_zeroize(g_registry.ranges[i].ptr, g_registry.ranges[i].size);
 #if defined(__linux__)
             apply_madvise(g_registry.ranges[i].ptr, g_registry.ranges[i].size, MADV_DODUMP);
+#elif defined(_WIN32)
+            apply_memlock(g_registry.ranges[i].ptr, g_registry.ranges[i].size, false);
 #endif
         }
         g_registry.ranges[i].ptr = NULL;
@@ -207,5 +250,5 @@ void alrios_sensitive_clear_all(void) {
     }
     g_registry.count = 0;
 
-    pthread_mutex_unlock(&g_registry.lock);
+    alrios_lock_release(&g_registry.lock);
 }

@@ -7,7 +7,7 @@
  * and at: https://github.com/alrigroup/licenses
  */
 
-#include "aros_hal.h"
+#include <alrios/platform/aros_hal.h>
 
 #include <stdio.h>
 #include <stdlib.h>

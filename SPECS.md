@@ -289,7 +289,7 @@ The `.arapp` format is an immutable binary envelope structured with rigid 32-bit
 ```c
 /* ====================================================================
  * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE.
  * ==================================================================== */
 
 #ifndef ALRIOS_ARAPP_FORMAT_H
@@ -519,7 +519,7 @@ The ALRIOS cryptographic hierarchy guarantees non-repudiation, quantum-resistanc
 ```c
 /* ====================================================================
  * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE.
  * ==================================================================== */
 
 #ifndef ALRIOS_CRYPTO_H
@@ -639,7 +639,7 @@ int alrios_aes256_gcm_encrypt(
 ```c
 /* ====================================================================
  * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE.
  * ==================================================================== */
 
 #include "alrios/crypto.h"
@@ -677,7 +677,7 @@ The loader orchestrates memory-only decryption, descriptor sealing, execution ri
 ```c
 /* ====================================================================
  * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE.
  * ==================================================================== */
 
 #define _GNU_SOURCE
@@ -909,7 +909,7 @@ int alrios_memloader_run(
 ```c
 /* ====================================================================
  * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE.
  * ==================================================================== */
 
 #define _GNU_SOURCE
@@ -1001,7 +1001,7 @@ To allow sub-20ms atomic hot-reloads without losing active SQLite sessions or re
 ```c
 /* ====================================================================
  * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE.
  * ==================================================================== */
 
 #include <stdio.h>
@@ -1057,7 +1057,7 @@ Unsigned, un-homologated developer code runs inside a DevMode Sandbox Ring. It i
 ```c
 /* ====================================================================
  * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE.
  * ==================================================================== */
 
 #define _GNU_SOURCE
@@ -1191,7 +1191,7 @@ int alrios_sandbox_apply_seccomp(void) {
 ```c
 /* ====================================================================
  * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE.
  * ==================================================================== */
 
 #ifndef ALRIOS_IPC_CHANNEL_H
@@ -1256,7 +1256,7 @@ int alrios_ipc_recv_frame(
 ```c
 /* ====================================================================
  * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE.
  * ==================================================================== */
 
 #include "alrios/ipc_channel.h"
@@ -1345,7 +1345,7 @@ int alrios_ipc_recv_frame(
 ```c
 /* ====================================================================
  * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE.
  * ==================================================================== */
 
 #define _GNU_SOURCE
@@ -1415,7 +1415,7 @@ int alrios_send_live_fd(int unix_sock, int fd_to_send) {
 ```c
 /* ====================================================================
  * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE.
  * ==================================================================== */
 
 #ifndef ALRIOS_AR_SDK_H

@@ -12,7 +12,7 @@
 #include "alrios/audit/block.h"
 #include "alrios/audit/forwarder.h"
 #include "alrios/crypto_verify.h"
-#include "aros_hal.h"
+#include <alrios/platform/aros_hal.h>
 
 #include <errno.h>
 #include <fcntl.h>

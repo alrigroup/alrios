@@ -1,14 +1,17 @@
-/* ====================================================================
- * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
- * ==================================================================== */
-
+/*
+ * Copyright (c) 2026 ALRIGROUP and its affiliates.
+ * Engineered and maintained by ALRI Development.
+ *
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE
+ * found in the LICENSE file in the root directory of this source tree
+ * and at: https://github.com/alrigroup/licenses
+ */
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 #endif
 
-#include "ar_ipc.h"
-#include "aros_hal.h"
+#include <alrios/platform/ar_ipc.h>
+#include <alrios/platform/aros_hal.h>
 #include "arpm.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -221,7 +224,7 @@ static void print_installed_apps(void) {
 }
 
 static void print_usage(void) {
-  printf("ALRIOS CLI v0.9.3\n\n");
+  printf("ALRIOS CLI v1.0.0\n\n");
   printf("Uso:\n");
   printf("  alrios power on|off|reload       (gerencia ciclo de vida do kernel arcore)\n");
   printf("  alrios status                    (alias: list - status dos daemons)\n");
@@ -554,7 +557,32 @@ static int cmd_fullupdate(int argc, char **argv) {
   /* 3. Incremental App Packaging */
   printf("\033[1;34m[3/4]\033[0m Executando empacotamento incremental de "
          "aplicacoes (Content-Hash)...\n");
-#ifndef _WIN32
+#ifdef _WIN32
+  WIN32_FIND_DATAA fd_find;
+  HANDLE hFind = FindFirstFileA("src\\apps\\*", &fd_find);
+  if (hFind != INVALID_HANDLE_VALUE) {
+    do {
+      if (fd_find.cFileName[0] == '.')
+        continue;
+      if (fd_find.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+        char appdir[1024];
+        snprintf(appdir, sizeof(appdir), "src/apps/%s", fd_find.cFileName);
+        char output_path[1024];
+        snprintf(output_path, sizeof(output_path), "arcore/apps/%s.arapp", fd_find.cFileName);
+        char *package_argv[] = {
+          "arcore\\armake.exe", "build", appdir, output_path,
+          force ? "--force" : NULL, NULL
+        };
+        int package_rc = run_process(package_argv[0], package_argv);
+        if (package_rc != 0) {
+          fprintf(stderr, "\033[1;33m[AVISO]\033[0m empacotamento de %s falhou (codigo %d).\n",
+                  fd_find.cFileName, package_rc);
+        }
+      }
+    } while (FindNextFileA(hFind, &fd_find));
+    FindClose(hFind);
+  }
+#else
   DIR *d = opendir("src/apps");
   if (d) {
     struct dirent *entry;
@@ -724,7 +752,7 @@ int main(int argc, char *argv[]) {
 
   if (strcmp(a1, "version") == 0 || strcmp(a1, "--version") == 0 ||
       strcmp(a1, "-v") == 0) {
-    printf("ALRIOS CLI v0.9.3\n");
+    printf("ALRIOS CLI v1.0.0\n");
     return 0;
   }
 

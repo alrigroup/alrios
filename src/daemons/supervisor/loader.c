@@ -15,8 +15,8 @@
 #include "alrios/supervisor/context.h"
 #include "arapp_parser.h"
 #include "ar_path.h"
-#include "aros_hal.h"
-#include "ar_kernel.h"
+#include <alrios/platform/aros_hal.h>
+#include <alrios/platform/ar_kernel.h>
 #include "zip.h"
 #include "log.h"
 
@@ -646,15 +646,12 @@ static void scan_arapp_file(ar_supervisor_context_t *ctx,
     process_app(ctx, cache_dir, arapp_path, phase);
 }
 
+#ifndef _WIN32
 static int is_dir_path(const char *path) {
-#ifdef _WIN32
-    DWORD attr = GetFileAttributesA(path);
-    return (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY));
-#else
     struct stat st;
     return (stat(path, &st) == 0 && S_ISDIR(st.st_mode));
-#endif
 }
+#endif
 
 void ar_supervisor_get_apps_dir(const ar_supervisor_context_t *ctx, char *buf, int size) {
     if (!buf || size <= 0) return;

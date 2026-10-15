@@ -16,7 +16,7 @@
 
 #include "alrios/hooks/lifecycle.h"
 #include "alrios/atomic_swap.h"
-#include "aros_hal.h"
+#include <alrios/platform/aros_hal.h>
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -12,6 +12,7 @@
 #endif
 
 #include "alrios/deploy/layering.h"
+#include <alrios/platform/fs_compat.h>
 
 #include <dirent.h>
 #include <errno.h>
@@ -24,7 +25,9 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 #if defined(__linux__)
 #include <linux/fs.h>

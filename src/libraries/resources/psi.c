@@ -9,6 +9,13 @@
 
 #include "alrios/resources/psi.h"
 
+#ifdef _WIN32
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+#endif
+#include <windows.h>
+#endif
+
 #include <ctype.h>
 #include <errno.h>
 #include <math.h>
@@ -307,6 +314,24 @@ int alrios_psi_read_memory_path(const char *path,
 int alrios_psi_read_memory(alrios_psi_memory_sample_t *out_sample) {
 #ifdef __linux__
     return alrios_psi_read_memory_path(ALRIOS_PSI_MEMORY_PATH, out_sample);
+#elif defined(_WIN32)
+    if (out_sample == NULL) {
+        return ALRIOS_PSI_ERR_ARGUMENT;
+    }
+    MEMORYSTATUSEX ms;
+    ms.dwLength = sizeof(ms);
+    if (!GlobalMemoryStatusEx(&ms)) {
+        return ALRIOS_PSI_ERR_IO;
+    }
+    memset(out_sample, 0, sizeof(*out_sample));
+    double load = (double)ms.dwMemoryLoad;
+    out_sample->some.avg10 = load;
+    out_sample->some.avg60 = load;
+    out_sample->some.avg300 = load;
+    out_sample->full.avg10 = load;
+    out_sample->full.avg60 = load;
+    out_sample->full.avg300 = load;
+    return ALRIOS_PSI_OK;
 #else
     (void)out_sample;
     return ALRIOS_PSI_ERR_UNSUPPORTED;

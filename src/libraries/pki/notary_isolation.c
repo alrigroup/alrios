@@ -8,7 +8,7 @@
  */
 
 #include "alrios/pki/notary.h"
-#include "aros_hal.h"
+#include <alrios/platform/aros_hal.h>
 
 int alrios_notary_enable_noexec_confinement(void) {
     return ar_process_enable_noexec_confinement();

@@ -12,6 +12,7 @@
 #include "alrios/audit/block.h"
 
 #include <errno.h>
+#include <alrios/platform/fs_compat.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <openssl/evp.h>
@@ -20,7 +21,9 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 static const uint8_t audit_magic[8] = {
     0x41U, 0x4cU, 0x52U, 0x49U, 0x41U, 0x55U, 0x44U, 0x54U
@@ -319,6 +322,46 @@ int alrios_audit_block_verify(const uint8_t *wire, size_t wire_len,
     return ALRIOS_AUDIT_OK;
 }
 
+#if defined(_WIN32)
+static int lock_fd(int fd, short lock_type) {
+    HANDLE h = (HANDLE)_get_osfhandle(fd);
+    if (h == INVALID_HANDLE_VALUE) {
+        return ALRIOS_AUDIT_ERR_IO;
+    }
+    OVERLAPPED ov;
+    memset(&ov, 0, sizeof(ov));
+    (void)lock_type;
+    if (LockFileEx(h, LOCKFILE_EXCLUSIVE_LOCK, 0, MAXDWORD, MAXDWORD, &ov)) {
+        return ALRIOS_AUDIT_OK;
+    }
+    return ALRIOS_AUDIT_ERR_BUSY;
+}
+
+static int unlock_fd(int fd) {
+    HANDLE h = (HANDLE)_get_osfhandle(fd);
+    if (h == INVALID_HANDLE_VALUE) {
+        return ALRIOS_AUDIT_ERR_IO;
+    }
+    OVERLAPPED ov;
+    memset(&ov, 0, sizeof(ov));
+    if (UnlockFileEx(h, 0, MAXDWORD, MAXDWORD, &ov)) {
+        return ALRIOS_AUDIT_OK;
+    }
+    return ALRIOS_AUDIT_ERR_IO;
+}
+
+static int fd_mode_valid(int fd, int require_write) {
+    if (fd < 0) {
+        return 0;
+    }
+    HANDLE h = (HANDLE)_get_osfhandle(fd);
+    if (h == INVALID_HANDLE_VALUE) {
+        return 0;
+    }
+    (void)require_write;
+    return 1;
+}
+#else
 static int lock_fd(int fd, short lock_type) {
     struct flock lock;
 
@@ -362,6 +405,7 @@ static int fd_mode_valid(int fd, int require_write) {
     }
     return access_mode == O_RDONLY || access_mode == O_RDWR;
 }
+#endif
 
 static int read_exact_at(int fd, uint8_t *buffer, size_t length,
                          uint64_t offset) {

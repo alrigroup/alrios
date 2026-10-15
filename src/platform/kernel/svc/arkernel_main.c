@@ -1,15 +1,18 @@
-/* ====================================================================
- * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
- * ==================================================================== */
-
+/*
+ * Copyright (c) 2026 ALRIGROUP and its affiliates.
+ * Engineered and maintained by ALRI Development.
+ *
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE
+ * found in the LICENSE file in the root directory of this source tree
+ * and at: https://github.com/alrigroup/licenses
+ */
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 #endif
 
-#include "ar_kernel.h"
-#include "ar_svc.h"
-#include "aros_hal.h"
+#include <alrios/platform/ar_kernel.h>
+#include <alrios/platform/ar_svc.h>
+#include <alrios/platform/aros_hal.h>
 #include <stdio.h>
 #include <string.h>
 #ifdef _WIN32

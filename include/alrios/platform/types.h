@@ -11,7 +11,7 @@
 #define ALRIOS_PLATFORM_TYPES_H
 
 #ifdef _WIN32
-typedef int pid_t;
+#include <sys/types.h>
 typedef unsigned int uid_t;
 typedef unsigned int gid_t;
 #else

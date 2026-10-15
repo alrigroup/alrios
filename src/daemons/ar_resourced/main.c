@@ -9,6 +9,13 @@
 
 #include "alrios/resources/psi.h"
 
+#ifdef _WIN32
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+#endif
+#include <windows.h>
+#endif
+
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -45,6 +52,10 @@ static int parse_interval(const char *value, unsigned int *out_interval_ms) {
 }
 
 static int sleep_interval(unsigned int interval_ms) {
+#ifdef _WIN32
+    Sleep(interval_ms);
+    return 0;
+#else
     struct timespec requested;
     struct timespec remaining;
 
@@ -57,6 +68,7 @@ static int sleep_interval(unsigned int interval_ms) {
         requested = remaining;
     }
     return 0;
+#endif
 }
 
 static int emit_notification(void *context,
@@ -101,19 +113,19 @@ static void print_usage(const char *program) {
             program);
 }
 
+#ifdef _WIN32
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+#endif
+#include <windows.h>
+#endif
+
 int main(int argc, char **argv) {
     const char *psi_path = ALRIOS_PSI_MEMORY_PATH;
     unsigned int interval_ms = AR_RESOURCED_DEFAULT_INTERVAL_MS;
     alrios_psi_pressure_level_t previous_level = ALRIOS_PSI_PRESSURE_NORMAL;
     int run_once = 0;
     int index;
-
-#ifndef __linux__
-    (void)argc;
-    (void)argv;
-    fprintf(stderr, "ar_resourced: Linux PSI support is required\n");
-    return EXIT_FAILURE;
-#endif
 
     for (index = 1; index < argc; ++index) {
         if (strcmp(argv[index], "--once") == 0) {
@@ -144,7 +156,13 @@ int main(int argc, char **argv) {
     while (keep_running) {
         alrios_psi_memory_sample_t sample;
         alrios_psi_pressure_level_t level;
+#ifdef _WIN32
+        int status = (strcmp(psi_path, ALRIOS_PSI_MEMORY_PATH) == 0) ?
+            alrios_psi_read_memory(&sample) :
+            alrios_psi_read_memory_path(psi_path, &sample);
+#else
         int status = alrios_psi_read_memory_path(psi_path, &sample);
+#endif
 
         if (status != ALRIOS_PSI_OK) {
             fprintf(stderr, "ar_resourced: cannot monitor %s: %s\n",

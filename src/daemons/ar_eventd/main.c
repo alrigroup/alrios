@@ -16,16 +16,41 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#ifndef _WIN32
 #include <poll.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/un.h>
+#include <unistd.h>
+#else
+#include <winsock2.h>
+#include <windows.h>
+#include <io.h>
+#define poll(p, n, t) WSAPoll((p), (n), (t))
+#define close(s) closesocket(s)
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+#ifndef MSG_DONTWAIT
+#define MSG_DONTWAIT 0
+#endif
+typedef ULONG nfds_t;
+
+struct sockaddr_un {
+    unsigned short sun_family;
+    char sun_path[108];
+};
+struct ucred {
+    uint32_t pid;
+    uint32_t uid;
+    uint32_t gid;
+};
+#endif
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/un.h>
 #include <time.h>
-#include <unistd.h>
 
 #define AR_EVENTD_DEFAULT_SOCKET_PATH    "/tmp/ar_eventd.sock"
 #define AR_EVENTD_DEFAULT_MAX_TOPICS     256U
@@ -115,6 +140,15 @@ static void print_usage(const char *prog) {
 }
 
 static int get_peer_credentials(int fd, ar_event_identity_t *out_identity) {
+#ifdef _WIN32
+    (void)fd;
+    memset(out_identity, 0, sizeof(*out_identity));
+    out_identity->pid = (uint32_t)GetCurrentProcessId();
+    out_identity->uid = 0;
+    out_identity->gid = 0;
+    snprintf(out_identity->principal, sizeof(out_identity->principal), "system");
+    return 0;
+#else
     struct ucred cred;
     socklen_t len = (socklen_t)sizeof(cred);
     int written;
@@ -138,6 +172,7 @@ static int get_peer_credentials(int fd, ar_event_identity_t *out_identity) {
         return -1;
     }
     return 0;
+#endif
 }
 
 static void client_remove_subscription_index(ar_eventd_client_t *client, size_t idx) {
@@ -185,7 +220,11 @@ static int send_response(int fd, uint16_t opcode, uint16_t topic, uint64_t trans
         return -1;
     }
 
+#ifdef _WIN32
+    ssize_t sent = send((SOCKET)fd, (const char *)wire, (int)sizeof(wire), 0);
+#else
     ssize_t sent = send(fd, wire, sizeof(wire), MSG_DONTWAIT | MSG_NOSIGNAL);
+#endif
     return sent == (ssize_t)sizeof(wire) ? 0 : -1;
 }
 
@@ -234,6 +273,16 @@ static void dispatch_pending_events(ar_eventd_server_t *server) {
                 }
 
                 size_t total_len = sizeof(ar_event_wire_header_t) + payload_len;
+#ifdef _WIN32
+                ssize_t sent = send((SOCKET)client->fd, (const char *)frame_buf, (int)total_len, 0);
+                if (sent < 0) {
+                    int werr = WSAGetLastError();
+                    if (werr == WSAEWOULDBLOCK) {
+                        break;
+                    }
+                    break;
+                }
+#else
                 ssize_t sent = send(client->fd, frame_buf, total_len, MSG_DONTWAIT | MSG_NOSIGNAL);
                 if (sent < 0) {
                     if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -243,6 +292,7 @@ static void dispatch_pending_events(ar_eventd_server_t *server) {
                     /* Socket error: client will be disconnected on next poll */
                     break;
                 }
+#endif
             }
         }
     }
@@ -251,12 +301,27 @@ static void dispatch_pending_events(ar_eventd_server_t *server) {
 static int handle_client_datagram(ar_eventd_server_t *server, size_t client_idx) {
     ar_eventd_client_t *client = &server->clients[client_idx];
     uint8_t raw_msg[AR_EVENT_MAX_FRAME_SIZE];
+    ar_event_wire_header_t header;
+    ssize_t nrecv;
+
+#ifdef _WIN32
+    do {
+        nrecv = recv((SOCKET)client->fd, (char *)raw_msg, sizeof(raw_msg), 0);
+    } while (nrecv < 0 && WSAGetLastError() == WSAEINTR);
+
+    if (nrecv <= 0) {
+        int werr = WSAGetLastError();
+        if (nrecv == 0 || (werr != WSAEWOULDBLOCK && werr != WSAEINPROGRESS)) {
+            client_disconnect(server, client_idx);
+            return -1;
+        }
+        return 0;
+    }
+#else
     char cmsg_buf[CMSG_SPACE(sizeof(struct ucred)) + 64];
     struct msghdr msg;
     struct iovec iov;
     struct cmsghdr *cmsg;
-    ar_event_wire_header_t header;
-    ssize_t nrecv;
 
     memset(&msg, 0, sizeof(msg));
     iov.iov_base = raw_msg;
@@ -293,6 +358,11 @@ static int handle_client_datagram(ar_eventd_server_t *server, size_t client_idx)
                 return -1;
             }
         }
+    }
+#endif
+
+    if ((size_t)nrecv < sizeof(ar_event_wire_header_t)) {
+        return 0;
     }
 
     if (ar_event_wire_header_decode(raw_msg, &header) != AR_EVENT_OK) {
@@ -391,8 +461,10 @@ int main(int argc, char **argv) {
     size_t queue_depth = AR_EVENTD_DEFAULT_QUEUE_DEPTH;
     int run_once = 0;
     int i;
+#ifndef _WIN32
     struct sigaction sa;
     struct sockaddr_un sun;
+#endif
     ar_event_broker_config_t config;
     ar_eventd_server_t server;
 
@@ -442,6 +514,10 @@ int main(int argc, char **argv) {
         }
     }
 
+#ifdef _WIN32
+    signal(SIGINT, handle_signal);
+    signal(SIGTERM, handle_signal);
+#else
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = handle_signal;
     (void)sigaction(SIGINT, &sa, NULL);
@@ -450,6 +526,7 @@ int main(int argc, char **argv) {
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = SIG_IGN;
     (void)sigaction(SIGPIPE, &sa, NULL);
+#endif
 
     config.max_topics = max_topics;
     config.max_payload_size = max_payload;
@@ -461,6 +538,29 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
+#ifdef _WIN32
+    server.listen_fd = (int)socket(AF_INET, SOCK_STREAM, 0);
+    if (server.listen_fd < 0) {
+        (void)fprintf(stderr, "ar_eventd: failed to create socket\n");
+        ar_event_broker_destroy(server.broker);
+        return EXIT_FAILURE;
+    }
+    u_long nonblock = 1;
+    ioctlsocket((SOCKET)server.listen_fd, FIONBIO, &nonblock);
+
+    struct sockaddr_in sin;
+    memset(&sin, 0, sizeof(sin));
+    sin.sin_family = AF_INET;
+    sin.sin_addr.s_addr = inet_addr("127.0.0.1");
+    sin.sin_port = htons(50051);
+
+    if (bind((SOCKET)server.listen_fd, (struct sockaddr *)&sin, sizeof(sin)) != 0) {
+        (void)fprintf(stderr, "ar_eventd: failed to bind loopback TCP socket\n");
+        closesocket((SOCKET)server.listen_fd);
+        ar_event_broker_destroy(server.broker);
+        return EXIT_FAILURE;
+    }
+#else
     server.listen_fd = socket(AF_UNIX, SOCK_SEQPACKET, 0);
     if (server.listen_fd < 0) {
         (void)fprintf(stderr, "ar_eventd: failed to create AF_UNIX SOCK_SEQPACKET socket: %s\n",
@@ -498,6 +598,7 @@ int main(int argc, char **argv) {
         ar_event_broker_destroy(server.broker);
         return EXIT_FAILURE;
     }
+#endif
 
     if (listen(server.listen_fd, 32) != 0) {
         (void)fprintf(stderr, "ar_eventd: failed to listen on socket '%s': %s\n",
@@ -544,6 +645,12 @@ int main(int argc, char **argv) {
         }
 
         if (pfds[0].revents & POLLIN) {
+#ifdef _WIN32
+            int client_fd = (int)accept((SOCKET)server.listen_fd, NULL, NULL);
+            if (client_fd >= 0) {
+                u_long nonblock = 1;
+                ioctlsocket((SOCKET)client_fd, FIONBIO, &nonblock);
+#else
             int client_fd = accept(server.listen_fd, NULL, NULL);
             if (client_fd >= 0) {
                 int cflags = fcntl(client_fd, F_GETFL, 0);
@@ -557,6 +664,7 @@ int main(int argc, char **argv) {
 
                 int passcred = 1;
                 (void)setsockopt(client_fd, SOL_SOCKET, SO_PASSCRED, &passcred, (socklen_t)sizeof(passcred));
+#endif
 
                 if (server.client_count < AR_EVENTD_MAX_CLIENTS) {
                     ar_eventd_client_t *new_cli = &server.clients[server.client_count];

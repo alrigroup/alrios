@@ -1,15 +1,18 @@
-/* ====================================================================
- * Copyright (c) 2026 ALRI Development. All rights reserved.
- * Proprietary and confidential. Unauthorized copying is prohibited.
- * ==================================================================== */
-
+/*
+ * Copyright (c) 2026 ALRIGROUP and its affiliates.
+ * Engineered and maintained by ALRI Development.
+ *
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE
+ * found in the LICENSE file in the root directory of this source tree
+ * and at: https://github.com/alrigroup/licenses
+ */
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic ignored "-Wformat-truncation"
 #endif
 
 #include "zip.h"
 #include "arapp_parser.h"
-#include "aros_hal.h"
+#include <alrios/platform/aros_hal.h>
 #include "alrios/armake/package_v2.h"
 #include "alrios/package/arapp_v2.h"
 #include "alrios/package/index.h"

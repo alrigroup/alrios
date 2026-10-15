@@ -1,8 +1,18 @@
+/*
+ * Copyright (c) 2026 ALRIGROUP and its affiliates.
+ * Engineered and maintained by ALRI Development.
+ *
+ * This code is licensed under the ARGLP - ALRI GROUP LICENSE PERMISSIVE
+ * found in the LICENSE file in the root directory of this source tree
+ * and at: https://github.com/alrigroup/licenses
+ */
+
 /* ====================================================================
  * Copyright (c) 2026 ALRI Development. All rights reserved.
  * ALRIOS Sovereign Operating System - Native AR-SDK Core Implementation
  * ==================================================================== */
 #include "alrios/ar.h"
+#include "alrios/crypto_verify.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -49,7 +59,7 @@ const char *ar_context_get_app_id(const ar_context_t *ctx) {
 void ar_context_destroy(ar_context_t *ctx) {
     if (ctx) {
         /* Scrub sensitive memory before deallocation */
-        explicit_bzero(ctx, sizeof(ar_context_t));
+        alrios_explicit_zeroize(ctx, sizeof(ar_context_t));
         free(ctx);
     }
 }
@@ -126,7 +136,7 @@ void *ar_arena_calloc(ar_arena_t *arena, size_t nmemb, size_t size) {
 void ar_arena_reset(ar_arena_t *arena) {
     if (arena && arena->buffer) {
         /* Zero out request memory to prevent data remanence across scoped requests */
-        explicit_bzero(arena->buffer, arena->offset);
+        alrios_explicit_zeroize(arena->buffer, arena->offset);
         arena->offset = 0;
     }
 }
@@ -148,11 +158,11 @@ size_t ar_arena_get_capacity(const ar_arena_t *arena) {
 void ar_arena_destroy(ar_arena_t *arena) {
     if (arena) {
         if (arena->buffer) {
-            explicit_bzero(arena->buffer, arena->capacity);
+            alrios_explicit_zeroize(arena->buffer, arena->capacity);
             free(arena->buffer);
             arena->buffer = NULL;
         }
-        explicit_bzero(arena, sizeof(ar_arena_t));
+        alrios_explicit_zeroize(arena, sizeof(ar_arena_t));
         free(arena);
     }
 }
