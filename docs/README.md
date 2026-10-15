@@ -61,7 +61,9 @@ build.bat
 
 - **[Developer Guide & IPC Specification](DEVELOPER_GUIDE.md):** `.arapp` package creation and IPC protocol.
 - **[Complete Features Catalog](features.md):** Full technical catalog of all core subsystems.
-- **[Production & Deployment Guide](PRODUCTION.md):** Deployment manual for Debian/Linux servers.
+- **[Windows Portability & Parity Specification](WINDOWS_PORTABILITY_MAP.md):** Architectural mapping and Win32 isolation implementation.
+- **[System Implementation Readiness Matrix](IMPLEMENTATION_STATUS.md):** Verified subsystems and verification state.
+- **[Production & Deployment Guide](PRODUCTION.md):** Deployment manual for Linux/Windows enterprise servers.
 - **[System Requirements](REQUIREMENTS.md):** Complete software dependencies list.
 - **[ARKernel Specification](KERNEL.md):** OS Hardware Abstraction Layer.
 - **[Core Daemon (arcore)](CORE.md):** Lifecycle manager and service runner.

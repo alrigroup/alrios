@@ -10,9 +10,10 @@
 <p align="center"><strong>Sovereign Operating System, Native Microkernel & High-Performance Microservice Platform</strong></p>
 
 <p align="center">
-  <a href="https://github.com/alrigroup/alrios/actions/workflows/build-installers.yml"><img src="https://img.shields.io/github/actions/workflow/status/alrigroup/alrios/build-installers.yml?branch=release%2Fv0.9.3&label=CI%2FCD%20Linux%20Build&style=flat-square" alt="CI/CD Status"></a>
-  <img alt="Language" src="https://img.shields.io/badge/language-C%20%2F%20C%2B%2B-00599C?style=flat-square" />
-  <img alt="Platform" src="https://img.shields.io/badge/platform-Linux%20x64-blueviolet?style=flat-square" />
+  <a href="https://github.com/alrigroup/alrios/actions"><img src="https://img.shields.io/github/actions/workflow/status/alrigroup/alrios/build-installers.yml?branch=main&label=CI%2FCD%20Build&style=flat-square" alt="CI/CD Status"></a>
+  <img alt="Language" src="https://img.shields.io/badge/language-C11%20%2F%20C%2B%2B-00599C?style=flat-square" />
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Linux%20x64%20%7C%20Windows%20x64-blueviolet?style=flat-square" />
+  <img alt="Version" src="https://img.shields.io/badge/version-1.0.0%20GA-brightgreen?style=flat-square" />
   <img alt="License" src="https://img.shields.io/badge/license-ARGLP-green?style=flat-square" />
 </p>
 
@@ -46,8 +47,8 @@ This repository contains:
 
 ## 🚀 Instant Installation (1-Click Standalone)
 
-ALRIOS currently provides a **single-executable standalone installer for Linux x64**.
-**Zero dependencies required**: If your machine lacks compilers or runtimes (like GCC, Node.js, Python), the installer detects and auto-downloads everything on-the-fly!
+ALRIOS provides sovereign native distributions for both **Linux x64** and **Windows x64**.
+**Zero external runtime dependencies**: If your machine lacks compilers or runtimes (like GCC, Node.js, Python), the installer detects and auto-downloads everything on-the-fly!
 
 ### 🐧 Linux (x64)
 
@@ -64,6 +65,19 @@ chmod +x alrios-installer-linux-x64
 ```
 - **Installation Path**: `/opt/alrios/` (with sudo) or `~/.local/share/alrios/` (unprivileged user).
 - **Global PATH Commands**: Creates symbolic links in `/usr/local/bin` (`alrios`, `arpm`, `arcore`, `armake`).
+
+### 🪟 Windows (x64)
+
+Download the official package (`alrios-v1.0.0-windows-x64.zip`) or executable from the [Releases](https://github.com/alrigroup/alrios/releases) page:
+```cmd
+:: Run standalone master installer (Native Win32 GUI or CLI)
+arinstall.exe --gui
+
+:: Or install unattended via CLI:
+arinstall.exe --cli -y
+```
+- **Installation Path**: `C:\Program Files\alrios\` (Administrator) or `%LOCALAPPDATA%\alrios\` (user).
+- **Global PATH Commands**: Registers executables (`alrios.exe`, `arpm.exe`, `arcore.exe`, `armake.exe`) directly in your system PATH.
 
 ---
 
@@ -114,18 +128,23 @@ To clone and compile the core platform locally:
 
 ### Linux
 ```bash
-# System dependencies
+# System dependencies (Debian/Ubuntu/Arch)
 sudo apt update && sudo apt install -y cmake gcc make libssl-dev libgtk-3-dev pkg-config nodejs npm
 
 # Compilation
 cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release
-cmake --build build-linux --target arcore alrios armake arinstall -j$(nproc)
+cmake --build build-linux -j$(nproc)
 
 # Execute local installation
 ./install.sh
 ```
 
-Windows source and installer support are not part of the current Linux-only release.
+### Windows (MinGW-w64 or Cross-Compile)
+```bash
+# Cross-compilation using MinGW toolchain
+cmake -S . -B build-win -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-mingw64.cmake
+ninja -C build-win
+```
 
 ---
 
