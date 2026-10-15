@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.3] — 2026-10-15
+
+### Linux-only preview
+
+- Publicação temporariamente limitada ao instalador Linux x64.
+- Pipeline de release simplificada para não bloquear a pré-release enquanto a portabilidade Windows é corrigida e validada.
+- Arquivos gerados, caches locais e instruções exclusivas para agentes removidos do checkout.
+
 ## [0.9.2] — 2026-10-15
 
 ### Release candidate público para a v1.0
@@ -28,8 +36,10 @@ Uma execução com rede totalmente isolada obteve 59/60 porque `test_app_lifecyc
 
 ### Limitações conhecidas
 
-- A qualificação local foi executada em Linux; a pipeline de tag produzirá também o artefato Windows, que integra a validação de campo da linha 0.9.
+- Esta publicação é temporariamente exclusiva para Linux x64.
+- Windows permanece fora desta versão, pendente de correções de portabilidade e validação nativa.
 - A suíte automatizada não equivale à execução individual de todos os 88 planos adversariais documentados.
 - Esta versão é pré-release e não declara ausência absoluta de vulnerabilidades.
 
+[0.9.3]: https://github.com/alrigroup/alrios/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/alrigroup/alrios/compare/v0.9.1...v0.9.2

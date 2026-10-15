@@ -1,4 +1,4 @@
-name: Build & Package Installers (Multi-OS)
+name: Build & Package Installer (Linux)
 
 "on":
   push:
@@ -10,9 +10,6 @@ permissions:
   contents: write
 
 jobs:
-  # ============================================================================
-  # 1. LINUX BUILD & STANDALONE INSTALLER PACKAGING
-  # ============================================================================
   build-linux:
     name: Linux x64 Standalone Installer
     runs-on: ubuntu-latest
@@ -42,17 +39,16 @@ jobs:
             npm
 
       - name: Configure CMake (Release)
-        run: |
-          cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release
 
-      - name: Compile kernel, CLI, tools & master installer
+      - name: Compile kernel, CLI, tools and installer
         run: |
           cmake --build build-linux --target arcore alrios armake arinstall -j$(nproc)
           chmod +x arcore/arcore arcore/alrios arcore/armake arcore/arinstall 2>/dev/null || true
           ln -sf alrios arcore/arpm
           chmod +x arcore/arpm 2>/dev/null || true
 
-      - name: Package modular .arapp applications
+      - name: Package modular applications
         run: |
           mkdir -p arcore/apps
           for appdir in src/apps/*/; do
@@ -69,128 +65,36 @@ jobs:
           echo "==> Apps gerados:"
           ls -lh arcore/apps/
 
-      - name: Assemble Linux Standalone Installer Executable
+      - name: Assemble Linux standalone installer
         run: |
-          echo "==> Criando pacote de payload embutido..."
           python3 -c '
-          import zipfile, os
-          with zipfile.ZipFile("payload.zip", "w", zipfile.ZIP_STORED) as z:
+          import os
+          import zipfile
+          with zipfile.ZipFile("payload.zip", "w", zipfile.ZIP_STORED) as archive:
               for root, dirs, files in os.walk("arcore"):
-                  if ".staging" in root or "programfiles" in root: continue
-                  for f in files:
-                      if f == "arinstall": continue
-                      p = os.path.join(root, f)
-                      z.write(p, p)
+                  if ".staging" in root or "programfiles" in root:
+                      continue
+                  for filename in files:
+                      if filename == "arinstall":
+                          continue
+                      path = os.path.join(root, filename)
+                      archive.write(path, path)
           '
           cat arcore/arinstall payload.zip > alrios-installer-linux-x64
           chmod +x alrios-installer-linux-x64
           rm -f payload.zip
-          echo "==> Instalador executavel unico do Linux gerado:"
           ls -lh alrios-installer-linux-x64
 
-      - name: Upload Linux Installer Artifact
+      - name: Upload Linux installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: alrios-installer-linux-x64
           path: alrios-installer-linux-x64
           retention-days: 30
 
-  # ============================================================================
-  # 2. WINDOWS BUILD & STANDALONE SETUP EXECUTABLE
-  # ============================================================================
-  build-windows:
-    name: Windows x64 Standalone Setup (.exe)
-    runs-on: windows-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Initialize available submodules
-        shell: bash
-        run: |
-          git submodule sync || true
-          git submodule update --init --recursive || true
-
-      - name: Setup MSVC Developer Command Prompt
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Locate OpenSSL & Build with CMake
-        shell: cmd
-        run: |
-          set "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL"
-          if not exist "%OPENSSL_ROOT_DIR%" set "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL-Win64"
-          if not exist "%OPENSSL_ROOT_DIR%" (
-            choco install openssl.light -y
-            set "OPENSSL_ROOT_DIR=C:\Program Files\OpenSSL"
-          )
-          echo OpenSSL located at: %OPENSSL_ROOT_DIR%
-          cmake -S . -B build-win -DCMAKE_BUILD_TYPE=Release -DOPENSSL_ROOT_DIR="%OPENSSL_ROOT_DIR%"
-          cmake --build build-win --config Release --target arcore alrios armake arinstall
-
-      - name: Package modular .arapp applications
-        shell: bash
-        run: |
-          mkdir -p arcore/apps
-          for appdir in src/apps/*/; do
-            if [ -d "$appdir" ]; then
-              appname=$(basename "$appdir")
-              if [ -f "$appdir/${appname}.arappmake" ] || [ -f "$appdir/config.arwe" ] || [ -f "$appdir/CMakeLists.txt" ]; then
-                echo "==> Empacotando app: ${appname}..."
-                ./arcore/armake.exe build "$appdir" "arcore/apps/${appname}.arapp" || {
-                  echo "[AVISO] Falha ao empacotar ${appname}, continuando..."
-                }
-              fi
-            fi
-          done
-          echo "==> Apps gerados no Windows:"
-          ls -lh arcore/apps/
-
-      - name: Assemble Windows Standalone Setup Executable (.exe)
-        shell: bash
-        run: |
-          # Copiar DLLs de runtime do OpenSSL para arcore/
-          for p in "C:/Program Files/OpenSSL/bin" "C:/Program Files/OpenSSL-Win64/bin"; do
-            if [ -d "$p" ]; then
-              cp "$p"/*.dll arcore/ 2>/dev/null || true
-            fi
-          done
-          
-          echo "==> Empacotando payload embutido do Windows..."
-          python -c '
-          import zipfile, os
-          with zipfile.ZipFile("payload.zip", "w", zipfile.ZIP_STORED) as z:
-              for root, dirs, files in os.walk("arcore"):
-                  if ".staging" in root or "programfiles" in root: continue
-                  for f in files:
-                      if f == "arinstall.exe": continue
-                      p = os.path.join(root, f)
-                      z.write(p, p)
-          '
-          cat arcore/arinstall.exe payload.zip > alrios-setup.exe
-          rm -f payload.zip
-          echo "==> Executavel alrios-setup.exe gerado com sucesso:"
-          ls -lh alrios-setup.exe
-
-      - name: Upload Windows Setup Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: alrios-setup.exe
-          path: alrios-setup.exe
-          retention-days: 30
-
-  # ============================================================================
-  # 3. PUBLISH GITHUB RELEASE (Triggered only by version tags)
-  # ============================================================================
   release:
-    name: Publish Official Release
-    needs: [build-linux, build-windows]
+    name: Publish Linux Preview Release
+    needs: build-linux
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
@@ -199,30 +103,25 @@ jobs:
         with:
           name: alrios-installer-linux-x64
 
-      - name: Download Windows installer artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: alrios-setup.exe
-
-      - name: Create GitHub Release with Standalone Installers
+      - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: ALRIOS ${{ github.ref_name }}
-          files: |
-            alrios-installer-linux-x64
-            alrios-setup.exe
+          name: ALRIOS ${{ github.ref_name }} — Linux Preview
+          files: alrios-installer-linux-x64
           generate_release_notes: false
           append_body: false
           body: |
-            ### ALRIOS v0.9.2 — Release Candidate público para a v1.0
+            ### ALRIOS ${{ github.ref_name }} — Linux x64 Preview
 
-            - Primeira rodada pública de uso real antes da estabilização v1.0.
-            - Kernel, HAL, supervisor, CLI, empacotador, SDK e controles de segurança integrados.
-            - Build Linux, CTest, ASan/UBSan, gate de APIs e fuzzing limitado validados na revisão candidata.
-            - Artefatos Linux x64 e Windows x64 produzidos pela pipeline; a execução Windows nativa permanece uma validação de campo desta linha 0.9.
+            Release de campo anterior à v1.0, publicada temporariamente apenas para Linux x64.
 
-            **Full Changelog**: https://github.com/alrigroup/alrios/compare/v0.9.1...${{ github.ref_name }}
+            - Inclui instalador standalone Linux x64.
+            - Build e empacotamento Linux validados pela pipeline desta tag.
+            - Windows não integra esta publicação e permanece pendente de correções de portabilidade e validação nativa.
+            - A suíte automatizada não equivale à execução individual de todos os planos adversariais documentados.
+
+            **Full Changelog**: https://github.com/alrigroup/alrios/compare/v0.9.2...${{ github.ref_name }}
           draft: false
           prerelease: true
           make_latest: true
