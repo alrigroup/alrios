@@ -10,9 +10,9 @@
 <p align="center"><strong>Sovereign Operating System, Native Microkernel & High-Performance Microservice Platform</strong></p>
 
 <p align="center">
-  <a href="https://github.com/alrigroup/alrios/actions/workflows/build-installers.yml"><img src="https://img.shields.io/github/actions/workflow/status/alrigroup/alrios/build-installers.yml?branch=main&label=CI%2FCD%20Build%20%26%20Installers&style=flat-square" alt="CI/CD Status"></a>
+  <a href="https://github.com/alrigroup/alrios/actions/workflows/build-installers.yml"><img src="https://img.shields.io/github/actions/workflow/status/alrigroup/alrios/build-installers.yml?branch=release%2Fv0.9.3&label=CI%2FCD%20Linux%20Build&style=flat-square" alt="CI/CD Status"></a>
   <img alt="Language" src="https://img.shields.io/badge/language-C%20%2F%20C%2B%2B-00599C?style=flat-square" />
-  <img alt="Platform" src="https://img.shields.io/badge/platform-Linux%20x64%20%7C%20Windows%20x64-blueviolet?style=flat-square" />
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Linux%20x64-blueviolet?style=flat-square" />
   <img alt="License" src="https://img.shields.io/badge/license-ARGLP-green?style=flat-square" />
 </p>
 
@@ -27,7 +27,7 @@ This repository contains:
 - **`alrios`**: The Unified Management CLI and daemon orchestrator.
 - **`arpm`**: The ALRIOS Sovereign Package Manager (`install`, `search`, `update`).
 - **`armake`**: The Sovereign Application Bundler and compiler (`.arapp`).
-- **Unified Master Installer**: Single-executable standalone installers for Linux & Windows with dual CLI and GUI support.
+- **Unified Master Installer**: Single-executable standalone installer for Linux x64.
 
 ```
 ┌─────────────────┐       ┌──────────────────────────────────────────────────────┐
@@ -46,20 +46,8 @@ This repository contains:
 
 ## 🚀 Instant Installation (1-Click Standalone)
 
-ALRIOS provides **single-executable standalone installers** for both Linux and Windows.  
+ALRIOS currently provides a **single-executable standalone installer for Linux x64**.
 **Zero dependencies required**: If your machine lacks compilers or runtimes (like GCC, Node.js, Python), the installer detects and auto-downloads everything on-the-fly!
-
-### 🪟 Windows (x64)
-
-Download the official executable from the [Releases](https://github.com/alrigroup/alrios/releases) page:
-1. Run **`alrios-setup.exe`** to open the native graphical installer (Win32), or run in terminal:
-   ```cmd
-   alrios-setup.exe --cli -y
-   ```
-2. **Installation Directory**:
-   - Administrator: `C:\Program Files\ALRIOS\`
-   - Standard user: `%LOCALAPPDATA%\Programs\ALRIOS\`
-3. **Ready!** The installer automatically registers ALRIOS in the Windows `PATH`. Open any CMD or PowerShell and run `alrios` or `arpm`.
 
 ### 🐧 Linux (x64)
 
@@ -137,12 +125,7 @@ cmake --build build-linux --target arcore alrios armake arinstall -j$(nproc)
 ./install.sh
 ```
 
-### Windows
-```cmd
-cmake -S . -B build-win -DCMAKE_BUILD_TYPE=Release
-cmake --build build-win --config Release --target arcore alrios armake arinstall
-install.bat
-```
+Windows source and installer support are not part of the current Linux-only release.
 
 ---
 

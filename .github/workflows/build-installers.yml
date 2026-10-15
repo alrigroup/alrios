@@ -93,7 +93,7 @@ jobs:
           retention-days: 30
 
   release:
-    name: Publish Linux Preview Release
+    name: Publish Linux Release
     needs: build-linux
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -103,18 +103,18 @@ jobs:
         with:
           name: alrios-installer-linux-x64
 
-      - name: Publish GitHub prerelease
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: ALRIOS ${{ github.ref_name }} — Linux Preview
+          name: ALRIOS ${{ github.ref_name }} — Linux x64
           files: alrios-installer-linux-x64
           generate_release_notes: false
           append_body: false
           body: |
-            ### ALRIOS ${{ github.ref_name }} — Linux x64 Preview
+            ### ALRIOS ${{ github.ref_name }} — Linux x64
 
-            Release de campo anterior à v1.0, publicada temporariamente apenas para Linux x64.
+            Release principal temporariamente publicada apenas para Linux x64.
 
             - Inclui instalador standalone Linux x64.
             - Build e empacotamento Linux validados pela pipeline desta tag.
@@ -123,7 +123,7 @@ jobs:
 
             **Full Changelog**: https://github.com/alrigroup/alrios/compare/v0.9.2...${{ github.ref_name }}
           draft: false
-          prerelease: true
+          prerelease: false
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

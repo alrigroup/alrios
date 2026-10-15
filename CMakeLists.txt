@@ -25,8 +25,4 @@ find_package(Threads REQUIRED)
 
 include(cmake/CryptoProviders.cmake)
 
-enable_testing()
-
 add_subdirectory(src)
-
-add_subdirectory(tests)
