@@ -2,7 +2,7 @@ name: Build & Package Installers (Multi-OS)
 
 "on":
   push:
-    branches: [ "main", "beta-v0.2.0", "beta-v0.2", "beta*" ]
+    branches: [ "main", "release/**", "beta*" ]
     tags: [ "v*", "beta*" ]
   workflow_dispatch:
 
@@ -186,12 +186,12 @@ jobs:
           retention-days: 30
 
   # ============================================================================
-  # 3. PUBLISH GITHUB RELEASE (Triggered on Tags or beta-v0.2 branch)
+  # 3. PUBLISH GITHUB RELEASE (Triggered only by version tags)
   # ============================================================================
   release:
     name: Publish Official Release
     needs: [build-linux, build-windows]
-    if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/beta-v0.2.0' || github.ref == 'refs/heads/beta-v0.2' || github.ref == 'refs/heads/beta-v0.2.03'
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - name: Download Linux installer artifact
@@ -207,26 +207,24 @@ jobs:
       - name: Create GitHub Release with Standalone Installers
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.ref == 'refs/heads/beta-v0.2.03' && format('v0.2.03-prototype.{0}', github.run_number) || format('v0.2.0-prototype.{0}', github.run_number)) }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (github.ref == 'refs/heads/beta-v0.2.03' && format('ALRIOS v0.2.03 Prototype {0}', github.run_number) || format('ALRIOS v0.2.0 Prototype {0}', github.run_number)) }}
+          tag_name: ${{ github.ref_name }}
+          name: ALRIOS ${{ github.ref_name }}
           files: |
             alrios-installer-linux-x64
             alrios-setup.exe
           generate_release_notes: false
           append_body: false
           body: |
-            ### ALRIOS Sovereign System v0.2.03 (Beta)
+            ### ALRIOS v0.9.2 — Release Candidate público para a v1.0
 
-            - Instalação inteligente com persistência universal de PATH e links em /usr/local/bin.
+            - Primeira rodada pública de uso real antes da estabilização v1.0.
+            - Kernel, HAL, supervisor, CLI, empacotador, SDK e controles de segurança integrados.
+            - Build Linux, CTest, ASan/UBSan, gate de APIs e fuzzing limitado validados na revisão candidata.
+            - Artefatos Linux x64 e Windows x64 produzidos pela pipeline; a execução Windows nativa permanece uma validação de campo desta linha 0.9.
 
-            - CLI com sistema de registro e descoberta dinâmica de comandos por aplicativo.
-            - Toolchain, Arkernel e instaladores únicos para Linux e Windows.
-            - Binários soberanos prontos para Linux x64 e Windows x64.
-            - Compatibilidade total com gerenciador nativo `arpm`.
-
-            **Full Changelog**: https://github.com/alrigroup/alrios/commits/v0.2.03-beta
+            **Full Changelog**: https://github.com/alrigroup/alrios/compare/v0.9.1...${{ github.ref_name }}
           draft: false
-          prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          make_latest: ${{ startsWith(github.ref, 'refs/tags/') }}
+          prerelease: true
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -42,8 +42,8 @@
 
 #include <openssl/evp.h>
 
-#define ARPM_VERSION "0.2.03"
-#define DEFAULT_REGISTRY_URL "https://raw.githubusercontent.com/alrigroup/alrios/beta-v0.2.03/arcore/registry.json"
+#define ARPM_VERSION "0.9.2"
+#define DEFAULT_REGISTRY_URL "https://raw.githubusercontent.com/alrigroup/alrios/v0.9.2/arcore/registry.json"
 
 /* ANSI Colors */
 #define CLR_RESET   "\033[0m"
@@ -450,7 +450,7 @@ static void record_package(const char *name, const char *version, const char *so
     strftime(tbuf, sizeof(tbuf), "%Y-%m-%d %H:%M:%S", localtime(&now));
 
     fprintf(f, "pkg:%s|ver:%s|src:%s|type:%s|auto:%d|sha:%s|date:%s\n",
-            name, version ? version : "0.2.03", source ? source : "remote",
+            name, version ? version : "0.9.2", source ? source : "remote",
             type ? type : "binary", autostart, sha ? sha : "", tbuf);
     fclose(f);
 }
@@ -797,7 +797,7 @@ static int cmd_install(int argc, char **argv) {
     char app_name[128] = {0};
     char download_url_buf[1024] = {0};
     char expected_sha[128] = {0};
-    char version[64] = "0.2.03";
+    char version[64] = "0.9.2";
     char local_tmp[1024];
 
     /* Check if target is a local file */
@@ -1020,7 +1020,7 @@ static int cmd_install_src(int argc, char **argv) {
     }
 
     char app_name[128] = {0};
-    char version[64] = "0.2.03";
+    char version[64] = "0.9.2";
     read_manifest_info(manifest_path, app_name, sizeof(app_name), version, sizeof(version));
     if (app_name[0] == '\0') {
         snprintf(app_name, sizeof(app_name), "%s", app_hint[0] ? app_hint : "app");
