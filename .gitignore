@@ -5,6 +5,7 @@
 # Build Directories & Residue
 build/
 build-linux/
+build-win/
 .staging/
 bin/
 out/
