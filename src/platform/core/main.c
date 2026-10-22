@@ -152,7 +152,7 @@ static int initialize_execution_policy(void) {
   int result;
 
   if (!configured_profile || configured_profile[0] == '\0') {
-    configured_profile = "enterprise";
+    configured_profile = "edge";
   }
   if (alrios_profile_parse(configured_profile, &profile) != 0) {
     fprintf(stderr, "Invalid ALRIOS_PROFILE: %s\n", configured_profile);

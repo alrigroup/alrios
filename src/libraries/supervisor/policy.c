@@ -352,6 +352,10 @@ int alrios_supervisor_policy_startup_with_trust(
     }
     result = load_trust_configuration(policy, trust_directory);
     if (result != ALRIOS_POLICY_OK) {
+        if (profile == PROFILE_EDGE_PERF) {
+            *out_policy = policy;
+            return ALRIOS_POLICY_OK;
+        }
         alrios_supervisor_policy_shutdown(policy);
         return result;
     }
