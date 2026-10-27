@@ -1,65 +1,94 @@
-# ALRIOS Ecosystem Evolution Roadmap (v1.1+)
-**Documento de Especificação Arquitetural e Planejamento de Futuro**  
-*Mantido por ALRI Development & ALRIGROUP*
+# ALRIOS Ecosystem — Evolução Arquitetural e Roadmap Oficial (v1.1+)
+**Documento Estratégico de Engenharia e Especificações Futuras**  
+*ALRIGROUP & ALRI Development*
 
 ---
 
-## 1. ARAUTH v2 — Identidade Soberana & Desacoplamento Global
+## 1. A Nova Arquitetura de Autenticação Soberana
 
-### 1.1 O Diagnóstico Atual
-O `arauth` atual é excessivamente acoplado ao nó local e burocrático (cadastros longos e regras rígidas de formulário). A nova abordagem separa a **experiência do usuário** da **lógica do sistema**.
+A separação é cirúrgica e divide-se em dois componentes com responsabilidades estritas:
 
-### 1.2 Os Três Modos de Operação
-1. **Modo Standalone / Embedded (Offline / On-Premises)**:
-   - Qualquer desenvolvedor no mundo pode usar a biblioteca `libarauth` em aplicativos próprios sem nenhum vínculo, telemetria ou dependência da ALRIGROUP.
-   - Gerencia hash de senhas (Argon2id/PBKDF2), rate limit, sanitização e sessões diretamente no SQLite local do app.
-2. **Modo Self-Hosted IdP (Privado Empresarial)**:
-   - Empresas que rodam ALRIOS podem hospedar seu próprio portal de autenticação (ex: `auth.minhaempresa.com`).
-   - Gerencia usuários internos e emite tokens corporativos próprios.
-3. **Modo Federado Oficial (`auth.alrigroup.com`)**:
-   - Serviço web oficial da ALRIGROUP (`account.google.com` do ecossistema).
-   - Frontend em SPA moderna (Liquid Glass) rodando no ARWE com suporte a MFA, Passkeys/WebAuthn e gestão de perfil.
-   - Emite tokens assinados assimetricamente com chaves Ed25519 corporativas.
-
----
-
-## 2. ARAPIAUTH v2 — Middleware de Alta Velocidade Baseado em Chave Pública
-
-### 2.1 Validação Local em Memória (Zero Chamadas de Rede)
-- O `arapiauth` passa a atuar como um middleware de validação estática.
-- Em vez de fazer chamadas HTTP de volta ao `arauth` a cada request, ele apenas valida a assinatura criptográfica Ed25519 do Bearer Token utilizando a chave pública em memória RAM (latência < 0.05ms).
-
-### 2.2 Suporte Duplo (M2M + Usuários)
-- **User Tokens**: Sessões de usuários emitidas pelo `auth.alrigroup.com` ou instâncias locais.
-- **Service API Keys**: Chaves estáticas de comunicação entre microsserviços com hash de integridade (`alri_live_...`).
-
----
-
-## 3. ARDB v2 — Universal Multi-Model Storage Engine
-
-### 3.1 O Conceito: Motor Único, Múltiplas Interfaces
-Elimina a necessidade de instalar e manter múltiplos bancos de dados no mesmo servidor. Um único binário compilado em C de altíssimo desempenho expondo os protocolos nativos padrão da indústria.
-
-### 3.2 As Quatro Camadas do ARDB Universal:
-1. **Protocolos Wire Multiplexados**:
-   - **PostgreSQL Wire Protocol (Porta 5432)**: Compatibilidade com DBeaver, TypeORM, Prisma, etc.
-   - **MySQL Wire Protocol (Porta 3306)**: Suporte a clientes e drivers MySQL legados.
-   - **Redis RESP Protocol (Porta 6379)**: Compatibilidade com `redis-cli`, `ioredis`, cache em RAM, TTL e Pub/Sub sem locks.
-   - **Graph Protocol (IPC / GraphQL / Cypher)**: Consultas diretas de grafos e relacionamentos complexos sem JOINs caros.
-2. **Isolamento de Armazenamento por Aplicação (Multi-Tenancy Automático)**:
-   - Cada aplicativo instalado via `arpm` ganha seu namespace automático no storage:
-     - `ardb://localhost/argonge` ➔ `/opt/alrios/arcore/storage/argonge/data.db`
-     - `ardb://localhost/sc-zerohum` ➔ `/opt/alrios/arcore/storage/sc-zerohum/data.db`
-   - Garante que a invasão de um app não comprometa os dados de outros apps.
-3. **Alta Concorrência & WAL2**:
-   - Arquitetura Single-Writer / Multi-Reader sem contenção de locks para escrita intensiva.
-4. **Snapshots Criptografados a Quente**:
-   - Backups atômicos instantâneos cifrados com a chave AES-256-GCM do nó sem paralisação do banco.
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              arauth (PÚBLICO / OPEN SOURCE / MOTOR UNIVERSAL)               │
+│                                                                             │
+│  - Contém TODA a lógica de segurança, regras de negócio e criptografia      │
+│  - Não tem interface web própria e não se preocupa com domínios específicos │
+│  - Hashing Argon2id / PBKDF2, gestão de tokens Ed25519, rate limit, anti-brute│
+│  - Totalmente livre: qualquer desenvolvedor no mundo usa em app próprio     │
+│    sem nenhum vínculo ou telemetria com a ALRIGROUP (100% offline).         │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │ (Invocado como Engine Core)
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│           arauth.web (PRIVADO / ALRIGROUP OFFICIAL IDENTITY PORTAL)         │
+│                        (Antigo arapiauth remodelado)                        │
+│                                                                             │
+│  - NÃO POSSUI LÓGICA DE NEGÓCIO PRÓPRIA (Pass-Through / Gateway / BFF)      │
+│  - Responsável EXCLUSIVO por orquestrar o portal auth.alrigroup.com         │
+│  - Ponte entre a Interface Web Frontend (Liquid Glass no ARWE) e o arauth   │
+│  - Gerencia o fluxo visual: telas de login, cadastro rápido, recuperação de │
+│    senha, telas de consentimento SSO ("Entrar com ALRIGROUP"), MFA/Passkeys │
+│  - Apenas recebe as requisições HTTP do front, repassa para o arauth motor, │
+│    e devolve os tokens assinados e cookies de sessão para o navegador.      │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 4. Integração Prática em Apps do Ecossistema (Exemplo: ArgonGE)
+## 2. Modos de Uso Prático
 
-- **Login Simples**: O usuário pode optar por login local simples (aluno/professor) gerenciado pela `libarauth` ou clicar no botão universal **"Entrar com ALRIGROUP"**.
-- **Performance de API**: O backend do ArgonGE valida tokens via `arapiauth` na memória sem gargalos de rede.
-- **Persistência**: O ArgonGE armazena dados relacionais, sessões em cache rápido e grafos de turmas diretamente no mesmo daemon `ardb`, com pegada mínima de memória.
+### Modo A: Desenvolvedor Externo (Sem Vínculo com a ALRIGROUP)
+- O desenvolvedor importa o **`arauth` (Público)** no projeto dele (C, Node, Go, Python).
+- Ele tem o motor completo de autenticação funcionando no banco dele (SQLite, Postgres ou `ardb`).
+- Ele não precisa do `arauth.web` da ALRI; ele constrói o front dele como quiser ou usa o `arauth` como biblioteca pura.
+
+### Modo B: Ecossistema Oficial ALRIGROUP (`auth.alrigroup.com`)
+- O usuário acessa os serviços da ALRIGROUP (ArgonGE, SC-ZeroHum, ARWS, portal corporativo).
+- Clica em **"Entrar com ALRIGROUP"**.
+- É direcionado para o **`arauth.web`** no domínio `auth.alrigroup.com`.
+- O `arauth.web` renderiza a interface visual, colhe as credenciais e chama o motor `arauth` por baixo dos panos.
+- O token é assinado pela autoridade da ALRIGROUP e o usuário volta logado para o app.
+
+---
+
+## 3. ARAPIAUTH v2 — Middleware Estático de Alta Performance
+
+Com o antigo `arapiauth` promovido para `arauth.web`, a função de interceptador de API vira uma biblioteca/middleware leve:
+- **Zero Chamadas de Rede**: Valida tokens em memória RAM usando apenas a chave pública Ed25519 (tempo de resposta < 0.05ms).
+- **M2M e Usuários**: Valida tanto Bearer Tokens de usuários emitidos pelo `auth.alrigroup.com` quanto API Keys estáticas de comunicação entre microsserviços (`alri_live_...`).
+
+---
+
+## 4. ARDB v2 — Motor de Armazenamento Universal Multi-Modelo
+
+### 4.1 Conceito: "One Engine, Multiple Protocols"
+Elimina a necessidade de instalar múltiplos gerenciadores de banco de dados no servidor (como Postgres, Redis e MySQL separados). Um único binário compilado em C de altíssimo desempenho expondo os protocolos padrão do mercado:
+
+1. **Protocolo PostgreSQL Wire (Porta 5432)**:
+   - Totalmente compatível com clientes Postgres, DBeaver, TypeORM, Prisma, etc.
+2. **Protocolo MySQL Wire (Porta 3306)**:
+   - Compatibilidade com ferramentas e drivers do ecossistema MySQL/MariaDB.
+3. **Protocolo Redis RESP (Porta 6379)**:
+   - Cache em memória ultrarrápido sem locks (Lock-free Atomic CAS), filas de mensagens, TTL e Pub/Sub.
+4. **Motor de Grafos (IPC / GraphQL / Cypher)**:
+   - Armazenamento de vértices e arestas por ponteiros diretos em disco para relacionamentos complexos, dispensando JOINs pesados.
+
+### 4.2 Isolamento de Dados por Aplicação (Multi-Tenancy Automático)
+- Cada aplicativo instalado via `arpm` recebe seu namespace isolado no storage do kernel:
+  - `ardb://localhost/argonge` ➔ `/opt/alrios/arcore/storage/argonge/data.db`
+  - `ardb://localhost/sc-zerohum` ➔ `/opt/alrios/arcore/storage/sc-zerohum/data.db`
+- Garante isolamento físico entre aplicações no mesmo servidor.
+
+### 4.3 Concorrência Avançada & Backups a Quente
+- Modo WAL2 (Write-Ahead Logging) com arquitetura Single-Writer / Multi-Reader sem travamentos de concorrência (`SQLITE_BUSY`).
+- Snapshots atômicos a quente criptografados com AES-256-GCM sem paralisação do serviço.
+
+---
+
+## 5. Estudo de Caso Prático: Aplicação Externa (Ex: ArgonGE)
+
+- **Login Flexível**: O usuário do ArgonGE pode logar localmente (professor/aluno) via banco SQLite local gerenciado pela `libarauth`, ou usar o botão universal **"Entrar com ALRIGROUP"** via `auth.alrigroup.com` (`arauth.web`).
+- **Independência**: O ArgonGE pode ser vendido para rodar em servidores fechados de escolas sem qualquer dependência da ALRIGROUP.
+- **Alta Performance de API**: O backend valida tokens em microssegundos via `arapiauth` na memória RAM.
+- **Persistência Unificada**: O ArgonGE conecta no `ardb` usando SQL para turmas/provas e cache rápido na porta 6379 para sessões, consumindo menos de 30MB de memória total.
