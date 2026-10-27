@@ -144,7 +144,56 @@ static void cleanup_and_exit(void) {
   }
 }
 
+static void load_build_conf(void) {
+  char base_dir[1024];
+  char conf_path[2048];
+  loader_get_base_dir(base_dir, (int)sizeof(base_dir));
+#if defined(_WIN32)
+  (void)snprintf(conf_path, sizeof(conf_path), "%s\\..\\alrios.build.conf", base_dir);
+#else
+  (void)snprintf(conf_path, sizeof(conf_path), "%s/../alrios.build.conf", base_dir);
+#endif
+  FILE *f = fopen(conf_path, "r");
+  if (!f) {
+#if defined(_WIN32)
+    (void)snprintf(conf_path, sizeof(conf_path), "%s\\alrios.build.conf", base_dir);
+#else
+    (void)snprintf(conf_path, sizeof(conf_path), "%s/alrios.build.conf", base_dir);
+#endif
+    f = fopen(conf_path, "r");
+  }
+  if (!f) return;
+
+  char line[256];
+  while (fgets(line, sizeof(line), f)) {
+    char *p = line;
+    while (*p == ' ' || *p == '\t') p++;
+    if (*p == '#' || *p == '\r' || *p == '\n' || *p == '\0') continue;
+    char *eq = strchr(p, '=');
+    if (!eq) continue;
+    *eq = '\0';
+    char *key = p;
+    char *val = eq + 1;
+    /* trim key */
+    char *end = key + strlen(key) - 1;
+    while (end > key && (*end == ' ' || *end == '\t')) *end-- = '\0';
+    /* trim val */
+    while (*val == ' ' || *val == '\t') val++;
+    end = val + strlen(val) - 1;
+    while (end >= val && (*end == '\r' || *end == '\n' || *end == ' ' || *end == '\t')) *end-- = '\0';
+    if (*key && *val) {
+#if defined(_WIN32)
+      _putenv_s(key, val);
+#else
+      setenv(key, val, 0); /* only if not already explicitly set in environment */
+#endif
+    }
+  }
+  fclose(f);
+}
+
 static int initialize_execution_policy(void) {
+  load_build_conf();
   const char *configured_profile = getenv("ALRIOS_PROFILE");
   const char *trust_directory = getenv("ALRIOS_TRUST_DIR");
   alrios_profile_t profile;
@@ -166,13 +215,29 @@ static int initialize_execution_policy(void) {
       return -1;
     }
     trust_directory = default_trust_directory;
+  } else if (trust_directory[0] != '/' && !(trust_directory[1] == ':' && (trust_directory[2] == '\\' || trust_directory[2] == '/'))) {
+    /* If relative path specified in conf, resolve relative to base_dir or cwd */
+    char base_dir[1024];
+    loader_get_base_dir(base_dir, (int)sizeof(base_dir));
+    char resolved_path[1024];
+    int written = snprintf(resolved_path, sizeof(resolved_path), "%s/../%s", base_dir, trust_directory);
+    if (written > 0 && (size_t)written < sizeof(resolved_path) && access(resolved_path, F_OK) == 0) {
+      (void)snprintf(default_trust_directory, sizeof(default_trust_directory), "%s", resolved_path);
+      trust_directory = default_trust_directory;
+    } else {
+      written = snprintf(resolved_path, sizeof(resolved_path), "%s/%s", base_dir, trust_directory);
+      if (written > 0 && (size_t)written < sizeof(resolved_path) && access(resolved_path, F_OK) == 0) {
+        (void)snprintf(default_trust_directory, sizeof(default_trust_directory), "%s", resolved_path);
+        trust_directory = default_trust_directory;
+      }
+    }
   }
 
   result = loader_policy_initialize(profile, trust_directory);
   if (result != ALRIOS_POLICY_OK) {
     fprintf(stderr,
-            "Execution policy startup failed closed (profile=%s, rc=%d)\n",
-            alrios_profile_name(profile), result);
+            "Execution policy startup failed closed (profile=%s, trust_dir=%s, rc=%d)\n",
+            alrios_profile_name(profile), trust_directory, result);
     return -1;
   }
   policy_initialized = 1;

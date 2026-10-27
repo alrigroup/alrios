@@ -26,10 +26,12 @@ struct alrios_supervisor_policy {
     uint32_t magic;
     alrios_node_policy_t node_policy;
     alrios_trust_store_t trust_store;
+    alrios_certificate_t root_certificate;
     alrios_certificate_t leaf_certificate;
     alrios_certificate_t intermediate_certificate;
     EVP_PKEY *ed25519_public_key;
     EVP_PKEY *ml_dsa_public_key;
+    int trust_level; /* 1 = root only, 2 = root+inter, 3 = full chain */
     int trust_ready;
     int sealed;
 };
@@ -225,53 +227,100 @@ static int load_trust_configuration(alrios_supervisor_policy_t *policy,
     char intermediate_path[1024];
     char leaf_path[1024];
     char ml_dsa_path[1024];
-    alrios_certificate_t root_certificate;
     int result;
 
     if (!policy || !trust_directory) {
         return ALRIOS_POLICY_ERR_ARGUMENT;
     }
     if (make_trust_path(root_path, sizeof(root_path), trust_directory,
-                        "root.cert") != ALRIOS_POLICY_OK ||
-        make_trust_path(intermediate_path, sizeof(intermediate_path),
-                        trust_directory, "intermediate.cert") !=
-            ALRIOS_POLICY_OK ||
-        make_trust_path(leaf_path, sizeof(leaf_path), trust_directory,
-                        "leaf.cert") != ALRIOS_POLICY_OK) {
+                        "root.cert") != ALRIOS_POLICY_OK) {
         return ALRIOS_POLICY_ERR_ARGUMENT;
     }
-    result = load_certificate_file(root_path, &root_certificate);
+    result = load_certificate_file(root_path, &policy->root_certificate);
     if (result != ALRIOS_POLICY_OK) {
         return result;
-    }
-    result = load_certificate_file(intermediate_path,
-                                   &policy->intermediate_certificate);
-    if (result != ALRIOS_POLICY_OK) {
-        return result;
-    }
-    result = load_certificate_file(leaf_path, &policy->leaf_certificate);
-    if (result != ALRIOS_POLICY_OK) {
-        return result;
-    }
-    if (policy->leaf_certificate.public_key_algorithm !=
-            ALRIOS_PUBLIC_KEY_ALGORITHM_ED25519 ||
-        policy->leaf_certificate.public_key_len !=
-            ALRIOS_CERTIFICATE_ED25519_KEY_SIZE) {
-        return ALRIOS_POLICY_ERR_CERTIFICATE;
     }
 
     alrios_trust_store_init(&policy->trust_store);
     if (alrios_trust_store_add_anchor(&policy->trust_store,
-                                      &root_certificate) !=
+                                      &policy->root_certificate) !=
             ALRIOS_CERTIFICATE_OK ||
         alrios_trust_store_seal(&policy->trust_store) !=
             ALRIOS_CERTIFICATE_OK) {
         alrios_trust_store_clear(&policy->trust_store);
         return ALRIOS_POLICY_ERR_CERTIFICATE;
     }
-    policy->ed25519_public_key = EVP_PKEY_new_raw_public_key(
-        EVP_PKEY_ED25519, NULL, policy->leaf_certificate.public_key,
-        policy->leaf_certificate.public_key_len);
+
+    /* Check configured or dynamic trust level */
+    const char *configured_level = getenv("ALRIOS_TRUST_LEVEL");
+    int has_inter = 0;
+    int has_leaf = 0;
+
+    if (make_trust_path(intermediate_path, sizeof(intermediate_path),
+                        trust_directory, "intermediate.cert") == ALRIOS_POLICY_OK) {
+        if (load_certificate_file(intermediate_path, &policy->intermediate_certificate) == ALRIOS_POLICY_OK) {
+            has_inter = 1;
+        }
+    }
+
+    if (make_trust_path(leaf_path, sizeof(leaf_path),
+                        trust_directory, "leaf.cert") == ALRIOS_POLICY_OK) {
+        if (load_certificate_file(leaf_path, &policy->leaf_certificate) == ALRIOS_POLICY_OK) {
+            has_leaf = 1;
+        }
+    }
+
+    int trust_level = 3;
+    if (configured_level) {
+        if (strcmp(configured_level, "root") == 0) {
+            trust_level = 1;
+        } else if (strcmp(configured_level, "intermediate") == 0) {
+            trust_level = 2;
+        } else if (strcmp(configured_level, "leaf") == 0) {
+            trust_level = 3;
+        }
+    } else {
+        /* Dynamic auto-detection based on presence of cert files */
+        if (has_leaf && has_inter) {
+            trust_level = 3;
+        } else if (has_inter) {
+            trust_level = 2;
+        } else {
+            trust_level = 1;
+        }
+    }
+
+    policy->trust_level = trust_level;
+
+    if (trust_level == 1) {
+        /* Level 1: Root CA signs and verifies directly */
+        if (policy->root_certificate.public_key_algorithm != ALRIOS_PUBLIC_KEY_ALGORITHM_ED25519 ||
+            policy->root_certificate.public_key_len != ALRIOS_CERTIFICATE_ED25519_KEY_SIZE) {
+            return ALRIOS_POLICY_ERR_CERTIFICATE;
+        }
+        policy->ed25519_public_key = EVP_PKEY_new_raw_public_key(
+            EVP_PKEY_ED25519, NULL, policy->root_certificate.public_key,
+            policy->root_certificate.public_key_len);
+    } else if (trust_level == 2) {
+        /* Level 2: Root + Intermediate */
+        if (!has_inter || policy->intermediate_certificate.public_key_algorithm != ALRIOS_PUBLIC_KEY_ALGORITHM_ED25519 ||
+            policy->intermediate_certificate.public_key_len != ALRIOS_CERTIFICATE_ED25519_KEY_SIZE) {
+            return ALRIOS_POLICY_ERR_CERTIFICATE;
+        }
+        policy->ed25519_public_key = EVP_PKEY_new_raw_public_key(
+            EVP_PKEY_ED25519, NULL, policy->intermediate_certificate.public_key,
+            policy->intermediate_certificate.public_key_len);
+    } else {
+        /* Level 3: Full Chain (Root + Intermediate + Leaf) */
+        if (!has_inter || !has_leaf || policy->leaf_certificate.public_key_algorithm != ALRIOS_PUBLIC_KEY_ALGORITHM_ED25519 ||
+            policy->leaf_certificate.public_key_len != ALRIOS_CERTIFICATE_ED25519_KEY_SIZE) {
+            return ALRIOS_POLICY_ERR_CERTIFICATE;
+        }
+        policy->ed25519_public_key = EVP_PKEY_new_raw_public_key(
+            EVP_PKEY_ED25519, NULL, policy->leaf_certificate.public_key,
+            policy->leaf_certificate.public_key_len);
+    }
+
     if (!policy->ed25519_public_key) {
         return ALRIOS_POLICY_ERR_CERTIFICATE;
     }
@@ -580,11 +629,25 @@ int alrios_supervisor_policy_evaluate_package(
             package_data, package_length, policy->ed25519_public_key) ==
             ALRIOS_ARAPP_V2_SIG_OK) {
         requirements.ed25519_signature_valid = 1;
-        requirements.certificate_chain_valid =
-            alrios_pki_verify_chain(&policy->trust_store,
-                                    &policy->leaf_certificate,
-                                    &policy->intermediate_certificate,
-                                    now) == ALRIOS_ISSUER_OK;
+        if (policy->trust_level == 1) {
+            /* Level 1: Root anchor is the direct trust anchor and signer */
+            requirements.certificate_chain_valid = 1;
+        } else if (policy->trust_level == 2) {
+            /* Level 2: Intermediate certificate verified against Root anchor */
+            const alrios_certificate_t *root_anchor = NULL;
+            requirements.certificate_chain_valid =
+                alrios_trust_store_lookup(&policy->trust_store,
+                                          policy->intermediate_certificate.issuer_key_id,
+                                          &root_anchor) == ALRIOS_CERTIFICATE_OK &&
+                root_anchor != NULL;
+        } else {
+            /* Level 3: Full 3-level chain verification (Root -> Inter -> Leaf) */
+            requirements.certificate_chain_valid =
+                alrios_pki_verify_chain(&policy->trust_store,
+                                        &policy->leaf_certificate,
+                                        &policy->intermediate_certificate,
+                                        now) == ALRIOS_ISSUER_OK;
+        }
     }
     if (requirements.ml_dsa_signature_present != 0 &&
         policy->ml_dsa_public_key &&
