@@ -142,8 +142,40 @@ Um único binário em C compilado no nó, consumindo menos de 30MB de RAM e expo
 
 ---
 
-## 7. Estudo de Caso Prático: Aplicação de Cliente (Ex: ArgonGE)
+## 8. AR_LOGD & Subsistema Soberano de Logs Obrigatórios (Kernel/Supervisor)
 
-- **Login e Permissões Desacopladas**: O ArgonGE não cria tabelas de usuários nem colunas `role`. O `arauth` gerencia grupos (`professores`, `alunos`) e flags (`provas.create`).
-- **Autonomia Total**: O cliente roda 100% offline em Tier 1. Em nuvem corporativa, pode ativar Tier 2 com Passkeys e SSO da ALRIGROUP.
-- **Persistência Completa no ARDB**: SQL para provas e Redis/Cache para sessões no mesmo daemon `ardb`.
+### 8.1 Motivação e Desacoplamento do Host
+O ALRIOS não deve depender do `systemd-journald` do Linux ou do Event Viewer do Windows para a observabilidade de seus processos. O supervisor (`arcore`) deve possuir um subsistema nativo de gerenciamento, rotação e isolamento de logs.
+
+### 8.2 Estrutura Padronizada de Diretórios
+Todo aplicativo executado sob o ecossistema ALRIOS terá seus fluxos de saída obrigatoriamente redirecionados para:
+```
+/opt/alrios/arcore/logs/
+├── system/
+│   ├── arcore.log
+│   └── arws_access.log
+└── apps/
+    └── <app_id>/
+        ├── stdout.log         # Saída padrão capturada via pipe não-bloqueante
+        ├── stderr.log         # Erros capturados via pipe
+        ├── lifecycle.log      # Spawn, PID, restarts, OOM e exit codes
+        └── audit.log          # Hash-chain criptográfica SHA-256 (forense)
+```
+
+### 8.3 Captura Obrigatória e Proteção de I/O
+- **Redirecionamento no Spawn (`ar_process_spawn`)**: Processos filhos não herdam o terminal; descritores `1` (stdout) e `2` (stderr) são ligados a pipes gerenciados pelo supervisor.
+- **Ring Buffer Assíncrono em RAM**: Leitura não-bloqueante via `epoll`/`kqueue` em worker dedicado para garantir que um aplicativo imprimindo em alta frequência jamais congele o loop principal do `arcore`.
+- **Prevenção de Exaustão de Disco (Disk DoS)**:
+  - Rotação automática ao atingir 10 MB por arquivo (`.1.log.gz`).
+  - Quota máxima padrão de 50 MB por aplicação com rate-limiting defensivo (`[LOG_RATE_LIMITED]`).
+
+### 8.4 Interface CLI Unificada
+- `alrios logs <app_id>` (Últimas linhas)
+- `alrios logs <app_id> -f` (Follow em tempo real)
+- `alrios logs <app_id> --stderr` (Filtro exclusivo de erros)
+- `alrios logs <app_id> --audit` (Verificação de integridade da hash chain)
+
+---
+
+## 9. Backlog Ativo & Tópicos em Análise
+- **Criptografia Opcional de Pacotes `.arapp`**: Especificação em andamento sobre proteção de propriedade intelectual, selamento por máquina (TPM/KEM) e carregamento direto em memória volátil (`memfd_create` lacrado).
