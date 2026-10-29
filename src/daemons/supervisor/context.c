@@ -18,6 +18,7 @@
 #include <alrios/platform/ar_kernel.h>
 #include "ar_path.h"
 #include <alrios/platform/aros_hal.h>
+#include "alrios/package/arpkg.h"
 #include "zip.h"
 #include "log.h"
 
@@ -342,23 +343,35 @@ int ar_supervisor_hotreload_deploy(
              base_dir, SEPARATOR, SEPARATOR, app_name, candidate_idx);
     mkdir_p(cand->staging_dir);
 
-    zip_reader_t *z = zip_reader_open_arapp(resolved_pkg);
-    if (!z) {
-        z = zip_reader_open(resolved_pkg);
-    }
-    if (!z) {
-        cand->state = HOTRELOAD_ABORTED;
-        if (ctx->hotreload_mutex) ar_mutex_unlock(ctx->hotreload_mutex);
-        if (out_log && out_log_size > 0)
-            snprintf(out_log, out_log_size, "ERR: Falha ao abrir pacote .arapp: %s", resolved_pkg);
-        return -4;
-    }
+    if (arpkg_is_arpkg(resolved_pkg)) {
+        const char *pass = getenv("ALRIOS_PACKAGE_KEY");
+        int rc = arpkg_unpack(resolved_pkg, cand->staging_dir, pass);
+        if (rc != 0) {
+            cand->state = HOTRELOAD_ABORTED;
+            if (ctx->hotreload_mutex) ar_mutex_unlock(ctx->hotreload_mutex);
+            if (out_log && out_log_size > 0)
+                snprintf(out_log, out_log_size, "ERR: Falha ao descompactar ARPKG v3 (rc=%d): %s", rc, resolved_pkg);
+            return -4;
+        }
+    } else {
+        zip_reader_t *z = zip_reader_open_arapp(resolved_pkg);
+        if (!z) {
+            z = zip_reader_open(resolved_pkg);
+        }
+        if (!z) {
+            cand->state = HOTRELOAD_ABORTED;
+            if (ctx->hotreload_mutex) ar_mutex_unlock(ctx->hotreload_mutex);
+            if (out_log && out_log_size > 0)
+                snprintf(out_log, out_log_size, "ERR: Falha ao abrir pacote .arapp: %s", resolved_pkg);
+            return -4;
+        }
 
-    int count = zip_reader_count(z);
-    for (int i = 0; i < count; i++) {
-        zip_reader_extract(z, i, cand->staging_dir);
+        int count = zip_reader_count(z);
+        for (int i = 0; i < count; i++) {
+            zip_reader_extract(z, i, cand->staging_dir);
+        }
+        zip_reader_close(z);
     }
-    zip_reader_close(z);
 
     char manifest_path[1024];
     snprintf(manifest_path, sizeof(manifest_path), "%s%c%s.arappmake", cand->staging_dir, SEPARATOR, app_name);

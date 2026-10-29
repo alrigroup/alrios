@@ -15,6 +15,7 @@
 #include <alrios/platform/aros_hal.h>
 #include "alrios/armake/package_v2.h"
 #include "alrios/package/arapp_v2.h"
+#include "alrios/package/arpkg.h"
 #include "alrios/package/index.h"
 #include <stdio.h>
 #include <string.h>
@@ -182,8 +183,12 @@ static void print_usage(void) {
     printf("  armake [--target <os>] [--universal]       Build .arapp from manifest in current dir\n");
     printf("  armake build [dir] [output] [--target <os>|--universal]\n");
     printf("  armake buildapp -s <SRC> -o <OUT>          Build .arapp (-o apps => arcore/apps/)\n");
-    printf("  armake pack <dir> <output.arapp>          Pack directory into .arapp\n");
-    printf("  armake extract <file.arapp> <dir>          Extract .arapp to directory\n");
+    printf("  armake pack <dir> <output.arapp>          Pack directory into .arapp (Proprietary ARPKG v3)\n");
+    printf("         options: --encrypt --passphrase <p>  Encrypt payload with AES-256-GCM\n");
+    printf("                  --cloud-app <id>            Mark package as cloud-license bound\n");
+    printf("                  --legacy-zip                Use legacy zip container\n");
+    printf("  armake extract <file.arapp> <dir>          Extract .arapp (supports normal & encrypted)\n");
+    printf("         options: --passphrase <p>            Passphrase for encrypted packages\n");
     printf("  armake list <file.arapp>                   List contents of .arapp\n");
     printf("  armake header <file>                       Prepend ALRIGROUP@APP header\n");
     printf("  armake snapshot <dir> [-o <file>]          Map tree BEFORE compiling (cleanup base)\n");
@@ -800,6 +805,50 @@ static int cmd_pack(int argc, char **argv) {
     if (argc < 4) { print_usage(); return 1; }
     const char *input_dir = argv[2];
     const char *output = argv[3];
+    int do_encrypt = 0;
+    const char *passphrase = NULL;
+    const char *cloud_app = NULL;
+    const char *cloud_tenant = NULL;
+    int legacy_zip = 0;
+
+    for (int i = 4; i < argc; i++) {
+        if (strcmp(argv[i], "--encrypt") == 0 || strcmp(argv[i], "-e") == 0) {
+            do_encrypt = 1;
+        } else if ((strcmp(argv[i], "--passphrase") == 0 || strcmp(argv[i], "-p") == 0) && i + 1 < argc) {
+            passphrase = argv[++i];
+        } else if (strcmp(argv[i], "--cloud-app") == 0 && i + 1 < argc) {
+            cloud_app = argv[++i];
+            do_encrypt = 1;
+        } else if (strcmp(argv[i], "--cloud-tenant") == 0 && i + 1 < argc) {
+            cloud_tenant = argv[++i];
+        } else if (strcmp(argv[i], "--legacy-zip") == 0) {
+            legacy_zip = 1;
+        }
+    }
+
+    if (do_encrypt) {
+        if (!passphrase || passphrase[0] == '\0') {
+            printf("[ERRO] Modo --encrypt requer senha via --passphrase <senha>\n");
+            return 1;
+        }
+        int rc = arpkg_pack_encrypted(input_dir, output, passphrase, cloud_app, cloud_tenant);
+        if (rc != 0) {
+            printf("[ERRO] Falha ao criar pacote ARPKG v3 criptografado: %s\n", output);
+            return 1;
+        }
+        printf("[OK] Pacote proprietario ARPKG v3 CIFRADO (AES-256-GCM) criado: %s\n", output);
+        return 0;
+    }
+
+    if (!legacy_zip) {
+        int rc = arpkg_pack_normal(input_dir, output);
+        if (rc != 0) {
+            printf("[ERRO] Falha ao criar pacote ARPKG v3 normal: %s\n", output);
+            return 1;
+        }
+        printf("[OK] Pacote proprietario ARPKG v3 NORMAL criado: %s (%s)\n", output, input_dir);
+        return 0;
+    }
 
     {
         int iso_rc = armake_try_enable_packaging_fs_boundary(input_dir, input_dir, output);
@@ -819,7 +868,7 @@ static int cmd_pack(int argc, char **argv) {
     walk_dir(input_dir, NULL, z, path_buf, sizeof(path_buf));
 
     zip_close(z);
-    printf("[OK] %s criado (%s)\n", output, input_dir);
+    printf("[OK] %s criado legado (%s)\n", output, input_dir);
     return 0;
 }
 
@@ -2021,6 +2070,29 @@ static int cmd_extract(int argc, char **argv) {
     if (argc < 4) { print_usage(); return 1; }
     const char *archive = argv[2];
     const char *outdir = argv[3];
+    const char *passphrase = NULL;
+
+    for (int i = 4; i < argc; i++) {
+        if ((strcmp(argv[i], "--passphrase") == 0 || strcmp(argv[i], "-p") == 0) && i + 1 < argc) {
+            passphrase = argv[++i];
+        }
+    }
+
+    if (arpkg_is_arpkg(archive)) {
+        int rc = arpkg_unpack(archive, outdir, passphrase);
+        if (rc == 0) {
+            printf("[OK] Extraido com sucesso (ARPKG v3 proprietario): %s -> %s\n", archive, outdir);
+            return 0;
+        } else if (rc == -2) {
+            printf("[ERRO] Pacote cifrado (ARPKG v3 ENCRYPTED). Informe a senha com --passphrase <senha>\n");
+            return 1;
+        } else if (rc == -3) {
+            printf("[ERRO] Falha de autenticacao criptografica (senha incorreta ou pacote adulterado)\n");
+            return 1;
+        }
+        printf("[ERRO] Falha ao extrair pacote ARPKG v3 (rc=%d)\n", rc);
+        return 1;
+    }
 
     zip_reader_t *z = zip_reader_open(archive);
     if (!z) {

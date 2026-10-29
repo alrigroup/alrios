@@ -35,6 +35,13 @@ int ar_process_spawn(const char *path,
                      char *const envp[],
                      const char *working_directory,
                      unsigned int flags);
+int ar_process_spawn_redirect(const char *path,
+                             char *const argv[],
+                             char *const envp[],
+                             const char *working_directory,
+                             unsigned int flags,
+                             int stdout_fd,
+                             int stderr_fd);
 int ar_process_spawn_as(const char *path,
                         char *const argv[],
                         char *const envp[],

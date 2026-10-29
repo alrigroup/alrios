@@ -113,11 +113,13 @@ int os_process_create(const char *path, char *const argv[]) {
     return os_process_spawn(path, argv, NULL, NULL, AR_PROCESS_FLAG_SEARCH_PATH);
 }
 
-int os_process_spawn(const char *path,
-                     char *const argv[],
-                     char *const envp[],
-                     const char *working_directory,
-                     unsigned int flags) {
+static int spawn_win_internal(const char *path,
+                              char *const argv[],
+                              char *const envp[],
+                              const char *working_directory,
+                              unsigned int flags,
+                              int stdout_fd,
+                              int stderr_fd) {
     STARTUPINFOA si;
     PROCESS_INFORMATION pi;
     DWORD creation_flags = 0U;
@@ -127,10 +129,6 @@ int os_process_spawn(const char *path,
 
     if (envp != NULL || (flags & (AR_PROCESS_FLAG_NO_NEW_PRIVS |
                                   AR_PROCESS_FLAG_RAW_FD)) != 0U) {
-        return -ENOTSUP;
-    }
-    if ((flags & AR_PROCESS_FLAG_CLOSE_EXTRA_FDS) != 0U &&
-        (flags & AR_PROCESS_FLAG_NULL_STDIO) == 0U) {
         return -ENOTSUP;
     }
     command_line = build_command_line(path, argv);
@@ -162,9 +160,18 @@ int os_process_spawn(const char *path,
         si.hStdOutput = null_handle;
         si.hStdError = null_handle;
     }
+    if (stdout_fd >= 0 || stderr_fd >= 0) {
+        si.dwFlags |= STARTF_USESTDHANDLES;
+        if (stdout_fd >= 0) {
+            si.hStdOutput = (HANDLE)_get_osfhandle(stdout_fd);
+        }
+        if (stderr_fd >= 0) {
+            si.hStdError = (HANDLE)_get_osfhandle(stderr_fd);
+        }
+    }
 
     ok = CreateProcessA(NULL, command_line, NULL, NULL,
-                        null_handle != INVALID_HANDLE_VALUE, creation_flags,
+                        TRUE, creation_flags,
                         NULL, working_directory, &si, &pi);
     if (null_handle != INVALID_HANDLE_VALUE) CloseHandle(null_handle);
     free(command_line);
@@ -173,6 +180,24 @@ int os_process_spawn(const char *path,
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
     return (int)pi.dwProcessId;
+}
+
+int os_process_spawn(const char *path,
+                     char *const argv[],
+                     char *const envp[],
+                     const char *working_directory,
+                     unsigned int flags) {
+    return spawn_win_internal(path, argv, envp, working_directory, flags, -1, -1);
+}
+
+int os_process_spawn_redirect(const char *path,
+                             char *const argv[],
+                             char *const envp[],
+                             const char *working_directory,
+                             unsigned int flags,
+                             int stdout_fd,
+                             int stderr_fd) {
+    return spawn_win_internal(path, argv, envp, working_directory, flags, stdout_fd, stderr_fd);
 }
 
 int os_process_spawn_as(const char *path,

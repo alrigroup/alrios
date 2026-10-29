@@ -279,9 +279,11 @@ int zip_is_arapp(const char *path) {
     FILE *f = fopen(path, "rb");
     if (!f) return 0;
     unsigned char hdr[16];
-    int ok = (fread(hdr, 1, 16, f) == 16
-              && memcmp(hdr, "ALRIGROUP@APP", 13) == 0);
+    size_t n = fread(hdr, 1, 16, f);
     fclose(f);
+    if (n != 16) return 0;
+    int ok = (memcmp(hdr, "ALRIGROUP@APP", 13) == 0 ||
+              memcmp(hdr, "ALRIGROUP@ARPKG", 15) == 0);
     return ok;
 }
 

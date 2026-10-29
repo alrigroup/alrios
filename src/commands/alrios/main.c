@@ -238,6 +238,7 @@ static void print_usage(void) {
   printf("  alrios update <alvo>             (alvo: all|alrios|armake|arinstall)\n");
   printf("  alrios build -p <SRC> [-o <OUT>] (compila diretorio de app -> .arapp)\n");
   printf("  alrios deploy <app> [pkg.arapp]  (deploy atomico em tempo real com Zero-Downtime)\n");
+  printf("  alrios logs <app> [-f] [-n <num>] (inspeciona stdout/stderr/lifecycle de apps)\n");
   printf("  alrios refresh                   (atualiza lista de apps sem reiniciar)\n\n");
   print_installed_apps();
 }
@@ -662,6 +663,128 @@ static int cmd_update(const char *which) {
   return res;
 }
 
+static int print_tail_file(const char *filepath, int num_lines, int follow) {
+  FILE *f = fopen(filepath, "r");
+  if (!f) {
+    printf("[AVISO] Arquivo de log nao encontrado ou vazio: %s\n", filepath);
+    return 1;
+  }
+
+  char line[2048];
+  int total_lines = 0;
+  while (fgets(line, sizeof(line), f)) {
+    total_lines++;
+  }
+
+  int skip_lines = (total_lines > num_lines) ? (total_lines - num_lines) : 0;
+  fseek(f, 0, SEEK_SET);
+
+  int cur_line = 0;
+  while (fgets(line, sizeof(line), f)) {
+    if (cur_line >= skip_lines) {
+      printf("%s", line);
+    }
+    cur_line++;
+  }
+  fflush(stdout);
+
+  if (follow) {
+    printf("\033[2m--- Seguindo log em tempo real (Ctrl+C para sair) ---\033[0m\n");
+    while (1) {
+      if (fgets(line, sizeof(line), f)) {
+        printf("%s", line);
+        fflush(stdout);
+      } else {
+        clearerr(f);
+        ar_sleep_ms(200);
+      }
+    }
+  }
+
+  fclose(f);
+  return 0;
+}
+
+#ifdef _WIN32
+#define PATH_SEP '\\'
+#else
+#define PATH_SEP '/'
+#endif
+
+static int cmd_logs(int argc, char *argv[]) {
+  char base[1024];
+  get_base_dir(base, sizeof(base));
+
+  const char *app = NULL;
+  int lines = 40;
+  int follow = 0;
+  const char *stream = "stdout.log";
+
+  for (int i = 2; i < argc; i++) {
+    if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--follow") == 0) {
+      follow = 1;
+    } else if (strcmp(argv[i], "-n") == 0 && i + 1 < argc) {
+      lines = atoi(argv[++i]);
+      if (lines <= 0) lines = 40;
+    } else if (strcmp(argv[i], "--stderr") == 0 || strcmp(argv[i], "-e") == 0) {
+      stream = "stderr.log";
+    } else if (strcmp(argv[i], "--lifecycle") == 0 || strcmp(argv[i], "-l") == 0) {
+      stream = "lifecycle.log";
+    } else if (strcmp(argv[i], "--audit") == 0 || strcmp(argv[i], "-a") == 0) {
+      stream = "audit.log";
+    } else if (!app && argv[i][0] != '-') {
+      app = argv[i];
+    }
+  }
+
+  char logs_root[1024];
+  snprintf(logs_root, sizeof(logs_root), "%s%clogs%capps", base, PATH_SEP, PATH_SEP);
+
+  if (!app) {
+    printf("\033[1;36m=== ALRIOS Sovereign Logs Manager ===\033[0m\n\n");
+    printf("Aplicativos com registros de log em %s:\n", logs_root);
+#ifdef _WIN32
+    WIN32_FIND_DATAA fd;
+    char pat[1024];
+    snprintf(pat, sizeof(pat), "%s\\*", logs_root);
+    HANDLE h = FindFirstFileA(pat, &fd);
+    int found = 0;
+    if (h != INVALID_HANDLE_VALUE) {
+      do {
+        if (fd.cFileName[0] == '.') continue;
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+          printf("  • \033[1m%s\033[0m (stdout.log, stderr.log, lifecycle.log)\n", fd.cFileName);
+          found = 1;
+        }
+      } while (FindNextFileA(h, &fd));
+      FindClose(h);
+    }
+#else
+    DIR *d = opendir(logs_root);
+    int found = 0;
+    if (d) {
+      struct dirent *ent;
+      while ((ent = readdir(d)) != NULL) {
+        if (ent->d_name[0] == '.') continue;
+        printf("  • \033[1m%s\033[0m (stdout.log, stderr.log, lifecycle.log)\n", ent->d_name);
+        found = 1;
+      }
+      closedir(d);
+    }
+#endif
+    if (!found) {
+      printf("  \033[2m(Nenhum aplicativo gerou logs ate o momento)\033[0m\n");
+    }
+    printf("\nUso: alrios logs <app> [-f] [-n <linhas>] [--stderr|--lifecycle|--audit]\n");
+    return 0;
+  }
+
+  char target_file[1024];
+  snprintf(target_file, sizeof(target_file), "%s%c%s%c%s", logs_root, PATH_SEP, app, PATH_SEP, stream);
+  printf("\033[1;36m[LOGS: %s -> %s]\033[0m\n", app, stream);
+  return print_tail_file(target_file, lines, follow);
+}
+
 static int cmd_build(int argc, char *argv[]) {
   const char *src = NULL;
   const char *out = NULL;
@@ -762,6 +885,9 @@ int main(int argc, char *argv[]) {
 
   if (strcmp(a1, "deploy") == 0)
     return cmd_deploy(argc, argv);
+
+  if (strcmp(a1, "logs") == 0 || strcmp(a1, "log") == 0)
+    return cmd_logs(argc, argv);
 
   if (strcmp(a1, "status") == 0 || strcmp(a1, "list") == 0)
     return run_ctl(IPC_CTL_LIST, NULL);

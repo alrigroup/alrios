@@ -62,7 +62,9 @@ static int spawn_common(const char *path,
                         const char *working_directory,
                         unsigned int flags,
                         unsigned long uid,
-                        unsigned long gid) {
+                        unsigned long gid,
+                        int stdout_fd,
+                        int stderr_fd) {
     int error_pipe[2];
     pid_t pid;
 
@@ -103,11 +105,21 @@ static int spawn_common(const char *path,
         if (uid > 0UL && setuid((uid_t)uid) != 0) {
             child_fail(error_pipe[1], errno);
         }
+        if (stdout_fd >= 0) {
+            if (dup2(stdout_fd, STDOUT_FILENO) < 0) {
+                child_fail(error_pipe[1], errno);
+            }
+        }
+        if (stderr_fd >= 0) {
+            if (dup2(stderr_fd, STDERR_FILENO) < 0) {
+                child_fail(error_pipe[1], errno);
+            }
+        }
         if ((flags & AR_PROCESS_FLAG_NULL_STDIO) != 0U) {
             int null_fd = open("/dev/null", O_RDWR);
             if (null_fd < 0 || dup2(null_fd, STDIN_FILENO) < 0 ||
-                dup2(null_fd, STDOUT_FILENO) < 0 ||
-                dup2(null_fd, STDERR_FILENO) < 0) {
+                (stdout_fd < 0 && dup2(null_fd, STDOUT_FILENO) < 0) ||
+                (stderr_fd < 0 && dup2(null_fd, STDERR_FILENO) < 0)) {
                 child_fail(error_pipe[1], errno);
             }
             if (null_fd > STDERR_FILENO) {
@@ -120,7 +132,8 @@ static int spawn_common(const char *path,
                 max_fd = 4096;
             }
             for (int fd = STDERR_FILENO + 1; fd < (int)max_fd; ++fd) {
-                if (fd != error_pipe[1] && fd != executable_fd) {
+                if (fd != error_pipe[1] && fd != executable_fd &&
+                    fd != stdout_fd && fd != stderr_fd) {
                     (void)close(fd);
                 }
             }
@@ -155,7 +168,19 @@ int os_process_spawn(const char *path,
                      const char *working_directory,
                      unsigned int flags) {
     return spawn_common(path, -1, argv, envp, working_directory,
-                        flags & ~AR_PROCESS_FLAG_RAW_FD, 0UL, 0UL);
+                        flags & ~AR_PROCESS_FLAG_RAW_FD, 0UL, 0UL, -1, -1);
+}
+
+int os_process_spawn_redirect(const char *path,
+                             char *const argv[],
+                             char *const envp[],
+                             const char *working_directory,
+                             unsigned int flags,
+                             int stdout_fd,
+                             int stderr_fd) {
+    return spawn_common(path, -1, argv, envp, working_directory,
+                        flags & ~AR_PROCESS_FLAG_RAW_FD, 0UL, 0UL,
+                        stdout_fd, stderr_fd);
 }
 
 int os_process_spawn_as(const char *path,
@@ -166,7 +191,7 @@ int os_process_spawn_as(const char *path,
                         unsigned long uid,
                         unsigned long gid) {
     return spawn_common(path, -1, argv, envp, working_directory,
-                        flags & ~AR_PROCESS_FLAG_RAW_FD, uid, gid);
+                        flags & ~AR_PROCESS_FLAG_RAW_FD, uid, gid, -1, -1);
 }
 
 int os_process_spawn_fd(int executable_fd,
@@ -174,7 +199,7 @@ int os_process_spawn_fd(int executable_fd,
                         char *const envp[],
                         unsigned int flags) {
     return spawn_common(NULL, executable_fd, argv, envp, NULL,
-                        flags | AR_PROCESS_FLAG_RAW_FD, 0UL, 0UL);
+                        flags | AR_PROCESS_FLAG_RAW_FD, 0UL, 0UL, -1, -1);
 }
 
 int os_process_run_callback(int (*callback)(void *), void *arg) {

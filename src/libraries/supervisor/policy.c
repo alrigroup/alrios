@@ -583,9 +583,11 @@ int alrios_supervisor_policy_evaluate_package(
         return result;
     }
 
-    if (package_length >= ALRIOS_POLICY_LEGACY_MAGIC_SIZE &&
-        memcmp(package_data, ALRIOS_POLICY_LEGACY_MAGIC,
-               ALRIOS_POLICY_LEGACY_MAGIC_SIZE) == 0 &&
+    if (((package_length >= ALRIOS_POLICY_LEGACY_MAGIC_SIZE &&
+          memcmp(package_data, ALRIOS_POLICY_LEGACY_MAGIC,
+                 ALRIOS_POLICY_LEGACY_MAGIC_SIZE) == 0) ||
+         (package_length >= 15U &&
+          memcmp(package_data, "ALRIGROUP@ARPKG", 15U) == 0)) &&
         (package_length < ALRIOS_ARAPP_V2_MAGIC_SIZE ||
          memcmp(package_data, ALRIOS_ARAPP_V2_MAGIC,
                 ALRIOS_ARAPP_V2_MAGIC_SIZE) != 0)) {

@@ -17,6 +17,7 @@
 #include "ar_path.h"
 #include <alrios/platform/aros_hal.h>
 #include <alrios/platform/ar_kernel.h>
+#include "alrios/package/arpkg.h"
 #include "zip.h"
 #include "log.h"
 
@@ -24,6 +25,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include <fcntl.h>
 
 #define RST "\033[0m"
 #define RED "\033[31m"
@@ -125,6 +127,22 @@ static int has_arapp_header(const char *path) {
 
 static void extract_arapp(const char *archive, const char *outdir) {
     rm_rf(outdir);
+    if (arpkg_is_arpkg(archive)) {
+        const char *pass = getenv("ALRIOS_PACKAGE_KEY");
+        int rc = arpkg_unpack(archive, outdir, pass);
+        if (rc == 0) {
+            alri_printf("    " GRN "✓" RST " Unpacked proprietary ARPKG package: " DIM "%s" RST "\n", archive);
+            return;
+        } else if (rc == -2) {
+            alri_printf("    " RED "x" RST " Encrypted ARPKG requires license key / passphrase: " DIM "%s" RST "\n", archive);
+            return;
+        } else if (rc == -3) {
+            alri_printf("    " RED "x" RST " ARPKG decryption authentication failed: " DIM "%s" RST "\n", archive);
+            return;
+        }
+        alri_printf("    " RED "x" RST " Failed to unpack ARPKG package (rc=%d): " DIM "%s" RST "\n", rc, archive);
+        return;
+    }
     zip_reader_t *z = zip_reader_open_arapp(archive);
     if (!z) z = zip_reader_open(archive);
     if (!z) {
@@ -192,6 +210,89 @@ static int file_exists(const char *path) {
 #endif
 }
 
+#ifdef _WIN32
+#define PATH_SEP '\\'
+#else
+#define PATH_SEP '/'
+#endif
+
+static void ar_log_format_timestamp(char *buf, size_t size) {
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    if (t) {
+        strftime(buf, size, "%Y-%m-%d %H:%M:%S", t);
+    } else {
+        snprintf(buf, size, "2026-01-01 00:00:00");
+    }
+}
+
+static void ar_ensure_app_log_files(ar_supervisor_context_t *ctx, const char *app_name,
+                                    int *out_stdout_fd, int *out_stderr_fd) {
+    *out_stdout_fd = -1;
+    *out_stderr_fd = -1;
+    if (!ctx || !app_name || app_name[0] == '\0') return;
+
+    char dir[1024];
+    snprintf(dir, sizeof(dir), "%s%clogs", ctx->base_dir, PATH_SEP);
+#ifdef _WIN32
+    _mkdir(dir);
+#else
+    mkdir(dir, 0755);
+#endif
+    snprintf(dir, sizeof(dir), "%s%clogs%capps", ctx->base_dir, PATH_SEP, PATH_SEP);
+#ifdef _WIN32
+    _mkdir(dir);
+#else
+    mkdir(dir, 0755);
+#endif
+    snprintf(dir, sizeof(dir), "%s%clogs%capps%c%s", ctx->base_dir, PATH_SEP, PATH_SEP, PATH_SEP, app_name);
+#ifdef _WIN32
+    _mkdir(dir);
+#else
+    mkdir(dir, 0755);
+#endif
+
+    char out_file[1024];
+    snprintf(out_file, sizeof(out_file), "%s%cstdout.log", dir, PATH_SEP);
+#ifdef _WIN32
+    *out_stdout_fd = _open(out_file, _O_WRONLY | _O_CREAT | _O_APPEND | _O_BINARY, 0640);
+#else
+    *out_stdout_fd = open(out_file, O_WRONLY | O_CREAT | O_APPEND, 0640);
+#endif
+
+    char err_file[1024];
+    snprintf(err_file, sizeof(err_file), "%s%cstderr.log", dir, PATH_SEP);
+#ifdef _WIN32
+    *out_stderr_fd = _open(err_file, _O_WRONLY | _O_CREAT | _O_APPEND | _O_BINARY, 0640);
+#else
+    *out_stderr_fd = open(err_file, O_WRONLY | O_CREAT | O_APPEND, 0640);
+#endif
+
+    char life_file[1024];
+    snprintf(life_file, sizeof(life_file), "%s%clifecycle.log", dir, PATH_SEP);
+    FILE *f = fopen(life_file, "a");
+    if (f) {
+        char ts[64];
+        ar_log_format_timestamp(ts, sizeof(ts));
+        fprintf(f, "[%s] [LIFECYCLE] App '%s' spawning process\n", ts, app_name);
+        fclose(f);
+    }
+}
+
+static void ar_log_app_event(ar_supervisor_context_t *ctx, const char *app_name, int pid, const char *event) {
+    if (!ctx || !app_name || app_name[0] == '\0') return;
+    char life_file[1024];
+    snprintf(life_file, sizeof(life_file), "%s%clogs%capps%c%s%clifecycle.log",
+             ctx->base_dir, PATH_SEP, PATH_SEP, PATH_SEP, app_name, PATH_SEP);
+    FILE *f = fopen(life_file, "a");
+    if (f) {
+        char ts[64];
+        ar_log_format_timestamp(ts, sizeof(ts));
+        fprintf(f, "[%s] [LIFECYCLE] App '%s' (PID %d): %s\n", ts, app_name, pid, event);
+        fclose(f);
+    }
+}
+
 static void spawn_survive_check(loader_app_t *a) {
     if (!a || a->state != APP_RUNNING || a->pid <= 0) return;
     for (int i = 0; i < 6; i++) {
@@ -257,16 +358,28 @@ static void load_native(ar_supervisor_context_t *ctx, const ar_app_manifest_t *m
         char *argv[2];
         argv[0] = libpath;
         argv[1] = NULL;
-        int pid = ar_process_spawn(libpath, argv, NULL, app_dir,
-                                   AR_PROCESS_FLAG_CLOSE_EXTRA_FDS |
-                                   AR_PROCESS_FLAG_NEW_GROUP);
+        int stdout_fd = -1, stderr_fd = -1;
+        ar_ensure_app_log_files(ctx, m->name, &stdout_fd, &stderr_fd);
+        int pid = ar_process_spawn_redirect(libpath, argv, NULL, app_dir,
+                                            AR_PROCESS_FLAG_CLOSE_EXTRA_FDS |
+                                            AR_PROCESS_FLAG_NEW_GROUP,
+                                            stdout_fd, stderr_fd);
+#ifdef _WIN32
+        if (stdout_fd >= 0) _close(stdout_fd);
+        if (stderr_fd >= 0) _close(stderr_fd);
+#else
+        if (stdout_fd >= 0) close(stdout_fd);
+        if (stderr_fd >= 0) close(stderr_fd);
+#endif
         if (pid > 0) {
+            ar_log_app_event(ctx, m->name, pid, "Process spawned and running");
             void *pg = ctx ? ctx->proc_group : NULL;
             if (pg && ar_process_group_add(pg, pid) != 0) {
                 (void)ar_process_signal(pid, AR_PROCESS_SIGNAL_KILL, 1);
                 (void)ar_process_signal(pid, AR_PROCESS_SIGNAL_KILL, 0);
                 (void)ar_process_wait(pid);
                 if (a) { a->pid = 0; a->state = APP_CRASHED; }
+                ar_log_app_event(ctx, m->name, pid, "Failed to track process in group");
                 alri_printf("    " RED "x" RST " Failed to track " BLD "%s" RST " process\n", m->name);
                 return;
             }
@@ -275,6 +388,7 @@ static void load_native(ar_supervisor_context_t *ctx, const ar_app_manifest_t *m
                         m->name, pid, libpath);
             spawn_survive_check(a);
         } else {
+            ar_log_app_event(ctx, m->name, 0, "Failed to spawn process");
             if (a) { a->pid = 0; a->state = APP_CRASHED; }
             alri_printf("    " RED "x" RST " Failed to start " BLD "%s" RST " (" DIM "%s" RST ")\n",
                         m->name, libpath);
@@ -344,17 +458,29 @@ static void spawn_script(ar_supervisor_context_t *ctx, const ar_app_manifest_t *
     argv[ai++] = script_path;
     argv[ai] = NULL;
 
-    int pid = ar_process_spawn(rt_path, argv, NULL, app_dir,
-                               AR_PROCESS_FLAG_SEARCH_PATH |
-                               AR_PROCESS_FLAG_CLOSE_EXTRA_FDS |
-                               AR_PROCESS_FLAG_NEW_GROUP);
+    int stdout_fd = -1, stderr_fd = -1;
+    ar_ensure_app_log_files(ctx, m->name, &stdout_fd, &stderr_fd);
+    int pid = ar_process_spawn_redirect(rt_path, argv, NULL, app_dir,
+                                        AR_PROCESS_FLAG_SEARCH_PATH |
+                                        AR_PROCESS_FLAG_CLOSE_EXTRA_FDS |
+                                        AR_PROCESS_FLAG_NEW_GROUP,
+                                        stdout_fd, stderr_fd);
+#ifdef _WIN32
+    if (stdout_fd >= 0) _close(stdout_fd);
+    if (stderr_fd >= 0) _close(stderr_fd);
+#else
+    if (stdout_fd >= 0) close(stdout_fd);
+    if (stderr_fd >= 0) close(stderr_fd);
+#endif
     if (pid > 0) {
+        ar_log_app_event(ctx, m->name, pid, "Script/Runtime process spawned and running");
         void *pg = ctx ? ctx->proc_group : NULL;
         if (pg && ar_process_group_add(pg, pid) != 0) {
             (void)ar_process_signal(pid, AR_PROCESS_SIGNAL_KILL, 1);
             (void)ar_process_signal(pid, AR_PROCESS_SIGNAL_KILL, 0);
             (void)ar_process_wait(pid);
             if (a) { a->pid = 0; a->state = APP_CRASHED; }
+            ar_log_app_event(ctx, m->name, pid, "Failed to track process in group");
             alri_printf("    " RED "x" RST " Failed to track " BLD "%s" RST " process\n", m->name);
             return;
         }
@@ -362,6 +488,7 @@ static void spawn_script(ar_supervisor_context_t *ctx, const ar_app_manifest_t *
         alri_printf("    " GRN "✓" RST " " BLD "%s" RST " started (" DIM "pid %d" RST ")\n", m->name, (int)pid);
         spawn_survive_check(a);
     } else {
+        ar_log_app_event(ctx, m->name, 0, "Failed to spawn script/runtime process");
         if (a) { a->pid = 0; a->state = APP_CRASHED; }
         alri_printf("    " RED "x" RST " Failed to start " BLD "%s" RST "\n", m->name);
     }
