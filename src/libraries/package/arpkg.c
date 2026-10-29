@@ -49,6 +49,32 @@ typedef struct {
     size_t count;
 } arpkg_file_list_t;
 
+static int is_safe_relative_path(const char *path) {
+    if (!path || path[0] == '\0') return 0;
+
+    /* Rejeita caminhos absolutos Unix ou Windows */
+    if (path[0] == '/' || path[0] == '\\') return 0;
+    if (path[1] == ':' && ((path[0] >= 'a' && path[0] <= 'z') || (path[0] >= 'A' && path[0] <= 'Z'))) {
+        return 0;
+    }
+
+    /* Analisa cada segmento do caminho contra '..' */
+    const char *p = path;
+    while (*p) {
+        while (*p == '/' || *p == '\\') p++;
+        if (!*p) break;
+
+        const char *seg_start = p;
+        while (*p && *p != '/' && *p != '\\') p++;
+        size_t seg_len = (size_t)(p - seg_start);
+
+        if (seg_len == 2 && seg_start[0] == '.' && seg_start[1] == '.') {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 static void ensure_parent_dirs(const char *path) {
     char temp[1024];
     size_t len = strlen(path);
@@ -403,6 +429,12 @@ static int extract_payload_buffer(const uint8_t *payload, size_t payload_len, co
         memcpy(&entry, payload + offset, sizeof(entry));
         offset += sizeof(entry);
 
+        /* Blindagem contra Path Traversal (ARPKG-Slip / CWE-22) */
+        entry.path[sizeof(entry.path) - 1] = '\0';
+        if (!is_safe_relative_path(entry.path)) {
+            return ARPKG_ERR_PATH_TRAVERSAL;
+        }
+
         if (offset + (size_t)entry.file_size > payload_len) return -1;
 
         char target_path[1024];
@@ -431,33 +463,63 @@ static int extract_payload_buffer(const uint8_t *payload, size_t payload_len, co
 }
 
 int arpkg_unpack(const char *package_file, const char *dest_dir, const char *passphrase) {
-    if (!package_file || !dest_dir) return -1;
+    if (!package_file || !dest_dir) return ARPKG_ERR_ARGUMENT;
 
     FILE *f = fopen(package_file, "rb");
-    if (!f) return -1;
+    if (!f) return ARPKG_ERR_IO;
+
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return ARPKG_ERR_IO;
+    }
+    long total_len = ftell(f);
+    if (total_len < (long)sizeof(arpkg_header_t) || fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return ARPKG_ERR_IO;
+    }
+    size_t actual_file_size = (size_t)total_len;
 
     arpkg_header_t hdr;
     if (fread(&hdr, 1, sizeof(hdr), f) != sizeof(hdr)) {
         fclose(f);
-        return -1;
+        return ARPKG_ERR_IO;
     }
 
     if (memcmp(hdr.magic, ARPKG_MAGIC, ARPKG_MAGIC_LEN) != 0 || hdr.version != ARPKG_VERSION) {
         fclose(f);
-        return -1;
+        return ARPKG_ERR_ARGUMENT;
+    }
+
+    /* Blindagem 1: Limite maximo defensivo contra Decompression Bomb (CWE-400) */
+    if (hdr.payload_size > ARPKG_MAX_PAYLOAD_SIZE) {
+        fclose(f);
+        return ARPKG_ERR_BOMB_LIMIT;
+    }
+
+    /* Blindagem 2: Payload declarado nao pode exceder o tamanho fisico no disco */
+    size_t available_payload = actual_file_size - sizeof(hdr);
+    if ((size_t)hdr.payload_size > available_payload) {
+        fclose(f);
+        return ARPKG_ERR_BOMB_LIMIT;
+    }
+
+    /* Blindagem 3: Limite maximo de arquivos catalogados no pacote */
+    if (hdr.file_count > ARPKG_MAX_FILES) {
+        fclose(f);
+        return ARPKG_ERR_BOMB_LIMIT;
     }
 
     size_t payload_len = (size_t)hdr.payload_size;
     uint8_t *file_payload = (uint8_t *)malloc(payload_len + 1U);
     if (!file_payload) {
         fclose(f);
-        return -1;
+        return ARPKG_ERR_BOMB_LIMIT;
     }
 
     if (fread(file_payload, 1, payload_len, f) != payload_len) {
         free(file_payload);
         fclose(f);
-        return -1;
+        return ARPKG_ERR_IO;
     }
     fclose(f);
 
@@ -470,20 +532,20 @@ int arpkg_unpack(const char *package_file, const char *dest_dir, const char *pas
     } else if (hdr.mode == ARPKG_MODE_ENCRYPTED) {
         if (!passphrase || passphrase[0] == '\0') {
             free(file_payload);
-            return -2; /* Requer chave / passphrase */
+            return ARPKG_ERR_REQUIRES_KEY;
         }
 
         uint8_t aes_key[32];
         if (derive_key_pbkdf2(passphrase, hdr.salt, aes_key) != 0) {
             free(file_payload);
-            return -1;
+            return ARPKG_ERR_ARGUMENT;
         }
 
         uint8_t *plaintext = (uint8_t *)malloc(payload_len + 1U);
         if (!plaintext) {
             alrios_explicit_zeroize(aes_key, sizeof(aes_key));
             free(file_payload);
-            return -1;
+            return ARPKG_ERR_BOMB_LIMIT;
         }
 
         size_t aad_len = offsetof(arpkg_header_t, tag);
@@ -496,7 +558,7 @@ int arpkg_unpack(const char *package_file, const char *dest_dir, const char *pas
         if (crypt_rc != ALRIOS_CRYPTO_OK) {
             alrios_explicit_zeroize(plaintext, payload_len);
             free(plaintext);
-            return -3; /* Falha de autenticacao / senha incorreta */
+            return ARPKG_ERR_AUTH_FAIL;
         }
 
         int rc = extract_payload_buffer(plaintext, payload_len, dest_dir);
@@ -506,5 +568,5 @@ int arpkg_unpack(const char *package_file, const char *dest_dir, const char *pas
     }
 
     free(file_payload);
-    return -1;
+    return ARPKG_ERR_ARGUMENT;
 }

@@ -32,6 +32,17 @@ extern "C" {
 #define ARPKG_IV_LEN   12U
 #define ARPKG_TAG_LEN  16U
 
+/* Security Limits & Error Codes */
+#define ARPKG_MAX_PAYLOAD_SIZE (512ULL * 1024ULL * 1024ULL) /* 512 MB */
+
+#define ARPKG_OK                  0
+#define ARPKG_ERR_ARGUMENT       -1
+#define ARPKG_ERR_REQUIRES_KEY   -2
+#define ARPKG_ERR_AUTH_FAIL      -3
+#define ARPKG_ERR_PATH_TRAVERSAL -4
+#define ARPKG_ERR_BOMB_LIMIT     -5
+#define ARPKG_ERR_IO             -6
+
 #pragma pack(push, 1)
 typedef struct {
     char     magic[16];

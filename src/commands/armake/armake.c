@@ -2089,6 +2089,12 @@ static int cmd_extract(int argc, char **argv) {
         } else if (rc == -3) {
             printf("[ERRO] Falha de autenticacao criptografica (senha incorreta ou pacote adulterado)\n");
             return 1;
+        } else if (rc == -4) {
+            printf("[SECURITY ALERT] Pacote rejeitado: tentativa de Path Traversal (ARPKG-Slip / CWE-22) detectada!\n");
+            return 1;
+        } else if (rc == -5) {
+            printf("[SECURITY ALERT] Pacote rejeitado: limite de seguranca violado (Decompression/Memory Bomb / CWE-400)!\n");
+            return 1;
         }
         printf("[ERRO] Falha ao extrair pacote ARPKG v3 (rc=%d)\n", rc);
         return 1;
