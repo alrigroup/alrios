@@ -98,6 +98,7 @@ static const char *skip_value(const char *p) {
             if (depth > 0) p++;
         }
         if (depth > 0) return NULL;
+        p++;
         return p;
     }
     while (*p && *p != ',' && *p != '}' && *p != ']' && *p != '\n')
