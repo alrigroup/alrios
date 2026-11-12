@@ -21,10 +21,17 @@ void *os_thread_create(void *(*fn)(void *), void *arg) {
     pthread_t *thread = malloc(sizeof(pthread_t));
     if (!thread) return NULL;
 
-    if (pthread_create(thread, NULL, fn, arg) != 0) {
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    /* 1 MiB stack size per thread to prevent virtual & physical RAM exhaustion */
+    pthread_attr_setstacksize(&attr, 1024 * 1024);
+
+    if (pthread_create(thread, &attr, fn, arg) != 0) {
+        pthread_attr_destroy(&attr);
         free(thread);
         return NULL;
     }
+    pthread_attr_destroy(&attr);
     return thread;
 }
 
