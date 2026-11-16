@@ -19,6 +19,8 @@
 #include <grp.h>
 #include <pwd.h>
 #include <unistd.h>
+#include <sys/prctl.h>
+#include <malloc.h>
 #else
 #include <windows.h>
 #include <direct.h>
@@ -128,6 +130,21 @@ static void spinner_done(const char *msg, const char *result_color,
 
 static volatile int running = 1;
 static int policy_initialized = 0;
+
+#ifndef _WIN32
+#include <sys/wait.h>
+#include <errno.h>
+static void handle_sigchld(int sig) {
+  (void)sig;
+  int saved_errno = errno;
+  pid_t pid;
+  int status;
+  while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+    /* Auto-reap any finished child processes to prevent defunct zombies */
+  }
+  errno = saved_errno;
+}
+#endif
 
 static void handle_signal(int sig) {
   (void)sig;
@@ -247,6 +264,15 @@ static int initialize_execution_policy(void) {
 }
 
 int main(void) {
+#ifdef __linux__
+  prctl(41, 1, 0, 0, 0); /* PR_SET_THP_DISABLE: disable Transparent Huge Pages bloat */
+#ifdef M_ARENA_MAX
+  mallopt(M_ARENA_MAX, 2);
+#endif
+#ifdef M_TRIM_THRESHOLD
+  mallopt(M_TRIM_THRESHOLD, 128 * 1024);
+#endif
+#endif
   setvbuf(stdout, NULL, _IONBF, 0);
   enable_ansi();
   print_banner();
@@ -260,6 +286,14 @@ int main(void) {
 
   signal(SIGINT, handle_signal);
   signal(SIGTERM, handle_signal);
+#ifndef _WIN32
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = handle_sigchld;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+  sigaction(SIGCHLD, &sa, NULL);
+#endif
   atexit(cleanup_and_exit);
 
   char run_dir[1024];

@@ -257,11 +257,29 @@ int os_process_group_add(void *group, int pid) {
     return 0;
 }
 
+int os_process_group_remove(void *group, int pid) {
+    if (!group || pid <= 0) return -EINVAL;
+    process_group_t *pg = (process_group_t *)group;
+    for (int i = 0; i < pg->count; i++) {
+        if (pg->pids[i] == (pid_t)pid) {
+            if (i < pg->count - 1) {
+                pg->pids[i] = pg->pids[pg->count - 1];
+            }
+            pg->count--;
+            return 0;
+        }
+    }
+    return -ESRCH;
+}
+
 int os_process_group_destroy(void *group) {
     if (!group) return -EINVAL;
     process_group_t *pg = (process_group_t *)group;
     for (int i = 0; i < pg->count; i++) {
-        (void)kill(pg->pids[i], SIGTERM);
+        int status;
+        if (waitpid(pg->pids[i], &status, WNOHANG) == 0) {
+            (void)kill(pg->pids[i], SIGTERM);
+        }
     }
     free(pg->pids);
     free(pg);

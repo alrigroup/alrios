@@ -254,18 +254,32 @@ static void ar_ensure_app_log_files(ar_supervisor_context_t *ctx, const char *ap
 
     char out_file[1024];
     snprintf(out_file, sizeof(out_file), "%s%cstdout.log", dir, PATH_SEP);
-#ifdef _WIN32
-    *out_stdout_fd = _open(out_file, _O_WRONLY | _O_CREAT | _O_APPEND | _O_BINARY, 0640);
+#ifndef _WIN32
+    struct stat st_out;
+    if (stat(out_file, &st_out) == 0 && st_out.st_size > 10 * 1024 * 1024) {
+        char old_out[1050];
+        snprintf(old_out, sizeof(old_out), "%s.1", out_file);
+        unlink(old_out);
+        rename(out_file, old_out);
+    }
+    *out_stdout_fd = open(out_file, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0640);
 #else
-    *out_stdout_fd = open(out_file, O_WRONLY | O_CREAT | O_APPEND, 0640);
+    *out_stdout_fd = _open(out_file, _O_WRONLY | _O_CREAT | _O_APPEND | _O_BINARY, 0640);
 #endif
 
     char err_file[1024];
     snprintf(err_file, sizeof(err_file), "%s%cstderr.log", dir, PATH_SEP);
-#ifdef _WIN32
-    *out_stderr_fd = _open(err_file, _O_WRONLY | _O_CREAT | _O_APPEND | _O_BINARY, 0640);
+#ifndef _WIN32
+    struct stat st_err;
+    if (stat(err_file, &st_err) == 0 && st_err.st_size > 10 * 1024 * 1024) {
+        char old_err[1050];
+        snprintf(old_err, sizeof(old_err), "%s.1", err_file);
+        unlink(old_err);
+        rename(err_file, old_err);
+    }
+    *out_stderr_fd = open(err_file, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0640);
 #else
-    *out_stderr_fd = open(err_file, O_WRONLY | O_CREAT | O_APPEND, 0640);
+    *out_stderr_fd = _open(err_file, _O_WRONLY | _O_CREAT | _O_APPEND | _O_BINARY, 0640);
 #endif
 
     char life_file[1024];

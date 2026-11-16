@@ -56,9 +56,21 @@ int os_socket_listen(int fd, int backlog) {
 int os_socket_accept(int fd) {
     struct sockaddr_in sa;
     socklen_t slen = sizeof(sa);
+#ifdef SOCK_CLOEXEC
+    int client = accept4(fd, (struct sockaddr *)&sa, &slen, SOCK_CLOEXEC);
+    if (client == -1) {
+        if (errno == ENOSYS) {
+            client = accept(fd, (struct sockaddr *)&sa, &slen);
+            if (client >= 0) fcntl(client, F_SETFD, FD_CLOEXEC);
+        } else {
+            return -errno;
+        }
+    }
+#else
     int client = accept(fd, (struct sockaddr *)&sa, &slen);
     if (client == -1) return -errno;
     fcntl(client, F_SETFD, FD_CLOEXEC);
+#endif
     return client;
 }
 
